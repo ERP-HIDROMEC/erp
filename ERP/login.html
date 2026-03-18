@@ -1,0 +1,161 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Hidromec ERP — Iniciar sesión</title>
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<style>
+  :root{--bg:#0f1117;--bg2:#181c27;--bg3:#1e2436;--border:rgba(255,255,255,0.07);--text:#e8eaf0;--muted:#7a8099;--blue:#3b82f6;--green:#10b981;--red:#ef4444;}
+  *{margin:0;padding:0;box-sizing:border-box;}
+  body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--text);min-height:100vh;display:flex;align-items:center;justify-content:center;}
+
+  .login-wrap{width:100%;max-width:380px;padding:16px;}
+
+  .logo{text-align:center;margin-bottom:36px;}
+  .logo-icon{width:52px;height:52px;background:linear-gradient(135deg,#3b82f6,#8b5cf6);border-radius:14px;display:inline-flex;align-items:center;justify-content:center;margin-bottom:14px;}
+  .logo-icon svg{width:28px;height:28px;color:#fff;}
+  .logo h1{font-size:20px;font-weight:600;margin-bottom:4px;}
+  .logo span{font-size:13px;color:var(--muted);}
+
+  .card{background:var(--bg2);border:1px solid var(--border);border-radius:16px;padding:32px;}
+
+  .card h2{font-size:16px;font-weight:600;margin-bottom:6px;}
+  .card p{font-size:13px;color:var(--muted);margin-bottom:28px;}
+
+  .field{margin-bottom:18px;}
+  .field label{display:block;font-size:12px;font-weight:500;color:var(--muted);margin-bottom:7px;text-transform:uppercase;letter-spacing:0.6px;}
+  .field input{width:100%;padding:11px 14px;background:var(--bg3);border:1px solid var(--border);border-radius:9px;color:var(--text);font-size:14px;font-family:'DM Sans',sans-serif;outline:none;transition:border-color 0.15s;}
+  .field input:focus{border-color:var(--blue);}
+  .field input::placeholder{color:var(--muted);}
+
+  .btn-login{width:100%;padding:12px;background:var(--blue);color:#fff;border:none;border-radius:9px;font-size:14px;font-weight:500;font-family:'DM Sans',sans-serif;cursor:pointer;transition:background 0.15s;margin-top:8px;}
+  .btn-login:hover{background:#2563eb;}
+  .btn-login:disabled{opacity:0.5;cursor:not-allowed;}
+
+  .error-msg{display:none;background:rgba(239,68,68,0.1);border:1px solid rgba(239,68,68,0.25);color:var(--red);padding:10px 14px;border-radius:8px;font-size:13px;margin-bottom:16px;}
+  .error-msg.show{display:block;}
+
+  .footer{text-align:center;margin-top:24px;font-size:12px;color:var(--muted);}
+
+  .spinner{display:inline-block;width:14px;height:14px;border:2px solid rgba(255,255,255,0.3);border-top-color:#fff;border-radius:50%;animation:spin 0.7s linear infinite;vertical-align:middle;margin-right:6px;}
+  @keyframes spin{to{transform:rotate(360deg)}}
+</style>
+</head>
+<body>
+
+<div class="login-wrap">
+  <div class="logo">
+    <div class="logo-icon">
+      <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4"/></svg>
+    </div>
+    <h1>Hidromec ERP</h1>
+    <span>Sistema de gestión interno</span>
+  </div>
+
+  <div class="card">
+    <h2>Iniciar sesión</h2>
+    <p>Ingresá con tu cuenta de usuario.</p>
+
+    <div class="error-msg" id="error-msg"></div>
+
+    <div class="field">
+      <label>Email</label>
+      <input type="email" id="email" placeholder="usuario@empresa.com" autocomplete="email">
+    </div>
+    <div class="field">
+      <label>Contraseña</label>
+      <input type="password" id="password" placeholder="••••••••" autocomplete="current-password">
+    </div>
+
+    <button class="btn-login" id="btn-login" onclick="login()">Ingresar</button>
+  </div>
+
+  <div class="footer">Hidromec SRL · Placemem SRL &mdash; v1.0 2026</div>
+</div>
+
+<script>
+const SUPA_URL = 'https://avgkhbqtanvfsqxncmzm.supabase.co';
+const SUPA_KEY = 'sb_publishable_Q5W5JwdhUOWnOZv_QaGWQg_xHVhSEls';
+const db = supabase.createClient(SUPA_URL, SUPA_KEY);
+
+// Si ya hay sesión activa, redirigir al dashboard
+(async () => {
+  const { data: { session } } = await db.auth.getSession();
+  if (session) window.location.href = 'index.html';
+})();
+
+// Login con Enter
+document.getElementById('password').addEventListener('keydown', e => {
+  if (e.key === 'Enter') login();
+});
+document.getElementById('email').addEventListener('keydown', e => {
+  if (e.key === 'Enter') document.getElementById('password').focus();
+});
+
+async function login() {
+  const email    = document.getElementById('email').value.trim();
+  const password = document.getElementById('password').value;
+  const btn      = document.getElementById('btn-login');
+  const errEl    = document.getElementById('error-msg');
+
+  errEl.classList.remove('show');
+
+  if (!email || !password) {
+    mostrarError('Completá el email y la contraseña.');
+    return;
+  }
+
+  btn.disabled = true;
+  btn.innerHTML = '<span class="spinner"></span>Ingresando...';
+
+  try {
+    const { data, error } = await db.auth.signInWithPassword({ email, password });
+
+    if (error) {
+      if (error.message.includes('Invalid login') || error.message.includes('invalid_credentials')) {
+        mostrarError('Email o contraseña incorrectos.');
+      } else if (error.message.includes('Email not confirmed')) {
+        mostrarError('El email no fue confirmado. Revisá tu bandeja.');
+      } else {
+        mostrarError('Error al iniciar sesión: ' + error.message);
+      }
+      btn.disabled = false;
+      btn.innerHTML = 'Ingresar';
+      return;
+    }
+
+    // Verificar que el usuario esté activo en la tabla usuarios
+    const { data: usuario } = await db.from('usuarios').select('activo,rol').eq('id', data.user.id).single();
+    if (!usuario || !usuario.activo) {
+      await db.auth.signOut();
+      mostrarError('Tu cuenta está desactivada. Contactá al administrador.');
+      btn.disabled = false;
+      btn.innerHTML = 'Ingresar';
+      return;
+    }
+
+    // Redirigir según rol — los que no tienen dashboard van directo a su módulo
+    const INICIO_POR_ROL = {
+      gestion:     'facturas.html',
+      operaciones: 'proyectos.html',
+      rrhh:        'empleados.html',
+    };
+    window.location.href = INICIO_POR_ROL[usuario.rol] || 'index.html';
+
+  } catch(e) {
+    mostrarError('Error inesperado: ' + e.message);
+    btn.disabled = false;
+    btn.innerHTML = 'Ingresar';
+  }
+}
+
+function mostrarError(msg) {
+  const el = document.getElementById('error-msg');
+  el.textContent = msg;
+  el.classList.add('show');
+}
+</script>
+</body>
+</html>
