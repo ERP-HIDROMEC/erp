@@ -114,6 +114,8 @@
     <button class="tab" onclick="cambiarTab('sueldos',this)">Sueldos</button>
     <button class="tab" onclick="cambiarTab('clientes',this)">Clientes</button>
     <button class="tab" onclick="cambiarTab('costos',this)">Costos por categoría</button>
+    <button class="tab" onclick="cambiarTab('documentos',this)">Documentos <span id="badge-docs-venc" style="display:none;background:var(--red);color:#fff;border-radius:20px;padding:1px 7px;font-size:11px;margin-left:4px"></span></button>
+    <button class="tab" onclick="cambiarTab('ausencias',this)">Licencias y ausencias</button>
   </div>
 
   <div class="filtros">
@@ -259,6 +261,134 @@
   </div>
 </div>
 
+<!-- MODAL DOCUMENTO -->
+<div class="modal-overlay" id="modal-documento">
+  <div class="modal" style="max-width:560px">
+    <h3 id="doc-titulo">Subir documento</h3>
+    <div class="form-row">
+      <div class="form-group">
+        <label>Empresa</label>
+        <select id="nd-empresa" onchange="cargarEmpleadosDocModal()">
+          <option value="a1000000-0000-0000-0000-000000000001">Hidromec</option>
+          <option value="a2000000-0000-0000-0000-000000000002">Placemem</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label>Empleado</label>
+        <select id="nd-empleado"></select>
+      </div>
+    </div>
+    <div class="form-row">
+      <div class="form-group">
+        <label>Tipo de documento</label>
+        <select id="nd-tipo">
+          <option value="dni">DNI</option>
+          <option value="art">ART — Constancia de cobertura</option>
+          <option value="preocupacional">Apto preocupacional</option>
+          <option value="alta_afip">Alta AFIP</option>
+          <option value="cv">CV</option>
+          <option value="cert_capacitacion">Certificado de capacitación</option>
+          <option value="cert_altura">Habilitación trabajos en altura</option>
+          <option value="cert_espacio">Habilitación espacio confinado</option>
+          <option value="examen_periodico">Examen médico periódico</option>
+          <option value="carnet_manejo">Carnet de conducir</option>
+          <option value="otro">Otro</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label>Fecha de vencimiento</label>
+        <input type="date" id="nd-vencimiento">
+      </div>
+    </div>
+    <div class="form-row full">
+      <div class="form-group">
+        <label>Descripción (opcional)</label>
+        <input type="text" id="nd-descripcion" placeholder="Ej: ART Galeno 2026, Carnet B1...">
+      </div>
+    </div>
+    <div class="form-row full">
+      <div class="form-group">
+        <label>Archivo (PDF o imagen)</label>
+        <input type="file" id="nd-archivo" accept=".pdf,.jpg,.jpeg,.png" style="padding:8px;background:var(--bg3);border:1px solid var(--border);border-radius:8px;color:var(--text);width:100%">
+      </div>
+    </div>
+    <div id="nd-upload-progress" style="display:none;margin-top:8px">
+      <div style="height:4px;background:var(--bg3);border-radius:2px">
+        <div id="nd-progress-bar" style="height:100%;background:var(--blue);border-radius:2px;width:0%;transition:width 0.3s"></div>
+      </div>
+      <div id="nd-progress-text" style="font-size:12px;color:var(--muted);margin-top:4px">Subiendo...</div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" onclick="cerrarModal('modal-documento')">Cancelar</button>
+      <button class="btn btn-primary" onclick="guardarDocumento()">Subir documento</button>
+    </div>
+  </div>
+</div>
+
+<!-- MODAL AUSENCIA -->
+<div class="modal-overlay" id="modal-ausencia">
+  <div class="modal" style="max-width:520px">
+    <h3>Registrar ausencia / licencia</h3>
+    <div class="form-row">
+      <div class="form-group">
+        <label>Empresa</label>
+        <select id="na-empresa" onchange="cargarEmpleadosAusModal()">
+          <option value="a1000000-0000-0000-0000-000000000001">Hidromec</option>
+          <option value="a2000000-0000-0000-0000-000000000002">Placemem</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label>Empleado</label>
+        <select id="na-empleado"></select>
+      </div>
+    </div>
+    <div class="form-row">
+      <div class="form-group">
+        <label>Tipo</label>
+        <select id="na-tipo">
+          <option value="vacaciones">Vacaciones</option>
+          <option value="enfermedad">Enfermedad</option>
+          <option value="art">ART / Accidente laboral</option>
+          <option value="licencia_sin_sueldo">Licencia sin sueldo</option>
+          <option value="maternidad">Maternidad / Paternidad</option>
+          <option value="duelo">Duelo</option>
+          <option value="estudio">Examen / Estudio</option>
+          <option value="injustificada">Inasistencia injustificada</option>
+          <option value="otro">Otro</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label>Estado</label>
+        <select id="na-estado">
+          <option value="aprobada">Aprobada</option>
+          <option value="pendiente">Pendiente aprobación</option>
+          <option value="rechazada">Rechazada</option>
+        </select>
+      </div>
+    </div>
+    <div class="form-row">
+      <div class="form-group">
+        <label>Fecha inicio</label>
+        <input type="date" id="na-inicio">
+      </div>
+      <div class="form-group">
+        <label>Fecha fin</label>
+        <input type="date" id="na-fin">
+      </div>
+    </div>
+    <div class="form-row full">
+      <div class="form-group">
+        <label>Observaciones</label>
+        <textarea id="na-obs" placeholder="Diagnóstico, número de expediente ART, etc."></textarea>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" onclick="cerrarModal('modal-ausencia')">Cancelar</button>
+      <button class="btn btn-primary" onclick="guardarAusencia()">Guardar</button>
+    </div>
+  </div>
+</div>
+
 <!-- MODAL CLIENTE -->
 <div class="modal-overlay" id="modal-cliente">
   <div class="modal">
@@ -318,6 +448,16 @@ async function init(){
   document.getElementById('ns-fecha-pago').value=hoy();
   await cargarEmpleadosModal();
   await cargarEmpleados();
+  await cargarEmpleadosDocModal();
+  await cargarEmpleadosAusModal();
+  // Badge documentos vencidos
+  const hoyStr=new Date().toISOString().split('T')[0];
+  const en30=new Date();en30.setDate(en30.getDate()+30);
+  const {data:docsAlert}=await db.from('empleados_documentos')
+    .select('id',{count:'exact',head:true})
+    .lte('fecha_vencimiento',en30.toISOString().split('T')[0]);
+  const badge=document.getElementById('badge-docs-venc');
+  if(badge&&docsAlert){badge.textContent=docsAlert.length||'';badge.style.display=docsAlert.length>0?'inline':'none';}
 }
 
 function cambiarTab(tab,btn){
@@ -325,9 +465,14 @@ function cambiarTab(tab,btn){
   document.querySelectorAll('.tab').forEach(t=>t.classList.remove('active'));
   btn.classList.add('active');
   const btnNuevo=document.getElementById('btn-nuevo');
-  btnNuevo.textContent=tab==='clientes'?'+ Nuevo cliente':tab==='sueldos'?'+ Registrar sueldo':tab==='costos'?'':'+ Nuevo empleado';
+  if(tab==='clientes') btnNuevo.textContent='+ Nuevo cliente';
+  else if(tab==='sueldos') btnNuevo.textContent='+ Registrar sueldo';
+  else if(tab==='documentos') btnNuevo.textContent='+ Subir documento';
+  else if(tab==='ausencias') btnNuevo.textContent='+ Registrar ausencia';
+  else if(tab==='costos') btnNuevo.textContent='';
+  else btnNuevo.textContent='+ Nuevo empleado';
   btnNuevo.style.display=tab==='costos'?'none':'';
-  document.getElementById('f-estado').style.display=tab==='sueldos'||tab==='costos'?'none':'';
+  document.getElementById('f-estado').style.display=(tab==='sueldos'||tab==='costos'||tab==='documentos'||tab==='ausencias')?'none':'';
   recargar();
 }
 
@@ -335,12 +480,16 @@ function recargar(){
   if(tabActual==='empleados') cargarEmpleados();
   else if(tabActual==='sueldos') cargarSueldos();
   else if(tabActual==='costos') cargarCostos();
+  else if(tabActual==='documentos') cargarDocumentos();
+  else if(tabActual==='ausencias') cargarAusencias();
   else cargarClientes();
 }
 
 function abrirNuevo(){
   if(tabActual==='clientes') abrirNuevoCliente();
   else if(tabActual==='sueldos') abrirNuevoSueldo();
+  else if(tabActual==='documentos') document.getElementById('modal-documento').classList.add('show');
+  else if(tabActual==='ausencias') document.getElementById('modal-ausencia').classList.add('show');
   else abrirNuevoEmpleado();
 }
 
@@ -679,6 +828,260 @@ async function guardarCostoRol(id,empId,rol){
   btn.textContent='✓ Guardado';
   btn.style.background='var(--green)';
   setTimeout(()=>{btn.textContent='Guardar';btn.style.background='';},2000);
+}
+
+
+// ═══════════════ DOCUMENTOS ═══════════════════════════════════
+
+async function cargarEmpleadosDocModal(){
+  const empId=document.getElementById('nd-empresa').value;
+  const {data}=await db.from('empleados').select('id,nombre').eq('empresa_id',empId).eq('activo',true).order('nombre');
+  document.getElementById('nd-empleado').innerHTML=(data||[]).map(e=>`<option value="${e.id}">${e.nombre}</option>`).join('');
+}
+
+async function cargarDocumentos(){
+  document.getElementById('kpis').innerHTML='';
+  document.getElementById('contenido').innerHTML='<div class="spinner-wrap"><div class="spinner"></div>Cargando...</div>';
+  const emp=document.getElementById('f-empresa').value;
+  const buscar=document.getElementById('f-buscar').value.toLowerCase();
+  const hoyStr=new Date().toISOString().split('T')[0];
+  const en30=new Date();en30.setDate(en30.getDate()+30);
+  const en30Str=en30.toISOString().split('T')[0];
+
+  let q=db.from('empleados_documentos')
+    .select('*,empleados(nombre),empresas(nombre)')
+    .order('fecha_vencimiento',{ascending:true,nullsFirst:false});
+  if(emp) q=q.eq('empresa_id',emp);
+  const {data}=await q;
+  let rows=data||[];
+  if(buscar) rows=rows.filter(r=>(r.empleados?.nombre||'').toLowerCase().includes(buscar)||(r.tipo||'').toLowerCase().includes(buscar));
+
+  const vencidos=rows.filter(r=>r.fecha_vencimiento&&r.fecha_vencimiento<hoyStr);
+  const proxVencer=rows.filter(r=>r.fecha_vencimiento&&r.fecha_vencimiento>=hoyStr&&r.fecha_vencimiento<=en30Str);
+  const vigentes=rows.filter(r=>!r.fecha_vencimiento||r.fecha_vencimiento>en30Str);
+
+  // Badge en tab
+  const badge=document.getElementById('badge-docs-venc');
+  const alertCount=vencidos.length+proxVencer.length;
+  if(badge){badge.textContent=alertCount;badge.style.display=alertCount>0?'inline':'none';}
+
+  document.getElementById('kpis').innerHTML=`
+    <div class="kpi-card red"><div class="kpi-label">Vencidos</div><div class="kpi-value">${vencidos.length}</div></div>
+    <div class="kpi-card orange"><div class="kpi-label">Vencen en 30 días</div><div class="kpi-value">${proxVencer.length}</div></div>
+    <div class="kpi-card green"><div class="kpi-label">Vigentes</div><div class="kpi-value">${vigentes.length}</div></div>
+    <div class="kpi-card blue"><div class="kpi-label">Total documentos</div><div class="kpi-value">${rows.length}</div></div>`;
+
+  const TIPO_LABELS={
+    dni:'DNI',art:'ART',preocupacional:'Preocupacional',alta_afip:'Alta AFIP',cv:'CV',
+    cert_capacitacion:'Cert. Capacitación',cert_altura:'Habilitación Altura',
+    cert_espacio:'Espacio Confinado',examen_periodico:'Examen Periódico',
+    carnet_manejo:'Carnet Conducir',otro:'Otro'
+  };
+
+  document.getElementById('contenido').innerHTML=`
+    <div style="overflow-x:auto"><table>
+      <thead><tr><th>Empleado</th><th>Empresa</th><th>Tipo</th><th>Descripción</th><th>Vencimiento</th><th>Estado</th><th>Acciones</th></tr></thead>
+      <tbody>${rows.length?rows.map(r=>{
+        const venc=r.fecha_vencimiento;
+        const esVencido=venc&&venc<hoyStr;
+        const esProximo=venc&&venc>=hoyStr&&venc<=en30Str;
+        const diasRestantes=venc?Math.ceil((new Date(venc+'T12:00:00')-new Date())/(1000*60*60*24)):null;
+        return`<tr>
+          <td style="font-weight:500">${r.empleados?.nombre||'—'}</td>
+          <td style="font-size:12px">${r.empresas?.nombre||'—'}</td>
+          <td><span style="font-size:11px;padding:2px 8px;border-radius:4px;background:var(--bg3);color:var(--muted)">${TIPO_LABELS[r.tipo]||r.tipo}</span></td>
+          <td style="font-size:12px;color:var(--muted)">${r.descripcion||'—'}</td>
+          <td class="mono" style="color:${esVencido?'var(--red)':esProximo?'var(--orange)':'var(--text)'}">
+            ${venc?new Date(venc+'T12:00:00').toLocaleDateString('es-AR'):'Sin vencimiento'}
+            ${esVencido?'<div style="font-size:10px;color:var(--red)">VENCIDO</div>':''}
+            ${esProximo?`<div style="font-size:10px;color:var(--orange)">Vence en ${diasRestantes}d</div>`:''}
+          </td>
+          <td>
+            ${esVencido?'<span style="font-size:11px;padding:3px 10px;border-radius:20px;background:rgba(239,68,68,0.15);color:var(--red)">Vencido</span>':
+              esProximo?'<span style="font-size:11px;padding:3px 10px;border-radius:20px;background:rgba(245,158,11,0.15);color:var(--orange)">Por vencer</span>':
+              '<span style="font-size:11px;padding:3px 10px;border-radius:20px;background:rgba(16,185,129,0.15);color:var(--green)">Vigente</span>'}
+          </td>
+          <td><div style="display:flex;gap:6px">
+            ${r.archivo_url?`<a href="${r.archivo_url}" target="_blank" class="btn btn-sm btn-ghost">Ver</a>`:''}
+            <button class="btn btn-sm btn-danger" onclick="borrarDocumento('${r.id}','${r.archivo_path||''}')">Borrar</button>
+          </div></td>
+        </tr>`;
+      }).join(''):'<tr><td colspan="7" style="text-align:center;padding:40px;color:var(--muted)">Sin documentos cargados</td></tr>'}</tbody>
+    </table></div>`;
+}
+
+async function guardarDocumento(){
+  const empId=document.getElementById('nd-empleado').value;
+  const tipo=document.getElementById('nd-tipo').value;
+  const venc=document.getElementById('nd-vencimiento').value;
+  const desc=document.getElementById('nd-descripcion').value;
+  const fileInput=document.getElementById('nd-archivo');
+  const file=fileInput.files[0];
+
+  if(!empId){alert('Seleccioná un empleado.');return;}
+
+  let archivoUrl=null;
+  let archivoPatch=null;
+
+  if(file){
+    // Upload to Supabase Storage
+    const ext=file.name.split('.').pop();
+    const path=`documentos/${empId}/${tipo}_${Date.now()}.${ext}`;
+    document.getElementById('nd-upload-progress').style.display='block';
+    document.getElementById('nd-progress-bar').style.width='40%';
+    document.getElementById('nd-progress-text').textContent='Subiendo archivo...';
+
+    const {data:uploadData,error:uploadError}=await db.storage
+      .from('empleados-docs')
+      .upload(path,file,{contentType:file.type,upsert:false});
+
+    if(uploadError){
+      document.getElementById('nd-upload-progress').style.display='none';
+      alert('Error al subir archivo: '+uploadError.message);
+      return;
+    }
+
+    document.getElementById('nd-progress-bar').style.width='80%';
+    const {data:urlData}=db.storage.from('empleados-docs').getPublicUrl(path);
+    archivoUrl=urlData?.publicUrl||null;
+    archivoPatch=path;
+    document.getElementById('nd-progress-bar').style.width='100%';
+    document.getElementById('nd-progress-text').textContent='Archivo subido';
+  }
+
+  const empresaId=document.getElementById('nd-empresa').value;
+  const {error}=await db.from('empleados_documentos').insert({
+    empresa_id:empresaId,
+    empleado_id:empId,
+    tipo,
+    descripcion:desc||null,
+    fecha_vencimiento:venc||null,
+    archivo_url:archivoUrl,
+    archivo_path:archivoPatch,
+  });
+
+  document.getElementById('nd-upload-progress').style.display='none';
+  if(error){alert('Error: '+error.message);return;}
+  cerrarModal('modal-documento');
+  fileInput.value='';
+  cargarDocumentos();
+}
+
+async function borrarDocumento(id,path){
+  if(!confirm('¿Borrar este documento?')) return;
+  if(path){
+    await db.storage.from('empleados-docs').remove([path]);
+  }
+  await db.from('empleados_documentos').delete().eq('id',id);
+  cargarDocumentos();
+}
+
+// ═══════════════ AUSENCIAS ════════════════════════════════════
+
+async function cargarEmpleadosAusModal(){
+  const empId=document.getElementById('na-empresa').value;
+  const {data}=await db.from('empleados').select('id,nombre').eq('empresa_id',empId).eq('activo',true).order('nombre');
+  document.getElementById('na-empleado').innerHTML=(data||[]).map(e=>`<option value="${e.id}">${e.nombre}</option>`).join('');
+}
+
+async function cargarAusencias(){
+  document.getElementById('kpis').innerHTML='';
+  document.getElementById('contenido').innerHTML='<div class="spinner-wrap"><div class="spinner"></div>Cargando...</div>';
+  const emp=document.getElementById('f-empresa').value;
+  const buscar=document.getElementById('f-buscar').value.toLowerCase();
+  const hoyStr=new Date().toISOString().split('T')[0];
+
+  let q=db.from('empleados_ausencias')
+    .select('*,empleados(nombre),empresas(nombre)')
+    .order('fecha_inicio',{ascending:false});
+  if(emp) q=q.eq('empresa_id',emp);
+  const {data}=await q;
+  let rows=data||[];
+  if(buscar) rows=rows.filter(r=>(r.empleados?.nombre||'').toLowerCase().includes(buscar));
+
+  // Stats
+  const hoy=rows.filter(r=>r.fecha_inicio<=hoyStr&&(!r.fecha_fin||r.fecha_fin>=hoyStr)&&r.estado==='aprobada');
+  const pendientes=rows.filter(r=>r.estado==='pendiente');
+  const totalDias=rows.filter(r=>r.estado==='aprobada').reduce((s,r)=>{
+    if(!r.fecha_fin) return s+1;
+    const d=Math.ceil((new Date(r.fecha_fin)-new Date(r.fecha_inicio))/(1000*60*60*24))+1;
+    return s+d;
+  },0);
+
+  document.getElementById('kpis').innerHTML=`
+    <div class="kpi-card red"><div class="kpi-label">Ausentes hoy</div><div class="kpi-value">${hoy.length}</div></div>
+    <div class="kpi-card orange"><div class="kpi-label">Pendientes aprobación</div><div class="kpi-value">${pendientes.length}</div></div>
+    <div class="kpi-card blue"><div class="kpi-label">Total días acumulados</div><div class="kpi-value">${totalDias}d</div></div>
+    <div class="kpi-card green"><div class="kpi-label">Registros</div><div class="kpi-value">${rows.length}</div></div>`;
+
+  const TIPO_LABELS={
+    vacaciones:'Vacaciones',enfermedad:'Enfermedad',art:'ART',
+    licencia_sin_sueldo:'Lic. sin sueldo',maternidad:'Maternidad/Paternidad',
+    duelo:'Duelo',estudio:'Estudio/Examen',injustificada:'Injustificada',otro:'Otro'
+  };
+  const ESTADO_STYLE={
+    aprobada:'background:rgba(16,185,129,0.15);color:var(--green)',
+    pendiente:'background:rgba(245,158,11,0.15);color:var(--orange)',
+    rechazada:'background:rgba(239,68,68,0.15);color:var(--red)'
+  };
+
+  document.getElementById('contenido').innerHTML=`
+    <div style="overflow-x:auto"><table>
+      <thead><tr><th>Empleado</th><th>Empresa</th><th>Tipo</th><th>Desde</th><th>Hasta</th><th>Días</th><th>Estado</th><th>Observaciones</th><th></th></tr></thead>
+      <tbody>${rows.length?rows.map(r=>{
+        const activa=r.fecha_inicio<=hoyStr&&(!r.fecha_fin||r.fecha_fin>=hoyStr)&&r.estado==='aprobada';
+        const dias=r.fecha_fin?Math.ceil((new Date(r.fecha_fin)-new Date(r.fecha_inicio))/(1000*60*60*24))+1:1;
+        return`<tr style="${activa?'background:rgba(239,68,68,0.04)':''}">
+          <td style="font-weight:500">
+            ${r.empleados?.nombre||'—'}
+            ${activa?'<span style="font-size:10px;background:rgba(239,68,68,0.15);color:var(--red);padding:1px 6px;border-radius:4px;margin-left:4px">AUSENTE HOY</span>':''}
+          </td>
+          <td style="font-size:12px">${r.empresas?.nombre||'—'}</td>
+          <td><span style="font-size:11px;padding:2px 8px;border-radius:4px;background:var(--bg3);color:var(--muted)">${TIPO_LABELS[r.tipo]||r.tipo}</span></td>
+          <td class="mono">${r.fecha_inicio?new Date(r.fecha_inicio+'T12:00:00').toLocaleDateString('es-AR'):'—'}</td>
+          <td class="mono">${r.fecha_fin?new Date(r.fecha_fin+'T12:00:00').toLocaleDateString('es-AR'):'—'}</td>
+          <td class="mono" style="font-weight:500">${dias}d</td>
+          <td><span style="font-size:11px;padding:3px 10px;border-radius:20px;${ESTADO_STYLE[r.estado]||''}">${r.estado}</span></td>
+          <td style="font-size:12px;color:var(--muted);max-width:150px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${r.observaciones||'—'}</td>
+          <td><div style="display:flex;gap:4px">
+            ${r.estado==='pendiente'?`
+              <button class="btn btn-sm btn-success" onclick="cambiarEstadoAusencia('${r.id}','aprobada')">Aprobar</button>
+              <button class="btn btn-sm btn-danger" onclick="cambiarEstadoAusencia('${r.id}','rechazada')">Rechazar</button>
+            `:''}
+            <button class="btn btn-sm btn-danger" onclick="borrarAusencia('${r.id}')">×</button>
+          </div></td>
+        </tr>`;
+      }).join(''):'<tr><td colspan="9" style="text-align:center;padding:40px;color:var(--muted)">Sin ausencias registradas</td></tr>'}</tbody>
+    </table></div>`;
+}
+
+async function guardarAusencia(){
+  const empId=document.getElementById('na-empleado').value;
+  const inicio=document.getElementById('na-inicio').value;
+  if(!empId||!inicio){alert('Empleado y fecha de inicio son obligatorios.');return;}
+  const {error}=await db.from('empleados_ausencias').insert({
+    empresa_id:document.getElementById('na-empresa').value,
+    empleado_id:empId,
+    tipo:document.getElementById('na-tipo').value,
+    estado:document.getElementById('na-estado').value,
+    fecha_inicio:inicio,
+    fecha_fin:document.getElementById('na-fin').value||null,
+    observaciones:document.getElementById('na-obs').value||null,
+  });
+  if(error){alert('Error: '+error.message);return;}
+  cerrarModal('modal-ausencia');
+  cargarAusencias();
+}
+
+async function cambiarEstadoAusencia(id,estado){
+  await db.from('empleados_ausencias').update({estado}).eq('id',id);
+  cargarAusencias();
+}
+
+async function borrarAusencia(id){
+  if(!confirm('Borrar este registro?')) return;
+  await db.from('empleados_ausencias').delete().eq('id',id);
+  cargarAusencias();
 }
 
 function cerrarModal(id){document.getElementById(id).classList.remove('show');}
