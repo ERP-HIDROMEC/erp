@@ -4,34 +4,13 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Hidromec ERP — Clientes</title>
+<link rel="stylesheet" href="erp-layout.css">
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="erp-utils.js"></script>
+<script src="erp-sidebar.js"></script>
 <style>
-  :root{--bg:#0f1117;--bg2:#181c27;--bg3:#1e2436;--border:rgba(255,255,255,0.07);--text:#e8eaf0;--muted:#7a8099;--blue:#3b82f6;--green:#10b981;--red:#ef4444;--orange:#f59e0b;--purple:#8b5cf6;--teal:#14b8a6;}
-  *{margin:0;padding:0;box-sizing:border-box;}
-  body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--text);min-height:100vh;}
-  .sidebar{position:fixed;left:0;top:0;bottom:0;width:220px;background:var(--bg2);border-right:1px solid var(--border);display:flex;flex-direction:column;z-index:100;overflow-y:auto;}
-  .sidebar-logo{padding:24px 20px 20px;border-bottom:1px solid var(--border);}
-  .sidebar-logo h1{font-size:16px;font-weight:600;}
-  .sidebar-logo span{font-size:11px;color:var(--muted);font-family:'DM Mono',monospace;}
-  .nav-section{padding:16px 16px 6px;font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:1.2px;color:var(--muted);}
-  .nav-item{display:flex;align-items:center;gap:10px;padding:9px 12px;margin:1px 8px;border-radius:8px;font-size:13.5px;color:var(--muted);cursor:pointer;transition:all 0.15s;text-decoration:none;}
-  .nav-item:hover{background:var(--bg3);color:var(--text);}
-  .nav-item.active{background:rgba(59,130,246,0.12);color:var(--blue);}
-  .nav-item svg{width:16px;height:16px;flex-shrink:0;}
-  .nav-bottom{padding:16px 12px;border-top:1px solid var(--border);margin-top:auto;position:sticky;bottom:0;background:var(--bg2);}
-  .btn-logout{width:100%;padding:8px;background:rgba(239,68,68,0.1);border:1px solid rgba(239,68,68,0.2);border-radius:8px;color:var(--red);cursor:pointer;font-size:13px;font-family:'DM Sans',sans-serif;}
-  .main{margin-left:220px;padding:28px 32px;}
-  .page-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:24px;}
-  .page-header h2{font-size:24px;font-weight:600;}
-  .tabs{display:flex;gap:4px;background:var(--bg2);padding:4px;border-radius:10px;margin-bottom:20px;width:fit-content;}
-  .tab{padding:7px 16px;border-radius:7px;border:none;background:transparent;color:var(--muted);cursor:pointer;font-size:13px;font-family:'DM Sans',sans-serif;transition:all 0.15s;white-space:nowrap;}
   .tab:hover{color:var(--text);}
-  .tab.active{background:var(--bg3);color:var(--text);font-weight:500;}
-  .filtros{display:flex;gap:8px;margin-bottom:16px;flex-wrap:wrap;align-items:center;}
-  .filtros select,.filtros input{padding:8px 12px;background:var(--bg2);border:1px solid var(--border);border-radius:8px;color:var(--text);font-size:13px;font-family:'DM Sans',sans-serif;outline:none;}
-  .filtros select:focus,.filtros input:focus{border-color:var(--blue);}
   .kpis{display:flex;gap:12px;margin-bottom:20px;flex-wrap:wrap;}
   .kpi-card{background:var(--bg2);border:1px solid var(--border);border-radius:10px;padding:14px 18px;min-width:150px;flex:1;}
   .kpi-card.blue{border-top:3px solid var(--blue);}
@@ -39,68 +18,19 @@
   .kpi-card.orange{border-top:3px solid var(--orange);}
   .kpi-card.red{border-top:3px solid var(--red);}
   .kpi-card.teal{border-top:3px solid var(--teal);}
-  .kpi-label{font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:0.6px;margin-bottom:6px;}
-  .kpi-value{font-size:22px;font-weight:600;font-family:'DM Mono',monospace;}
-  .panel{background:var(--bg2);border:1px solid var(--border);border-radius:10px;overflow:hidden;margin-bottom:16px;}
-  .panel-header{display:flex;align-items:center;justify-content:space-between;padding:14px 20px;border-bottom:1px solid var(--border);}
-  .panel-header h3{font-size:14px;font-weight:500;}
-  table{width:100%;border-collapse:collapse;}
-  th{padding:10px 14px;font-size:11px;font-weight:500;text-transform:uppercase;letter-spacing:0.6px;color:var(--muted);text-align:left;border-bottom:1px solid var(--border);background:var(--bg3);}
-  td{padding:11px 14px;border-bottom:1px solid var(--border);vertical-align:middle;}
-  tr:last-child td{border-bottom:none;}
-  tr:hover td{background:rgba(255,255,255,0.02);}
-  .mono{font-family:'DM Mono',monospace;font-size:13px;}
-  .btn{padding:8px 16px;border-radius:8px;border:none;cursor:pointer;font-size:13px;font-family:'DM Sans',sans-serif;font-weight:500;transition:all 0.15s;}
-  .btn-primary{background:var(--blue);color:#fff;}
-  .btn-primary:hover{opacity:0.9;}
-  .btn-ghost{background:transparent;color:var(--text);border:1px solid var(--border);}
-  .btn-ghost:hover{background:var(--bg3);}
-  .btn-danger{background:transparent;color:var(--red);border:1px solid rgba(239,68,68,0.3);}
-  .btn-sm{padding:5px 10px;font-size:12px;}
-  .modal-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,0.6);z-index:200;align-items:center;justify-content:center;padding:20px;}
-  .modal-overlay.show{display:flex;}
-  .modal{background:var(--bg2);border:1px solid var(--border);border-radius:12px;padding:24px;width:100%;max-width:600px;max-height:90vh;overflow-y:auto;}
-  .modal h3{font-size:16px;font-weight:600;margin-bottom:20px;}
-  .form-row{display:flex;gap:12px;margin-bottom:14px;flex-wrap:wrap;}
-  .form-group{flex:1;min-width:180px;}
-  .form-group.full{flex:0 0 100%;}
-  .form-group label{display:block;font-size:12px;color:var(--muted);margin-bottom:5px;}
-  .form-group input,.form-group select,.form-group textarea{width:100%;padding:9px 12px;background:var(--bg3);border:1px solid var(--border);border-radius:8px;color:var(--text);font-size:13px;font-family:'DM Sans',sans-serif;outline:none;}
-  .form-group textarea{min-height:70px;resize:vertical;}
-  .form-group input:focus,.form-group select:focus,.form-group textarea:focus{border-color:var(--blue);}
-  .modal-footer{display:flex;gap:8px;justify-content:flex-end;margin-top:20px;padding-top:16px;border-top:1px solid var(--border);}
-  .spinner-wrap{display:flex;align-items:center;justify-content:center;padding:60px;color:var(--muted);gap:12px;}
-  .spinner{width:20px;height:20px;border:2px solid var(--border);border-top-color:var(--blue);border-radius:50%;animation:spin 0.8s linear infinite;}
-  @keyframes spin{to{transform:rotate(360deg);}}
+  .kpi-.kpi-value{font-size:22px;font-weight:600;font-family:'DM Mono',monospace;}
+  tr:last-child tr:hover .form-group.full{flex:0 0 100%;}
+  .form-group .form-group input,.form-group select,.form-group .form-group .form-group input:focus,.form-group select:focus,.form-group textarea:focus{border-color:var(--blue);}
   .badge{display:inline-block;padding:2px 8px;border-radius:20px;font-size:11px;}
   .badge-activo{background:rgba(16,185,129,0.15);color:var(--green);}
   .badge-inactivo{background:rgba(239,68,68,0.15);color:var(--red);}
   .detalle-card{background:var(--bg3);border:1px solid var(--border);border-radius:8px;padding:12px 16px;margin-bottom:8px;}
-  .detalle-label{font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:0.6px;margin-bottom:4px;}
-  .detalle-value{font-size:14px;color:var(--text);}
+  .detalle-.detalle-value{font-size:14px;color:var(--text);}
 </style>
 </head>
 <body>
-<nav class="sidebar">
-  <div class="sidebar-logo"><h1>Hidromec ERP</h1><span>v1.0 — 2026</span></div>
-  <div data-seccion="dashboard" class="nav-section">Home</div>
-  <a data-modulo="dashboard" class="nav-item" href="index.html"><svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6"/></svg>Dashboard</a>
-  <div data-seccion="proyectos,contratos,remitos,presupuestos" class="nav-section">Operaciones</div>
-  <a data-modulo="proyectos" class="nav-item" href="proyectos.html"><svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"/></svg>Proyectos</a>
-  <a data-modulo="contratos" class="nav-item" href="contratos.html"><svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>Contratos</a>
-  <a data-modulo="remitos" class="nav-item" href="remitos.html"><svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>Remitos</a>
-  <a data-modulo="presupuestos" class="nav-item" href="presupuestos.html"><svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 7h6m0 10v-3m-3 3h.01M9 17h.01M9 14h.01M12 14h.01M15 11h.01M12 11h.01M9 11h.01M7 21h10a2 2 0 002-2V5a2 2 0 00-2-2H7a2 2 0 00-2 2v14a2 2 0 002 2z"/></svg>Presupuestos</a>
-  <div data-seccion="facturas,compras,impuestos,caja,clientes" class="nav-section">Gestión</div>
-  <a data-modulo="facturas" class="nav-item" href="facturas.html"><svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 9V7a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2m2 4h10a2 2 0 002-2v-6a2 2 0 00-2-2H9a2 2 0 00-2 2v6a2 2 0 002 2zm7-5a2 2 0 11-4 0 2 2 0 014 0z"/></svg>Facturación</a>
-  <a data-modulo="compras" class="nav-item" href="compras.html"><svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 3h2l.4 2M7 13h10l4-8H5.4M7 13L5.4 5M7 13l-2.293 2.293c-.63.63-.184 1.707.707 1.707H17m0 0a2 2 0 100 4 2 2 0 000-4zm-8 2a2 2 0 11-4 0 2 2 0 014 0z"/></svg>Compras</a>
-  <a data-modulo="caja" class="nav-item" href="caja.html"><svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>Caja</a>
-  <a data-modulo="impuestos" class="nav-item" href="impuestos.html"><svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 14l6-6m-5.5.5h.01m4.99 5h.01M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16l3.5-2 3.5 2 3.5-2 3.5 2z"/></svg>Impuestos</a>
-  <a data-modulo="clientes" class="nav-item active" href="clientes.html"><svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 21V19a4 4 0 00-4-4H9a4 4 0 00-4 4v2M12 11a4 4 0 100-8 4 4 0 000 8z"/></svg>Clientes</a>
-  <div data-seccion="empleados,syh" class="nav-section">RRHH</div>
-  <a data-modulo="empleados" class="nav-item" href="empleados.html"><svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z"/></svg>Empleados</a>
-  <a data-modulo="syh" class="nav-item" href="syh.html"><svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"/></svg>Seg. e Higiene</a>
-  <div class="nav-bottom"><button class="btn-logout" onclick="logout()">Cerrar sesión</button></div>
-</nav>
+<div id="overlay" class="overlay" onclick="ERP.ERP.closeSidebar()"></div>
+<div id="sidebar-root"></div>
 
 <main class="main">
   <div class="page-header">
@@ -298,8 +228,8 @@ let clienteSelId = null;
 let clienteEditId = null;
 
 async function init(){
-  const acceso = await verificarAcceso('clientes');
-  if(!acceso) return;
+  const usuario = await ERP.initLayout('clientes');
+  if(!usuario) return;
   cargarClientes();
 }
 
@@ -681,7 +611,7 @@ async function borrarDocCliente(id){
 }
 
 function cerrarModal(id){ document.getElementById(id).classList.remove('show'); }
-async function logout(){ await db.auth.signOut(); window.location.href = 'login.html'; }
+// logout() → ahora en ERP.logout() (erp-sidebar.js)
 
 init();
 </script>

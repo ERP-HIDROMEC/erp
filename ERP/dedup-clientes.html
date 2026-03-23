@@ -4,53 +4,18 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Hidromec ERP — Limpiar Clientes Duplicados</title>
+<link rel="stylesheet" href="erp-layout.css">
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="erp-utils.js"></script>
+<script src="erp-sidebar.js"></script>
 <style>
-  :root{--bg:#0f1117;--bg2:#181c27;--bg3:#1e2436;--border:rgba(255,255,255,0.07);--text:#e8eaf0;--muted:#7a8099;--blue:#3b82f6;--green:#10b981;--red:#ef4444;--orange:#f59e0b;--purple:#8b5cf6;}
-  *{margin:0;padding:0;box-sizing:border-box;}
-  body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--text);min-height:100vh;}
-
-  .sidebar{position:fixed;left:0;top:0;bottom:0;width:220px;background:var(--bg2);border-right:1px solid var(--border);display:flex;flex-direction:column;z-index:100;}
-  .sidebar-logo{padding:24px 20px 20px;border-bottom:1px solid var(--border);}
-  .sidebar-logo h1{font-size:16px;font-weight:600;}
-  .sidebar-logo span{font-size:11px;color:var(--muted);font-family:'DM Mono',monospace;}
-  .nav-section{padding:16px 12px 8px;font-size:10px;font-weight:500;color:var(--muted);letter-spacing:1.5px;text-transform:uppercase;}
-  .nav-item{display:flex;align-items:center;gap:10px;padding:9px 12px;margin:1px 8px;border-radius:8px;font-size:13.5px;color:var(--muted);cursor:pointer;transition:all 0.15s;text-decoration:none;}
-  .nav-item:hover{background:var(--bg3);color:var(--text);}
-  .nav-item.active{background:rgba(59,130,246,0.15);color:var(--blue);}
-  .nav-bottom{margin-top:auto;padding:16px 12px;border-top:1px solid var(--border);}
-  .btn-logout{width:100%;padding:9px 12px;background:rgba(239,68,68,0.1);border:1px solid rgba(239,68,68,0.2);border-radius:8px;color:var(--red);font-size:13px;font-family:'DM Sans',sans-serif;cursor:pointer;}
-
-  .main{margin-left:220px;padding:28px 32px;max-width:1100px;}
-  .page-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;flex-wrap:wrap;gap:12px;}
-  .page-header h2{font-size:22px;font-weight:600;}
   .page-sub{font-size:13px;color:var(--muted);margin-bottom:28px;}
 
-  .btn{padding:9px 18px;border-radius:8px;font-size:13px;font-weight:500;font-family:'DM Sans',sans-serif;cursor:pointer;border:none;transition:all 0.15s;}
-  .btn-primary{background:var(--blue);color:#fff;}
-  .btn-primary:hover{background:#2563eb;}
-  .btn-danger{background:rgba(239,68,68,0.15);color:var(--red);border:1px solid rgba(239,68,68,0.2);}
-  .btn-danger:hover{background:rgba(239,68,68,0.3);}
-  .btn-ghost{background:var(--bg3);color:var(--text);border:1px solid var(--border);}
-  .btn-ghost:hover{border-color:var(--blue);}
-  .btn-sm{padding:5px 12px;font-size:12px;}
   .btn-xs{padding:3px 8px;font-size:11px;}
   .btn:disabled{opacity:0.4;cursor:not-allowed;}
 
-  .panel{background:var(--bg2);border:1px solid var(--border);border-radius:12px;overflow:hidden;margin-bottom:24px;}
-  .panel-header{padding:16px 20px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;}
-  .panel-header h3{font-size:14px;font-weight:500;}
-
-  table{width:100%;border-collapse:collapse;}
-  th{padding:10px 16px;text-align:left;font-size:11px;font-weight:500;color:var(--muted);text-transform:uppercase;letter-spacing:0.8px;border-bottom:1px solid var(--border);background:var(--bg3);}
-  td{padding:10px 16px;font-size:13px;color:var(--text);border-bottom:1px solid var(--border);vertical-align:middle;}
-  tr:last-child td{border-bottom:none;}
-  tr:hover td{background:rgba(255,255,255,0.02);}
-  .mono{font-family:'DM Mono',monospace;font-size:12px;}
-
-  .badge{display:inline-block;padding:2px 8px;border-radius:20px;font-size:11px;font-weight:500;}
+  tr:last-child tr:hover .badge{display:inline-block;padding:2px 8px;border-radius:20px;font-size:11px;font-weight:500;}
   .badge-red{background:rgba(239,68,68,0.15);color:var(--red);}
   .badge-orange{background:rgba(245,158,11,0.15);color:var(--orange);}
   .badge-blue{background:rgba(59,130,246,0.15);color:var(--blue);}
@@ -89,8 +54,7 @@
   /* KPIs */
   .kpis{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:24px;}
   .kpi{background:var(--bg2);border:1px solid var(--border);border-radius:10px;padding:16px 18px;}
-  .kpi-label{font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:0.8px;margin-bottom:6px;}
-  .kpi-value{font-size:26px;font-weight:600;}
+  .kpi-.kpi-value{font-size:26px;font-weight:600;}
   .kpi-value.red{color:var(--red);}
   .kpi-value.green{color:var(--green);}
   .kpi-value.orange{color:var(--orange);}
@@ -102,20 +66,12 @@
   .alerta-success{background:rgba(16,185,129,0.1);border:1px solid rgba(16,185,129,0.2);color:var(--green);}
 
   /* Spinner */
-  .spinner{display:inline-block;width:16px;height:16px;border:2px solid rgba(255,255,255,0.2);border-top-color:#fff;border-radius:50%;animation:spin 0.7s linear infinite;vertical-align:middle;margin-right:6px;}
-  @keyframes spin{to{transform:rotate(360deg)}}
-
   /* Modal confirmación */
-  .modal-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,0.75);z-index:300;align-items:center;justify-content:center;}
   .modal-overlay.open{display:flex;}
-  .modal{background:var(--bg2);border:1px solid var(--border);border-radius:14px;padding:28px;max-width:460px;width:100%;margin:16px;}
-  .modal h3{font-size:16px;font-weight:600;margin-bottom:10px;}
   .modal p{font-size:13px;color:var(--muted);line-height:1.6;margin-bottom:20px;}
   .modal-actions{display:flex;gap:10px;justify-content:flex-end;}
 
-  #grupos-container .empty{padding:40px;text-align:center;color:var(--muted);font-size:13px;}
-
-  .step-indicator{display:flex;gap:0;margin-bottom:28px;}
+  #grupos-container .step-indicator{display:flex;gap:0;margin-bottom:28px;}
   .step{flex:1;padding:12px 16px;background:var(--bg3);border:1px solid var(--border);font-size:12px;color:var(--muted);text-align:center;}
   .step:first-child{border-radius:8px 0 0 8px;}
   .step:last-child{border-radius:0 8px 8px 0;}
@@ -127,36 +83,8 @@
 <body>
 
 <!-- SIDEBAR -->
-<nav class="sidebar">
-  <div class="sidebar-logo">
-    <h1>Hidromec ERP</h1>
-    <span>Sistema de gestión</span>
-  </div>
-  <div class="nav-section">Módulos</div>
-  <a href="index.html" class="nav-item">
-    <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6"/></svg>
-    Dashboard
-  </a>
-  <a href="facturas.html" class="nav-item">
-    <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>
-    Facturas
-  </a>
-  <a href="remitos.html" class="nav-item">
-    <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"/></svg>
-    Remitos
-  </a>
-  <a href="contratos.html" class="nav-item">
-    <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7v8a2 2 0 002 2h6M8 7V5a2 2 0 012-2h4.586a1 1 0 01.707.293l4.414 4.414a1 1 0 01.293.707V15a2 2 0 01-2 2h-2"/></svg>
-    Contratos
-  </a>
-  <a href="presupuestos.html" class="nav-item">
-    <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 7h6m0 10v-3m-3 3h.01M9 17h.01M9 14h.01M12 14h.01M15 11h.01M12 11h.01M9 11h.01M7 21h10a2 2 0 002-2V5a2 2 0 00-2-2H7a2 2 0 00-2 2v14a2 2 0 002 2z"/></svg>
-    Presupuestos
-  </a>
-  <div class="nav-bottom">
-    <button class="btn-logout" onclick="logout()">Cerrar sesión</button>
-  </div>
-</nav>
+<div id="overlay" class="overlay" onclick="ERP.ERP.closeSidebar()"></div>
+<div id="sidebar-root"></div>
 
 <!-- MAIN -->
 <div class="main">
@@ -250,21 +178,15 @@ let logLines = [];
 
 // ─── Init ─────────────────────────────────────────────────────
 (async () => {
-  const ok = await verificarAcceso('clientes');
-  if (!ok) return;
-  const u = await getUsuario();
-  if (u) {
-    // Solo admin/gerencia pueden hacer esto
-    if (!['admin_general','gerencia'].includes(u.rol)) {
-      mostrarSinAcceso('deduplicación de clientes');
-    }
+  const usuario = await ERP.initLayout('clientes');
+  if (!usuario) return;
+  // Solo admin_general puede hacer deduplicación
+  if (!['admin_general'].includes(usuario.rol)) {
+    mostrarSinAcceso('deduplicación de clientes');
   }
 })();
 
-async function logout() {
-  await db.auth.signOut();
-  window.location.href = 'login.html';
-}
+// logout() → ahora en ERP.logout() (erp-sidebar.js)
 
 // ─── Normalizar CUIT ─────────────────────────────────────────
 function normalizarCuit(cuit) {
