@@ -6,6 +6,8 @@
 <title>Hidromec ERP — Compras</title>
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 <script src="erp-utils.js"></script>
 <style>
   :root{--bg:#0f1117;--bg2:#181c27;--bg3:#1e2436;--border:rgba(255,255,255,0.07);--text:#e8eaf0;--muted:#7a8099;--blue:#3b82f6;--green:#10b981;--red:#ef4444;--orange:#f59e0b;--purple:#8b5cf6;--teal:#14b8a6;}
@@ -121,6 +123,7 @@
       Liberar para pago <span id="badge-liberar" style="display:none;background:var(--red);color:#fff;border-radius:20px;padding:1px 7px;font-size:11px;margin-left:4px"></span>
     </button>
     <button class="tab" onclick="cambiarTab('proveedores',this)">Proveedores</button>
+    <button class="tab" onclick="cambiarTab('importar',this)">↑ Importar AFIP</button>
   </div>
 
   <div class="filtros" id="filtros-egresos">
@@ -172,6 +175,12 @@
     </select>
     <input type="text" id="fp-buscar" placeholder="Buscar proveedor..." oninput="cargarProveedores()" style="min-width:220px">
     <button class="btn btn-ghost" onclick="abrirNuevoProveedor()">+ Nuevo proveedor</button>
+  </div>
+  <div class="filtros" id="filtros-importar" style="display:none">
+    <select id="fi-empresa">
+      <option value="a1000000-0000-0000-0000-000000000001">Hidromec</option>
+      <option value="a2000000-0000-0000-0000-000000000002">Placemem</option>
+    </select>
   </div>
 
   <div class="kpi-row" id="kpis-compras"></div>
@@ -786,9 +795,11 @@ function cambiarTab(tab,btn){
   document.getElementById('filtros-egresos').style.display=(tab==='egresos'||tab==='pendientes')?'flex':'none';
   document.getElementById('filtros-liberar').style.display=tab==='liberar'?'flex':'none';
   document.getElementById('filtros-proveedores').style.display=tab==='proveedores'?'flex':'none';
+  document.getElementById('filtros-importar').style.display=tab==='importar'?'flex':'none';
   if(tab==='egresos') cargarEgresos();
   else if(tab==='pendientes') cargarPendientes();
   else if(tab==='liberar') cargarParaLiberar();
+  else if(tab==='importar') mostrarImportarAFIP();
   else cargarProveedores();
 }
 
@@ -1182,6 +1193,196 @@ async function cargarProveedoresLiberar(){
   const sel=document.getElementById('fl-proveedor');
   if(sel) sel.innerHTML='<option value="">Todos los proveedores</option>'+(data||[]).map(p=>`<option value="${p.id}">${p.nombre}</option>`).join('\n');
 }
+
+// ═══════════════ IMPORTAR AFIP ════════════════════════════════
+let importRowsCompras=[];
+
+function mostrarImportarAFIP(){
+  document.getElementById('kpis-compras').innerHTML='';
+  document.getElementById('contenido').innerHTML=`
+    <div style="border:2px dashed var(--border);border-radius:12px;padding:48px;text-align:center;cursor:pointer;transition:border-color 0.2s;background:var(--bg3)"
+      id="drop-afip"
+      ondragover="event.preventDefault();this.style.borderColor='var(--blue)'"
+      ondragleave="this.style.borderColor='var(--border)'"
+      ondrop="event.preventDefault();this.style.borderColor='var(--border)';leerExcelAFIP(event.dataTransfer.files[0])">
+      <svg width="40" height="40" fill="none" stroke="currentColor" viewBox="0 0 24 24" style="margin:0 auto 16px;display:block;color:var(--muted)">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"/>
+      </svg>
+      <p style="font-size:15px;font-weight:500;color:var(--text);margin-bottom:6px">Subir Excel de AFIP — Compras recibidas</p>
+      <p style="font-size:12px;color:var(--muted)">Formato: Mis Comprobantes Recibidos (.xlsx) — Portal AFIP</p>
+      <input type="file" id="file-afip" accept=".xlsx,.xls" style="display:none" onchange="leerExcelAFIP(this.files[0])">
+      <button class="btn btn-ghost" style="margin-top:16px" onclick="document.getElementById('file-afip').click()">Seleccionar archivo</button>
+    </div>
+    <div id="preview-afip" style="margin-top:16px"></div>`;
+}
+
+function leerExcelAFIP(file){
+  if(!file) return;
+  procesarExcelAFIP(file);
+}
+
+function procesarExcelAFIP(file){
+  const reader=new FileReader();
+  reader.onload=e=>{
+    const wb=XLSX.read(new Uint8Array(e.target.result),{type:'array',cellDates:true});
+    const ws=wb.Sheets[wb.SheetNames[0]];
+    const json=XLSX.utils.sheet_to_json(ws,{header:1,defval:null,raw:true});
+
+    // Fila 1 = titulo general, Fila 2 = headers reales
+    // Buscar la fila que tiene "Fecha" en col 0
+    let hrIdx=1;
+    for(let i=0;i<Math.min(5,json.length);i++){
+      if(json[i]&&String(json[i][0]||'').toLowerCase().trim()==='fecha'){hrIdx=i;break;}
+    }
+    const dataRows=json.slice(hrIdx+1).filter(r=>r&&r[0]&&r[29]!=null);
+
+    // Columnas reales del archivo "Mis Comprobantes Recibidos" AFIP:
+    // [0]  Fecha
+    // [1]  Tipo (ej: "1 - Factura A")
+    // [2]  Punto de Venta
+    // [3]  Numero Desde
+    // [7]  Nro. Doc. Emisor (CUIT)
+    // [8]  Denominacion Emisor
+    // [11] Tipo Cambio
+    // [12] Moneda ("$" o "DOL")
+    // [24] Neto Gravado Total
+    // [25] Neto No Gravado
+    // [26] Op. Exentas
+    // [28] Total IVA
+    // [29] Imp. Total
+
+    importRowsCompras=dataRows.map(r=>{
+      // Fecha
+      let fechaISO='';
+      const fechaRaw=r[0];
+      if(fechaRaw instanceof Date){
+        fechaISO=fechaRaw.toISOString().split('T')[0];
+      } else {
+        const s=String(fechaRaw||'');
+        fechaISO=s.includes('/')?s.split('/').reverse().join('-'):s;
+      }
+
+      // Tipo de comprobante
+      const tipoRaw=String(r[1]||'').toUpperCase();
+      let tipo='FC';
+      if(tipoRaw.includes('CRED')||tipoRaw.includes('NC')) tipo='NC';
+      else if(tipoRaw.includes('DEB')&&tipoRaw.includes('ND')) tipo='ND';
+      else if(tipoRaw.includes(' A')) tipo='FA';
+      else if(tipoRaw.includes(' B')) tipo='FB';
+      else if(tipoRaw.includes(' C')) tipo='FC';
+
+      // Numero
+      const pv=String(r[2]||'0').padStart(5,'0');
+      const nro=String(r[3]||'0').padStart(8,'0');
+      const numero=`${pv}-${nro}`;
+
+      // Proveedor
+      const cuit=String(r[7]||'').replace(/[^0-9]/g,'');
+      const proveedor=String(r[8]||'').trim().toUpperCase();
+
+      // Moneda y tipo de cambio
+      const monedaRaw=String(r[12]||'$').trim().toUpperCase();
+      const tipoCambio=parseFloat(r[11])||1;
+      const esDolar=monedaRaw==='DOL'||monedaRaw==='USD'||monedaRaw==='U$S';
+
+      // Montos — columnas exactas del AFIP
+      const netoGravado=parseFloat(r[24])||0;   // [24] Neto Gravado Total
+      const netoNoGrav=parseFloat(r[25])||0;     // [25] Neto No Gravado
+      const exentas=parseFloat(r[26])||0;        // [26] Op. Exentas
+      const neto=netoGravado+netoNoGrav+exentas; // Neto total real
+      const totalIVA=parseFloat(r[28])||0;       // [28] Total IVA
+      const total=parseFloat(r[29])||0;          // [29] Imp. Total
+
+      if(!total) return null;
+
+      return{
+        fecha:fechaISO,tipo,numero,cuit,proveedor,
+        neto,totalIVA,total,
+        moneda:esDolar?'USD':'ARS',
+        tipoCambio:esDolar?tipoCambio:1,
+      };
+    }).filter(Boolean);
+
+    const usd=importRowsCompras.filter(r=>r.moneda==='USD');
+    const fmtNum=(v,isUSD)=>(isUSD?'U$S ':'$')+Number(v).toLocaleString('es-AR',{minimumFractionDigits:2,maximumFractionDigits:2});
+
+    document.getElementById('preview-afip').innerHTML=`
+      <div style="background:var(--bg3);border-radius:8px;padding:14px 18px;margin-bottom:16px;display:flex;gap:24px;align-items:center;flex-wrap:wrap">
+        <span style="font-size:13px">📄 <strong>${importRowsCompras.length}</strong> comprobantes encontrados</span>
+        ${usd.length?`<span style="font-size:12px;color:var(--orange)">💵 <strong>${usd.length}</strong> en dolares</span>`:''}
+        ${importRowsCompras.length?`<button class="btn btn-success" onclick="confirmarImportAFIP()">Importar ${importRowsCompras.length} comprobantes</button>`:''}
+      </div>
+      <div class="panel"><div style="overflow-x:auto;max-height:420px;overflow-y:auto"><table>
+        <thead><tr><th>Fecha</th><th>Tipo</th><th>N°</th><th>Proveedor</th><th>Moneda</th><th>Neto</th><th>IVA</th><th>Total</th></tr></thead>
+        <tbody>${importRowsCompras.slice(0,100).map(r=>`<tr>
+          <td class="mono" style="font-size:12px">${r.fecha}</td>
+          <td><span style="font-size:11px;padding:2px 8px;border-radius:4px;background:var(--bg3);color:var(--muted)">${r.tipo}</span></td>
+          <td class="mono" style="font-size:11px">${r.numero}</td>
+          <td style="font-size:12px;max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${r.proveedor}</td>
+          <td>${r.moneda==='USD'
+            ?'<span style="font-size:11px;padding:2px 8px;border-radius:4px;background:rgba(245,158,11,0.15);color:var(--orange);font-weight:600">USD</span>'
+            :'<span style="font-size:11px;padding:2px 8px;border-radius:4px;background:var(--bg3);color:var(--muted)">ARS</span>'}</td>
+          <td class="mono" style="font-size:12px">${fmtNum(r.neto,r.moneda==='USD')}</td>
+          <td class="mono" style="font-size:12px;color:var(--muted)">${fmtNum(r.totalIVA,r.moneda==='USD')}</td>
+          <td class="mono" style="color:var(--red);font-weight:500">${fmtNum(r.total,r.moneda==='USD')}</td>
+        </tr>`).join('')}
+        ${importRowsCompras.length>100?`<tr><td colspan="8" style="text-align:center;color:var(--muted);font-size:12px">...y ${importRowsCompras.length-100} mas</td></tr>`:''}
+        </tbody></table></div></div>`;
+  };
+  reader.readAsArrayBuffer(file);
+}
+
+async function confirmarImportAFIP(){
+  const empId=document.getElementById('fi-empresa').value;
+  const btn=document.querySelector('#preview-afip .btn-success');
+  if(btn){btn.disabled=true;btn.textContent='Importando...';}
+
+  // Cargar proveedores existentes
+  const {data:provs}=await db.from('proveedores').select('id,nombre,cuit').eq('empresa_id',empId).eq('activo',true);
+  const listaProvs=provs||[];
+
+  // Deduplicar en bulk
+  const numeros=importRowsCompras.map(r=>r.numero).filter(Boolean);
+  const {data:existentes}=await db.from('egresos').select('numero_factura').eq('empresa_id',empId).in('numero_factura',numeros);
+  const numerosExistentes=new Set((existentes||[]).map(r=>r.numero_factura));
+
+  let ok=0,skip=0;
+  for(const r of importRowsCompras){
+    if(numerosExistentes.has(r.numero)){skip++;continue;}
+
+    // Buscar/crear proveedor
+    let prov=listaProvs.find(p=>p.cuit&&p.cuit===r.cuit)
+           ||listaProvs.find(p=>p.nombre&&(p.nombre.includes(r.proveedor)||r.proveedor.includes(p.nombre)));
+    if(!prov&&r.proveedor){
+      const {data:np}=await db.from('proveedores')
+        .insert({empresa_id:empId,nombre:r.proveedor,cuit:r.cuit||null,activo:true})
+        .select().maybeSingle();
+      if(np){prov=np;listaProvs.push(np);}
+    }
+
+    // Descripcion con info de dolares si aplica
+    const esUSD=r.moneda==='USD';
+    const descMoneda=esUSD?` [USD ${r.total.toFixed(2)} x TC ${r.tipoCambio}]`:'';
+
+    const {error}=await db.from('egresos').insert({
+      empresa_id:empId,
+      proveedor_id:prov?.id||null,
+      tipo:'materiales',
+      descripcion:`${r.tipo} ${r.numero} - ${r.proveedor}${descMoneda}`,
+      monto:r.total,
+      fecha_egreso:r.fecha,
+      numero_factura:r.numero,
+      pagado:false,
+      observaciones:esUSD?`Factura en USD. Monto: U$S ${r.total.toFixed(2)} | TC: ${r.tipoCambio}`:null,
+    });
+    if(!error){ok++;numerosExistentes.add(r.numero);}else skip++;
+  }
+
+  const txtUSD=importRowsCompras.filter(r=>r.moneda==='USD').length;
+  alert(`OK: ${ok} comprobantes importados${txtUSD?` (${txtUSD} en USD)`:''}.\n${skip} omitidos (ya existian).`);
+  mostrarImportarAFIP();
+}
+
 
 init();
 </script>
