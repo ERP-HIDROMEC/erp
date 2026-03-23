@@ -665,11 +665,11 @@ function calcularCostoProyecto(){
 
 async function guardarProyecto(){
   const nombre=document.getElementById('np-nombre').value.trim();
-  if(!nombre){alert('Ingresá el nombre del proyecto.');return;}
+  if(!nombre){toast('Ingresá el nombre del proyecto.', 'warn');return;}
   const contratoId=document.getElementById('np-contrato').value;
   const ocRef=document.getElementById('np-oc').value.trim();
   if(!contratoId&&!ocRef){
-    alert('El proyecto requiere una OC o Contrato asociado.\nIngresá el número de OC/Contrato o seleccioná uno existente.');
+    toast('El proyecto requiere una OC o Contrato asociado.\nIngresá el número de OC/Contrato o seleccioná uno existente.', 'warn');
     return;
   }
   const payload={
@@ -693,7 +693,7 @@ async function guardarProyecto(){
   let error;
   if(proyEditId){({error}=await db.from('proyectos').update(payload).eq('id',proyEditId));}
   else{({error}=await db.from('proyectos').insert(payload));}
-  if(error){alert('Error: '+error.message);return;}
+  if(error){toast('Error: ', 'error');return;}
   cerrarModal('modal-proyecto');
   cargarProyectos();
 }
@@ -722,16 +722,7 @@ async function verDetalle(id,nombre){
   const resultado=totalFacturado-costoTotal;
   const margen=totalFacturado>0?Math.round(resultado/totalFacturado*100):0;
 
-  alert(`PROYECTO: ${nombre}
-──────────────────────
-Horas trabajadas: ${horasTrabajadas.toFixed(1)}h
-Costo mano de obra: ${fmt(totalHoras)}
-Costo materiales/otros: ${fmt(totalCostos)}
-Costo total: ${fmt(costoTotal)}
-──────────────────────
-Facturado: ${fmt(totalFacturado)}
-Resultado: ${fmt(resultado)}
-Margen: ${margen}%`);
+  toast(`Proyecto creado: ${nombre}`, 'success');
 }
 
 // ===== HORAS =====
@@ -811,7 +802,7 @@ async function cargarHoras(){
 
 async function guardarHoras(){
   const horas=parseFloat(document.getElementById('nh-horas').value)||0;
-  if(!horas){alert('Ingresá las horas.');return;}
+  if(!horas){toast('Ingresá las horas.', 'warn');return;}
   const personas=parseFloat(document.getElementById('nh-personas').value)||1;
   const costoHora=parseFloat(document.getElementById('nh-costo-hora').value)||0;
   const tipoHora=document.getElementById('nh-tipo-hora').value;
@@ -828,13 +819,13 @@ async function guardarHoras(){
     costo_calculado:horas*personas*costoHora*mult,
     observaciones:document.getElementById('nh-obs').value||null,
   });
-  if(error){alert('Error: '+error.message);return;}
+  if(error){toast('Error: ', 'error');return;}
   cerrarModal('modal-horas');
   cargarHoras();
 }
 
 async function borrarHoras(id){
-  if(!confirm('¿Borrar este registro de horas?')) return;
+  if(!(await confirmar('¿Borrar este registro de horas?'))) return;
   await db.from('imputacion_horas').delete().eq('id',id);
   cargarHoras();
 }
@@ -885,7 +876,7 @@ async function cargarCostos(){
 async function guardarCosto(){
   const desc=document.getElementById('nc-descripcion').value.trim();
   const monto=parseFloat(document.getElementById('nc-monto').value)||0;
-  if(!desc||!monto){alert('Completá descripción y monto.');return;}
+  if(!desc||!monto){toast('Completá descripción y monto.', 'warn');return;}
   const {error}=await db.from('costos_obra').insert({
     empresa_id:document.getElementById('nc-empresa').value,
     proyecto_id:document.getElementById('nc-proyecto').value,
@@ -894,13 +885,13 @@ async function guardarCosto(){
     fecha:document.getElementById('nc-fecha').value,
     comprobante:document.getElementById('nc-comprobante').value||null,
   });
-  if(error){alert('Error: '+error.message);return;}
+  if(error){toast('Error: ', 'error');return;}
   cerrarModal('modal-costo');
   cargarCostos();
 }
 
 async function borrarCosto(id){
-  if(!confirm('¿Borrar este costo?')) return;
+  if(!(await confirmar('¿Borrar este costo?'))) return;
   await db.from('costos_obra').delete().eq('id',id);
   cargarCostos();
 }
@@ -1002,7 +993,7 @@ function cargarDatosOT(){
 
 async function guardarOT(){
   const proyId=document.getElementById('not-proyecto').value;
-  if(!proyId){alert('Seleccioná un proyecto.');return;}
+  if(!proyId){toast('Seleccioná un proyecto.', 'warn');return;}
   const payload={
     empresa_id:document.getElementById('not-empresa').value,
     proyecto_id:proyId,
@@ -1020,7 +1011,7 @@ async function guardarOT(){
   let error;
   if(otEditId){({error}=await db.from('ordenes_trabajo').update(payload).eq('id',otEditId));}
   else{({error}=await db.from('ordenes_trabajo').insert(payload));}
-  if(error){alert('Error: '+error.message);return;}
+  if(error){toast('Error: ', 'error');return;}
   cerrarModal('modal-ot');
   cargarOrdenesOT();
 }
@@ -1108,7 +1099,7 @@ async function imprimirOTById(id){
 
 function imprimirOT(){
   const proyId=document.getElementById('not-proyecto').value;
-  if(!proyId){alert('Seleccioná un proyecto primero.');return;}
+  if(!proyId){toast('Seleccioná un proyecto primero.', 'warn');return;}
   const sel=document.getElementById('not-proyecto');
   const opt=sel.options[sel.selectedIndex];
   let d={};

@@ -744,7 +744,7 @@ async function cargarClientesRet(){
 
 async function guardarRetencion(){
   const monto=parseFloat(document.getElementById('nr-monto').value)||0;
-  if(!monto){alert('Ingresá el monto.');return;}
+  if(!monto){toast('Ingresá el monto.', 'warn');return;}
   const {error}=await db.from('retenciones').insert({
     empresa_id:document.getElementById('nr-empresa').value,
     cliente_id:document.getElementById('nr-cliente').value||null,
@@ -754,13 +754,13 @@ async function guardarRetencion(){
     monto,
     nro_certificado:document.getElementById('nr-cert').value||null,
   });
-  if(error){alert('Error: '+error.message);return;}
+  if(error){toast('Error: ', 'error');return;}
   cerrarModal('modal-ret');
   recargar();
 }
 
 async function borrarRetencion(id){
-  if(!confirm('¿Borrar esta retención?')) return;
+  if(!(await confirmar('¿Borrar esta retención?'))) return;
   await db.from('retenciones').delete().eq('id',id);
   cargarRetenciones();
 }
@@ -772,7 +772,7 @@ function toggleSocio(){
 
 async function guardarPago(){
   const monto=parseFloat(document.getElementById('np-monto').value)||0;
-  if(!monto){alert('Ingresá el monto.');return;}
+  if(!monto){toast('Ingresá el monto.', 'warn');return;}
   const {error}=await db.from('pagos_impuestos').insert({
     empresa_id:document.getElementById('np-empresa').value,
     tipo:document.getElementById('np-tipo').value,
@@ -783,13 +783,13 @@ async function guardarPago(){
     socio:document.getElementById('np-socio').value||null,
     observaciones:document.getElementById('np-obs').value||null,
   });
-  if(error){alert('Error: '+error.message);return;}
+  if(error){toast('Error: ', 'error');return;}
   cerrarModal('modal-pago');
   recargar();
 }
 
 async function borrarPago(id){
-  if(!confirm('¿Borrar este pago?')) return;
+  if(!(await confirmar('¿Borrar este pago?'))) return;
   await db.from('pagos_impuestos').delete().eq('id',id);
   cargarPagos();
 }
@@ -876,7 +876,7 @@ async function cargarVarios(){
 async function guardarVarios(){
   const monto=parseFloat(document.getElementById('nv-monto').value)||0;
   const desc=document.getElementById('nv-descripcion').value.trim();
-  if(!monto||!desc){alert('Completá descripción y monto.');return;}
+  if(!monto||!desc){toast('Completá descripción y monto.', 'warn');return;}
   const {error}=await db.from('impuestos_varios').insert({
     empresa_id:document.getElementById('nv-empresa').value,
     tipo:document.getElementById('nv-tipo').value,
@@ -887,7 +887,7 @@ async function guardarVarios(){
     pagado:document.getElementById('nv-pagado').value==='true',
     comprobante:document.getElementById('nv-comprobante').value||null,
   });
-  if(error){alert('Error: '+error.message);return;}
+  if(error){toast('Error: ', 'error');return;}
   cerrarModal('modal-varios');
   cargarVarios();
 }
@@ -898,7 +898,7 @@ async function pagarVarios(id){
 }
 
 async function borrarVarios(id){
-  if(!confirm('¿Borrar este registro?')) return;
+  if(!(await confirmar('¿Borrar este registro?'))) return;
   await db.from('impuestos_varios').delete().eq('id',id);
   cargarVarios();
 }

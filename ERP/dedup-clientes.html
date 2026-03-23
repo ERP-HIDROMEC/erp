@@ -363,7 +363,7 @@ async function analizarDuplicados() {
   } catch(e) {
     btn.innerHTML = '🔍 Analizar clientes duplicados';
     btn.disabled = false;
-    alert('Error al analizar: ' + e.message);
+    toast('Error al analizar: ', 'error');
   }
 }
 

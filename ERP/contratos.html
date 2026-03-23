@@ -441,7 +441,7 @@ async function editarContrato(id){
 async function guardarContrato(){
   const numero=document.getElementById('nc-numero').value.trim();
   const cliente=document.getElementById('nc-cliente').value;
-  if(!numero||!cliente){alert('Completá número y cliente.');return;}
+  if(!numero||!cliente){toast('Completá número y cliente.', 'warn');return;}
   const payload={
     empresa_id:document.getElementById('nc-empresa').value,
     cliente_id:cliente,
@@ -456,7 +456,7 @@ async function guardarContrato(){
   let error;
   if(contratoEditId){({error}=await db.from('contratos').update(payload).eq('id',contratoEditId));}
   else{({error}=await db.from('contratos').insert(payload));}
-  if(error){alert('Error: '+error.message);return;}
+  if(error){toast('Error: ', 'error');return;}
   cerrarModal('modal-contrato');
   cargarContratos();
 }
@@ -520,7 +520,7 @@ async function cargarPrecios(){
 }
 
 function abrirNuevoItem(){
-  if(!contratoSelId){alert('Seleccioná un contrato primero.');return;}
+  if(!contratoSelId){toast('Seleccioná un contrato primero.', 'warn');return;}
   itemEditId=null;
   document.getElementById('item-titulo').textContent='Nuevo ítem';
   document.getElementById('item-contrato-info').textContent='Contrato: '+contratoSelNombre;
@@ -543,7 +543,7 @@ function editarItem(id, desc, um, precio){
 async function guardarItem(){
   const desc=document.getElementById('ni-desc').value.trim();
   const precio=parseFloat(document.getElementById('ni-precio').value)||0;
-  if(!desc||!precio){alert('Completá descripción y precio.');return;}
+  if(!desc||!precio){toast('Completá descripción y precio.', 'warn');return;}
   
   if(itemEditId){
     // Guardar historial del precio anterior
@@ -576,7 +576,7 @@ async function guardarItem(){
 }
 
 async function borrarItem(id){
-  if(!confirm('¿Borrar este ítem?')) return;
+  if(!(await confirmar('¿Borrar este ítem?'))) return;
   await db.from('contrato_items').update({activo:false}).eq('id',id);
   cargarPrecios();
 }

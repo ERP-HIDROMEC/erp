@@ -498,7 +498,7 @@ function cambiarTab(tab,btn){
 
 function abrirNuevo(){
   if(tabActual==='remitos') abrirModalRemito();
-  else if(tabActual==='cobros') alert('Seleccioná una factura de la pestaña Facturas para registrar un cobro.');
+  else if(tabActual==='cobros') toast('Seleccioná una factura de la pestaña Facturas para registrar un cobro.', 'warn');
   else abrirNuevaFactura();
 }
 
@@ -704,7 +704,7 @@ async function guardarFactura(){
     observaciones:document.getElementById('nf-obs').value||null,
     remitos_ids:_remitosSeleccionados,
   };
-  if(!payload.numero_factura||!payload.monto_total){alert('Completá número y monto.');return;}
+  if(!payload.numero_factura||!payload.monto_total){toast('Completá número y monto.', 'warn');return;}
   let error,data;
   if(facturaEditId){
     ({error}=await db.from('facturas_emitidas').update(payload).eq('id',facturaEditId));
@@ -712,7 +712,7 @@ async function guardarFactura(){
   } else {
     ({data,error}=await db.from('facturas_emitidas').insert(payload).select().single());
   }
-  if(error){alert('Error: '+error.message);return;}
+  if(error){toast('Error: ', 'error');return;}
   // Marcar remitos como facturados
   const factId=data?.id||facturaEditId;
   if(_remitosSeleccionados.length&&factId){
@@ -727,7 +727,7 @@ async function guardarFactura(){
 }
 
 async function anularFactura(id,numero){
-  if(!confirm(`¿Anular la factura ${numero}? Esta acción no se puede deshacer.`)) return;
+  if(!(await confirmar(`¿Anular la factura ${numero}? Esta acción no se puede deshacer.`))) return;
   await db.from('facturas_emitidas').update({estado:'anulada'}).eq('id',id);
   cargarFacturas();
 }
@@ -770,7 +770,7 @@ function calcularNetoPercibido(){
 
 async function guardarCobro(){
   const monto=parseFloat(document.getElementById('nc-monto').value)||0;
-  if(!monto){alert('Ingresá un monto.');return;}
+  if(!monto){toast('Ingresá un monto.', 'warn');return;}
 
   // Guardar cobro
   const {error}=await db.from('cobros').insert({
@@ -782,7 +782,7 @@ async function guardarCobro(){
     numero_cheque:document.getElementById('nc-cheque').value||null,
     observaciones:document.getElementById('nc-obs').value||null,
   });
-  if(error){alert('Error al guardar cobro: '+error.message);return;}
+  if(error){toast('Error al guardar cobro: ', 'error');return;}
 
   // Marcar factura como cobrada
   await db.from('facturas_emitidas').update({estado:'cobrada'}).eq('id',cobroFacturaId);
@@ -822,7 +822,7 @@ async function guardarCobro(){
   cargarFacturas();
   if(retsAGuardar.length>0){
     // Mostrar confirmación
-    setTimeout(()=>alert(`✓ Cobro registrado\n✓ ${retsAGuardar.length} retención(es) guardada(s) en Impuestos automáticamente`),100);
+    setTimeout(()=>toast(`✓ Cobro registrado\n✓ ${retsAGuardar.length} retención(es) guardada(s) en Impuestos automáticamente`, 'success'),100);
   }
 }
 
@@ -840,15 +840,15 @@ async function guardarRemito(){
     observaciones:document.getElementById('nr-obs').value||null,
     estado:'pendiente',total:0,
   };
-  if(!payload.numero_remito){alert('Ingresá número de remito.');return;}
+  if(!payload.numero_remito){toast('Ingresá número de remito.', 'warn');return;}
   const {error}=await db.from('remitos').insert(payload);
-  if(error){alert('Error: '+error.message);return;}
+  if(error){toast('Error: ', 'error');return;}
   cerrarModal('modal-remito');
   cargarRemitos();
 }
 
 async function borrarRemito(id){
-  if(!confirm('¿Borrar este remito?')) return;
+  if(!(await confirmar('¿Borrar este remito?'))) return;
   await db.from('remitos').delete().eq('id',id);
   cargarRemitos();
 }
@@ -952,7 +952,7 @@ async function confirmarImport(){
     if(!error) ok++; else skip++;
   }
   cerrarModal('modal-import');
-  alert(`Importación completada:\n✓ ${ok} facturas importadas\n⊘ ${skip} omitidas (duplicadas o sin cliente)`);
+  toast(`Importación completada:\n✓ ${ok} facturas importadas\n⊘ ${skip} omitidas (duplicadas o sin cliente)`, 'success');
   cargarFacturas();
 }
 

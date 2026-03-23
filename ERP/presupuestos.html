@@ -431,7 +431,7 @@ async function editarPresupuesto(id){
 
 async function guardarPresupuesto(estadoOverride){
   const desc=document.getElementById('np-descripcion').value.trim();
-  if(!desc){alert('Ingresá la descripción del trabajo.');return;}
+  if(!desc){toast('Ingresá la descripción del trabajo.', 'warn');return;}
   const mo=parseFloat(document.getElementById('np-costo-horas').value)||0;
   const mat=parseFloat(document.getElementById('np-materiales').value)||0;
   const otros=parseFloat(document.getElementById('np-otros').value)||0;
@@ -459,7 +459,7 @@ async function guardarPresupuesto(estadoOverride){
   let error;
   if(editId){({error}=await db.from('presupuestos').update(payload).eq('id',editId));}
   else{({error}=await db.from('presupuestos').insert(payload));}
-  if(error){alert('Error: '+error.message);return;}
+  if(error){toast('Error: ', 'error');return;}
   cerrarModal();
   cargarPresupuestos();
 }
@@ -472,7 +472,7 @@ async function cambiarEstado(id,estado){
 async function convertirAProyecto(id){
   const {data:p}=await db.from('presupuestos').select('*').eq('id',id).single();
   if(!p) return;
-  if(!confirm(`¿Crear proyecto desde el presupuesto "${p.descripcion.substring(0,50)}"?`)) return;
+  if(!(await confirmar(`¿Crear proyecto desde el presupuesto "${p.descripcion.substring(0,50)}"?`))) return;
   const {error}=await db.from('proyectos').insert({
     empresa_id:p.empresa_id,
     cliente_id:p.cliente_id,
@@ -482,14 +482,14 @@ async function convertirAProyecto(id){
     presupuesto_estimado:p.precio_venta,
     fecha_inicio:hoy(),
   });
-  if(error){alert('Error: '+error.message);return;}
+  if(error){toast('Error: ', 'error');return;}
   await db.from('presupuestos').update({estado:'aprobado'}).eq('id',id);
-  alert('Proyecto creado. Podés verlo en el módulo Operaciones → Proyectos.');
+  toast('Proyecto creado. Podés verlo en el módulo Operaciones → Proyectos.', 'success');
   cargarPresupuestos();
 }
 
 async function borrar(id){
-  if(!confirm('¿Borrar este presupuesto?')) return;
+  if(!(await confirmar('¿Borrar este presupuesto?'))) return;
   await db.from('presupuestos').delete().eq('id',id);
   cargarPresupuestos();
 }

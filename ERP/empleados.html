@@ -650,7 +650,7 @@ async function editarEmpleado(id){
 
 async function guardarEmpleado(){
   const nombre=document.getElementById('ne-nombre').value.trim();
-  if(!nombre){alert('Ingresá el nombre.');return;}
+  if(!nombre){toast('Ingresá el nombre.', 'warn');return;}
   const payload={
     empresa_id:document.getElementById('ne-empresa').value,
     nombre:nombre.toUpperCase(),
@@ -663,13 +663,13 @@ async function guardarEmpleado(){
   let error;
   if(empEditId){({error}=await db.from('empleados').update(payload).eq('id',empEditId));}
   else{({error}=await db.from('empleados').insert(payload));}
-  if(error){alert('Error: '+error.message);return;}
+  if(error){toast('Error: ', 'error');return;}
   cerrarModal('modal-empleado');
   cargarEmpleados();
 }
 
 async function toggleActivo(id,activo){
-  if(!confirm(activo?'¿Dar de baja este empleado?':'¿Reactivar este empleado?')) return;
+  if(!(await confirmar(activo?'¿Dar de baja este empleado?':'¿Reactivar este empleado?'))) return;
   await db.from('empleados').update({activo:!activo}).eq('id',id);
   cargarEmpleados();
 }
@@ -738,7 +738,7 @@ function abrirNuevoSueldo(){
 async function guardarSueldo(){
   const bruto=parseFloat(document.getElementById('ns-bruto').value)||0;
   const neto=parseFloat(document.getElementById('ns-neto').value)||0;
-  if(!bruto){alert('Ingresá el monto bruto.');return;}
+  if(!bruto){toast('Ingresá el monto bruto.', 'warn');return;}
   const pagado=document.getElementById('ns-pagado').value==='true';
   const {error}=await db.from('sueldos').insert({
     empresa_id:document.getElementById('ns-empresa').value,
@@ -751,7 +751,7 @@ async function guardarSueldo(){
     pagado,
     fecha_pago:pagado?document.getElementById('ns-fecha-pago').value:null,
   });
-  if(error){alert('Error: '+error.message);return;}
+  if(error){toast('Error: ', 'error');return;}
   cerrarModal('modal-sueldo');
   cargarSueldos();
 }
@@ -762,7 +762,7 @@ async function pagarSueldo(id){
 }
 
 async function borrarSueldo(id){
-  if(!confirm('¿Borrar este registro de sueldo?')) return;
+  if(!(await confirmar('¿Borrar este registro de sueldo?'))) return;
   await db.from('sueldos').delete().eq('id',id);
   cargarSueldos();
 }
@@ -822,7 +822,7 @@ async function editarCliente(id){
 
 async function guardarCliente(){
   const nombre=document.getElementById('nc-nombre').value.trim();
-  if(!nombre){alert('Ingresá el nombre del cliente.');return;}
+  if(!nombre){toast('Ingresá el nombre del cliente.', 'warn');return;}
   const payload={
     empresa_id:document.getElementById('nc-empresa').value,
     nombre:nombre.toUpperCase(),
@@ -835,7 +835,7 @@ async function guardarCliente(){
   let error;
   if(cliEditId){({error}=await db.from('clientes').update(payload).eq('id',cliEditId));}
   else{({error}=await db.from('clientes').insert(payload));}
-  if(error){alert('Error: '+error.message);return;}
+  if(error){toast('Error: ', 'error');return;}
   cerrarModal('modal-cliente');
   cargarClientes();
 }
@@ -912,7 +912,7 @@ function actualizarRecargos(id){
 async function guardarCostoRol(id,empId,rol){
   const monto=parseFloat(document.getElementById('costo-'+id).value)||0;
   const {error}=await db.from('costos_roles').update({costo_hora:monto}).eq('id',id);
-  if(error){alert('Error: '+error.message);return;}
+  if(error){toast('Error: ', 'error');return;}
   const btn=event.target;
   btn.textContent='✓ Guardado';
   btn.style.background='var(--green)';
@@ -1077,7 +1077,7 @@ async function guardarDocumento(){
     document.getElementById('nd-progress-bar').style.width='40%';
     document.getElementById('nd-progress-text').textContent='Subiendo archivo...';
     const {error:uploadError}=await db.storage.from('empleados-docs').upload(path,file,{contentType:file.type,upsert:false});
-    if(uploadError){document.getElementById('nd-upload-progress').style.display='none';alert('Error al subir: '+uploadError.message);return;}
+    if(uploadError){document.getElementById('nd-upload-progress').style.display='none';toast('Error al subir: ', 'error');return;}
     document.getElementById('nd-progress-bar').style.width='90%';
     const {data:urlData}=db.storage.from('empleados-docs').getPublicUrl(path);
     archivoUrl=urlData?.publicUrl||null;
@@ -1093,14 +1093,14 @@ async function guardarDocumento(){
     archivo_url:archivoUrl,archivo_path:archivoPatch,
   });
   document.getElementById('nd-upload-progress').style.display='none';
-  if(error){alert('Error: '+error.message);return;}
+  if(error){toast('Error: ', 'error');return;}
   cerrarModal('modal-documento');
   fileInput.value='';
   recargar();
 }
 
 async function borrarDocumento(id,path){
-  if(!confirm('Borrar este documento?')) return;
+  if(!(await confirmar('Borrar este documento?'))) return;
   if(path) await db.storage.from('empleados-docs').remove([path]);
   await db.from('empleados_documentos').delete().eq('id',id);
   recargar();
@@ -1289,7 +1289,7 @@ async function cargarAusencias(){
 async function guardarAusencia(){
   const empId=document.getElementById('na-empleado').value;
   const inicio=document.getElementById('na-inicio').value;
-  if(!empId||!inicio){alert('Empleado y fecha de inicio son obligatorios.');return;}
+  if(!empId||!inicio){toast('Empleado y fecha de inicio son obligatorios.', 'warn');return;}
   const empId2=document.getElementById('na-empresa').value;
 
   let certUrl=null,certPath=null;
@@ -1318,7 +1318,7 @@ async function guardarAusencia(){
     observaciones:document.getElementById('na-obs').value||null,
     certificado_url:certUrl,certificado_path:certPath,
   });
-  if(error){alert('Error: '+error.message);return;}
+  if(error){toast('Error: ', 'error');return;}
   if(fileInput) fileInput.value='';
   cerrarModal('modal-ausencia');
   cargarAusencias();
@@ -1330,7 +1330,7 @@ async function cambiarEstadoAusencia(id,estado){
 }
 
 async function borrarAusencia(id){
-  if(!confirm('Borrar este registro?')) return;
+  if(!(await confirmar('Borrar este registro?'))) return;
   await db.from('empleados_ausencias').delete().eq('id',id);
   cargarAusencias();
 }
@@ -1412,7 +1412,7 @@ function verDocsVehiculo(id, nombre){
 
 async function guardarVehiculo(){
   const desc=document.getElementById('nv-descripcion').value.trim();
-  if(!desc){alert('La descripcion es obligatoria.');return;}
+  if(!desc){toast('La descripcion es obligatoria.', 'warn');return;}
   const empId=document.getElementById('nv-empresa').value;
   const payload={
     empresa_id:empId,
@@ -1428,7 +1428,7 @@ async function guardarVehiculo(){
   let error;
   if(vehEditId){({error}=await db.from('vehiculos').update(payload).eq('id',vehEditId));}
   else{({error}=await db.from('vehiculos').insert(payload));}
-  if(error){alert('Error: '+error.message);return;}
+  if(error){toast('Error: ', 'error');return;}
   vehEditId=null;
   cerrarModal('modal-vehiculo');
   cargarVehiculos();
@@ -1454,7 +1454,7 @@ async function editarVehiculo(id){
 
 async function toggleActivoVehiculo(id, estaActivo){
   const msg=estaActivo?'Dar de baja este vehiculo/equipo?':'Activar este vehiculo/equipo?';
-  if(!confirm(msg)) return;
+  if(!(await confirmar(msg))) return;
   await db.from('vehiculos').update({activo:!estaActivo}).eq('id',id);
   cargarVehiculos();
 }

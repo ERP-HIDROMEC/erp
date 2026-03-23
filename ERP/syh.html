@@ -702,14 +702,14 @@ async function guardarDocEmpresa(){
     fecha_vencimiento:document.getElementById('sde-vencimiento').value||null,
     archivo_url:archivoUrl,archivo_path:archivoPatch,
   });
-  if(error){alert('Error: '+error.message);return;}
+  if(error){toast('Error: ', 'error');return;}
   cerrarModal('modal-doc-empresa');
   document.getElementById('sde-archivo').value='';
   cargarDocEmpresa();
 }
 
 async function borrarDocSYH(id,path){
-  if(!confirm('Borrar este documento?')) return;
+  if(!(await confirmar('Borrar este documento?'))) return;
   if(path) await db.storage.from('syh-docs').remove([path]);
   await db.from('syh_documentos').delete().eq('id',id);
   recargar();
@@ -787,7 +787,7 @@ async function guardarCapacitacion(){
   const empId=document.getElementById('sc-empresa').value;
   const tipo=document.getElementById('sc-tipo').value;
   const fecha=document.getElementById('sc-fecha').value;
-  if(!fecha){alert('Ingresa la fecha.');return;}
+  if(!fecha){toast('Ingresa la fecha.', 'warn');return;}
 
   const asistentes=[...document.querySelectorAll('input[name="sc-asistente"]:checked')].map(c=>c.value);
 
@@ -810,7 +810,7 @@ async function guardarCapacitacion(){
     archivo_url:archivoUrl,archivo_path:archivoPatch,
   }).select().single();
 
-  if(error){alert('Error: '+error.message);return;}
+  if(error){toast('Error: ', 'error');return;}
 
   // Insert asistentes
   if(asistentes.length&&cap){
@@ -825,7 +825,7 @@ async function guardarCapacitacion(){
 }
 
 async function borrarCapacitacion(id,path){
-  if(!confirm('Borrar esta capacitacion?')) return;
+  if(!(await confirmar('Borrar esta capacitacion?'))) return;
   if(path) await db.storage.from('syh-docs').remove([path]);
   await db.from('syh_capacitacion_asistentes').delete().eq('capacitacion_id',id);
   await db.from('syh_capacitaciones').delete().eq('id',id);
@@ -895,9 +895,9 @@ function recogerItemsEPP(){
 async function guardarEPP(){
   const empleadoId=document.getElementById('se-empleado').value;
   const fecha=document.getElementById('se-fecha').value;
-  if(!empleadoId||!fecha){alert('Selecciona empleado y fecha.');return;}
+  if(!empleadoId||!fecha){toast('Selecciona empleado y fecha.', 'warn');return;}
   const items=recogerItemsEPP();
-  if(!items.length){alert('Agrega al menos un elemento EPP.');return;}
+  if(!items.length){toast('Agrega al menos un elemento EPP.', 'warn');return;}
   const empId=document.getElementById('se-empresa').value;
 
   // Get empleado data
@@ -911,7 +911,7 @@ async function guardarEPP(){
     items:items,
   }).select().single();
 
-  if(error){alert('Error: '+error.message);return;}
+  if(error){toast('Error: ', 'error');return;}
 
   // Generate PDF
   generarPDFEPP(entrega,emp,items,empId);
@@ -966,7 +966,7 @@ async function reimprimirEPP(id){
 }
 
 async function borrarEPP(id){
-  if(!confirm('Borrar esta entrega EPP?')) return;
+  if(!(await confirmar('Borrar esta entrega EPP?'))) return;
   await db.from('syh_epp_entregas').delete().eq('id',id);
   cargarEPP();
 }
@@ -1148,7 +1148,7 @@ async function guardarIncidente(){
   const empId=document.getElementById('si-empresa').value;
   const empleadoId=document.getElementById('si-empleado').value;
   const fecha=document.getElementById('si-fecha').value;
-  if(!fecha){alert('Ingresa la fecha.');return;}
+  if(!fecha){toast('Ingresa la fecha.', 'warn');return;}
 
   let archivoUrl=null,archivoPatch=null;
   const file=document.getElementById('si-archivo').files[0];
@@ -1169,14 +1169,14 @@ async function guardarIncidente(){
     medidas_correctivas:document.getElementById('si-correctivas').value||null,
     archivo_url:archivoUrl,archivo_path:archivoPatch,
   });
-  if(error){alert('Error: '+error.message);return;}
+  if(error){toast('Error: ', 'error');return;}
   cerrarModal('modal-incidente');
   document.getElementById('si-archivo').value='';
   cargarIncidentes();
 }
 
 async function borrarIncidente(id,path){
-  if(!confirm('Borrar este incidente?')) return;
+  if(!(await confirmar('Borrar este incidente?'))) return;
   if(path) await db.storage.from('syh-docs').remove([path]);
   await db.from('syh_incidentes').delete().eq('id',id);
   cargarIncidentes();
@@ -1311,23 +1311,23 @@ async function guardarPortalDoc(){
   const empId=document.getElementById('mp-empresa').value;
   const portalSelVal=document.getElementById('mp-portal-sel').value;
   const venc=document.getElementById('mp-vencimiento').value;
-  if(!venc){alert('La fecha de vencimiento es obligatoria.');return;}
+  if(!venc){toast('La fecha de vencimiento es obligatoria.', 'warn');return;}
 
   let portalId=portalSelVal;
 
   // Crear portal nuevo si corresponde
   if(portalSelVal==='__nuevo__'){
     const nombre=document.getElementById('mp-portal-nombre').value.trim();
-    if(!nombre){alert('Ingresa el nombre del portal.');return;}
+    if(!nombre){toast('Ingresa el nombre del portal.', 'warn');return;}
     const url=document.getElementById('mp-portal-url').value.trim()||null;
     const {data:np,error:pe}=await db.from('portales_clientes')
       .insert({empresa_id:empId,nombre,url_portal:url,activo:true})
       .select().single();
-    if(pe){alert('Error al crear portal: '+pe.message);return;}
+    if(pe){toast('Error al crear portal: ', 'error');return;}
     portalId=np.id;
   }
 
-  if(!portalId){alert('Selecciona un portal.');return;}
+  if(!portalId){toast('Selecciona un portal.', 'warn');return;}
 
   const aplica=document.getElementById('mp-aplica').value;
   const {error}=await db.from('portal_documentos').insert({
@@ -1343,7 +1343,7 @@ async function guardarPortalDoc(){
     estado_portal:document.getElementById('mp-estado-portal').value,
     observaciones:document.getElementById('mp-obs').value||null,
   });
-  if(error){alert('Error: '+error.message);return;}
+  if(error){toast('Error: ', 'error');return;}
   cerrarModal('modal-portal-doc');
   cargarPortales();
 }
@@ -1503,18 +1503,18 @@ function filtrarPorPortal(portalId){
 async function editarVencimientoPortal(id){
   const nuevaFecha=prompt('Nueva fecha de vencimiento (YYYY-MM-DD):');
   if(!nuevaFecha) return;
-  if(!/^\d{4}-\d{2}-\d{2}$/.test(nuevaFecha)){alert('Formato invalido. Usa YYYY-MM-DD');return;}
+  if(!/^\d{4}-\d{2}-\d{2}$/.test(nuevaFecha)){toast('Formato invalido. Usa YYYY-MM-DD', 'warn');return;}
   const {error}=await db.from('portal_documentos').update({
     fecha_vencimiento:nuevaFecha,
     estado_portal:'aprobado',
     fecha_carga_portal:hoy(),
   }).eq('id',id);
-  if(error){alert('Error: '+error.message);return;}
+  if(error){toast('Error: ', 'error');return;}
   cargarPortales();
 }
 
 async function borrarPortalDoc(id){
-  if(!confirm('Borrar este documento del portal?')) return;
+  if(!(await confirmar('Borrar este documento del portal?'))) return;
   await db.from('portal_documentos').delete().eq('id',id);
   cargarPortales();
 }

@@ -624,14 +624,14 @@ async function editarRemito(id){
 async function guardarRemito(estado){
   const empId=document.getElementById('nr-empresa').value;
   const clienteId=document.getElementById('nr-cliente').value||null;
-  if(!clienteId&&estado==='emitido'){alert('Seleccioná un cliente para emitir.');return;}
+  if(!clienteId&&estado==='emitido'){toast('Seleccioná un cliente para emitir.', 'warn');return;}
 
   // Obtener CAI si se emite
   let numero=null, cai=null, caiVto=null, puntoVenta='0001', talonarioId=null;
   if(estado==='emitido'&&!editId){
-    if(!caiActual){alert('No hay talonario CAI activo. Cargá uno en CAI/Talonarios.');return;}
-    if(caiActual.fecha_vencimiento<hoy()){alert('El CAI está vencido. Cargá un talonario nuevo.');return;}
-    if(caiActual.nro_actual>caiActual.nro_hasta){alert('Se agotaron los números del talonario. Cargá uno nuevo.');return;}
+    if(!caiActual){toast('No hay talonario CAI activo. Cargá uno en CAI/Talonarios.', 'warn');return;}
+    if(caiActual.fecha_vencimiento<hoy()){toast('El CAI está vencido. Cargá un talonario nuevo.', 'warn');return;}
+    if(caiActual.nro_actual>caiActual.nro_hasta){toast('Se agotaron los números del talonario. Cargá uno nuevo.', 'warn');return;}
     numero=caiActual.nro_actual;
     cai=caiActual.cai;
     caiVto=caiActual.fecha_vencimiento;
@@ -660,7 +660,7 @@ async function guardarRemito(estado){
   let remitoId=editId;
   if(editId){
     const {error}=await db.from('remitos_v2').update(payload).eq('id',editId);
-    if(error){alert('Error: '+error.message);return;}
+    if(error){toast('Error: ', 'error');return;}
   } else {
     if(estado==='borrador'){
       // Para borrador no necesita número
@@ -668,7 +668,7 @@ async function guardarRemito(estado){
       payload.numero_formateado='BORRADOR';
     }
     const {data,error}=await db.from('remitos_v2').insert(payload).select().single();
-    if(error){alert('Error: '+error.message);return;}
+    if(error){toast('Error: ', 'error');return;}
     remitoId=data.id;
     // Avanzar número CAI
     if(estado==='emitido'&&talonarioId){
@@ -696,7 +696,7 @@ async function guardarRemito(estado){
 }
 
 async function anularRemito(id){
-  if(!confirm('¿Anular este remito?')) return;
+  if(!(await confirmar('¿Anular este remito?'))) return;
   await db.from('remitos_v2').update({estado:'anulado'}).eq('id',id);
   cargarRemitos();
 }
@@ -707,7 +707,7 @@ function irAFacturar(id){
 
 async function generarPDF(id){
   const {data:r}=await db.from('remitos_v2').select('*,clientes(*),empresas(*)').eq('id',id).single();
-  if(!r){alert('No se encontró el remito.');return;}
+  if(!r){toast('No se encontró el remito.', 'warn');return;}
   const {data:items}=await db.from('remito_items_v2').select('*').eq('remito_id',id).order('orden');
 
   const {jsPDF}=window.jspdf;
@@ -950,7 +950,7 @@ async function guardarTalonario(){
   const actual=parseInt(document.getElementById('nt-actual').value)||desde;
   const cai=document.getElementById('nt-cai').value.trim();
   const vto=document.getElementById('nt-vto').value;
-  if(!cai||!vto||!desde||!hasta){alert('Completá todos los campos.');return;}
+  if(!cai||!vto||!desde||!hasta){toast('Completá todos los campos.', 'warn');return;}
   // Desactivar talonarios anteriores
   await db.from('talonarios_cai').update({activo:false})
     .eq('empresa_id',document.getElementById('nt-empresa').value);
@@ -960,7 +960,7 @@ async function guardarTalonario(){
     cai,fecha_vencimiento:vto,
     nro_desde:desde,nro_hasta:hasta,nro_actual:actual,activo:true,
   });
-  if(error){alert('Error: '+error.message);return;}
+  if(error){toast('Error: ', 'error');return;}
   cerrarModal2();
   await verificarCAI();
   cargarTalonarios();
@@ -971,16 +971,16 @@ function cerrarModal2(){document.getElementById('modal-talonario').classList.rem
 async function logout(){await db.auth.signOut();window.location.href='login.html';}
 
 async function marcarHistoricoFacturado(id){
-  if(!confirm('¿Marcar este remito histórico como facturado?')) return;
+  if(!(await confirmar('¿Marcar este remito histórico como facturado?'))) return;
   const {error}=await db.from('remitos_v2').update({estado:'facturado'}).eq('id',id);
-  if(error){alert('Error: '+error.message);return;}
+  if(error){toast('Error: ', 'error');return;}
   recargar();
 }
 
 async function marcarHistoricoPendiente(id){
-  if(!confirm('¿Volver este remito a pendiente de facturación?')) return;
+  if(!(await confirmar('¿Volver este remito a pendiente de facturación?'))) return;
   const {error}=await db.from('remitos_v2').update({estado:'emitido'}).eq('id',id);
-  if(error){alert('Error: '+error.message);return;}
+  if(error){toast('Error: ', 'error');return;}
   recargar();
 }
 

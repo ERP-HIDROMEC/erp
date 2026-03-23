@@ -506,7 +506,7 @@ async function editarCliente(id){
 
 async function guardarCliente(){
   const nombre = document.getElementById('nc-nombre').value.trim();
-  if(!nombre){ alert('El nombre es obligatorio.'); return; }
+  if(!nombre){ toast('El nombre es obligatorio.', 'warn'); return; }
   const payload = {
     empresa_id: document.getElementById('nc-empresa').value,
     nombre,
@@ -526,14 +526,14 @@ async function guardarCliente(){
   let error;
   if(clienteEditId){ ({error} = await db.from('clientes').update(payload).eq('id', clienteEditId)); }
   else { ({error} = await db.from('clientes').insert(payload)); }
-  if(error){ alert('Error: ' + error.message); return; }
+  if(error){ toast('Error: ', 'error'); return; }
   cerrarModal('modal-cliente');
   cargarClientes();
 }
 
 async function toggleActivo(id, estaActivo){
   const msg = estaActivo ? '¿Dar de baja este cliente?' : '¿Reactivar este cliente?';
-  if(!confirm(msg)) return;
+  if(!(await confirmar(msg))) return;
   await db.from('clientes').update({activo: !estaActivo}).eq('id', id);
   cargarClientes();
 }
@@ -635,8 +635,8 @@ function abrirAgregarDoc(clienteId){
 async function guardarDocCliente(){
   const nombre = document.getElementById('mdc-nombre').value.trim();
   const venc = document.getElementById('mdc-vencimiento').value;
-  if(!nombre){ alert('El nombre es obligatorio.'); return; }
-  if(!venc){ alert('La fecha de vencimiento es obligatoria.'); return; }
+  if(!nombre){ toast('El nombre es obligatorio.', 'warn'); return; }
+  if(!venc){ toast('La fecha de vencimiento es obligatoria.', 'warn'); return; }
   const {error} = await db.from('cliente_docs_config').insert({
     cliente_id: _docClienteId,
     nombre,
@@ -644,7 +644,7 @@ async function guardarDocCliente(){
     fecha_vencimiento: venc,
     notas: document.getElementById('mdc-notas').value || null,
   });
-  if(error){ alert('Error: '+error.message); return; }
+  if(error){ toast('Error: ', 'error'); return; }
   cerrarModal('modal-doc-cliente');
   cargarDocsCliente(_docClienteId);
 }
@@ -662,20 +662,20 @@ function abrirRenovar(id, nombre, fechaActual){
 
 async function confirmarRenovar(){
   const fecha = document.getElementById('renovar-fecha').value;
-  if(!fecha){ alert('Ingresa la nueva fecha.'); return; }
+  if(!fecha){ toast('Ingresa la nueva fecha.', 'warn'); return; }
   const notas = document.getElementById('renovar-notas').value || null;
   const {error} = await db.from('cliente_docs_config').update({
     fecha_vencimiento: fecha,
     notas: notas,
     updated_at: new Date().toISOString(),
   }).eq('id', docRenovarId);
-  if(error){ alert('Error: '+error.message); return; }
+  if(error){ toast('Error: ', 'error'); return; }
   cerrarModal('modal-renovar-doc');
   cargarDocsCliente(clienteSelId);
 }
 
 async function borrarDocCliente(id){
-  if(!confirm('Borrar este documento de la lista?')) return;
+  if(!(await confirmar('Borrar este documento de la lista?'))) return;
   await db.from('cliente_docs_config').delete().eq('id', id);
   cargarDocsCliente(clienteSelId);
 }

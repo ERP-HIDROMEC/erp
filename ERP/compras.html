@@ -454,7 +454,7 @@ function actualizarBotonOP(){
 }
 
 async function abrirOPMultiple(){
-  if(seleccionadosOP.size===0){alert('Seleccioná al menos un egreso.');return;}
+  if(seleccionadosOP.size===0){toast('Seleccioná al menos un egreso.', 'warn');return;}
   const ids=[...seleccionadosOP];
   const {data}=await db.from('egresos').select('*,proveedores(nombre),empresas(nombre)').in('id',ids);
   const rows=data||[];
@@ -513,12 +513,12 @@ async function confirmarOPMultiple(){
   const fecha=document.getElementById('opm-fecha').value;
   const metodo=document.getElementById('opm-metodo').value;
   const obs=document.getElementById('opm-obs').value;
-  if(!fecha){alert('Ingresá la fecha de pago.');return;}
+  if(!fecha){toast('Ingresá la fecha de pago.', 'warn');return;}
 
   const ids=[...seleccionadosOP];
   const {data:egresos}=await db.from('egresos').select('*,proveedores(nombre,cuit),empresas(nombre)').in('id',ids);
   const rows=egresos||[];
-  if(!rows.length){alert('Error al cargar los egresos.');return;}
+  if(!rows.length){toast('Error al cargar los egresos.', 'error');return;}
 
   const {count}=await db.from('egresos').select('*',{count:'exact',head:true}).not('orden_pago_nro','is',null);
   const nroOrden='OP-'+String((count||0)+1).padStart(4,'0')+'-'+new Date().getFullYear();
@@ -639,7 +639,7 @@ async function enviarOPporMail(pdfBlob,nroOrden,total,mailDest,rows,empresa){
     const a=document.createElement('a');
     a.href=pdfUrl; a.download=nroOrden+'.pdf'; a.click();
 
-    alert(`✓ Orden de Pago ${nroOrden} generada.\nPDF descargado y email enviado a ${mailDest}`);
+    toast(`✓ Orden de Pago ${nroOrden} generada.\nPDF descargado y email enviado a ${mailDest}`, 'success');
 
   }catch(err){
     console.error('Error EmailJS:',err);
@@ -648,9 +648,9 @@ async function enviarOPporMail(pdfBlob,nroOrden,total,mailDest,rows,empresa){
     const a=document.createElement('a');a.href=url;a.download=nroOrden+'.pdf';a.click();
 
     if(err.message&&err.message.includes('REEMPLAZAR')){
-      alert(`⚠ EmailJS no configurado todavía.\n\nEl PDF se descargó automáticamente.\n\nPara activar el envío automático:\n1. Crear cuenta en emailjs.com\n2. Conectar tu cuenta Google Workspace\n3. Crear template con las variables {{to_email}}, {{subject}}, {{detalle}}, {{total}}\n4. Reemplazar los 3 IDs en compras.html`);
+      toast(`⚠ EmailJS no configurado todavía.\n\nEl PDF se descargó automáticamente.\n\nPara activar el envío automático:\n1. Crear cuenta en emailjs.com\n2. Conectar tu cuenta Google Workspace\n3. Crear template con las variables {{to_email}}, {{subject}}, {{detalle}}, {{total}}\n4. Reemplazar los 3 IDs en compras.html`, 'warn');
     } else {
-      alert(`✓ PDF descargado.\nError al enviar email: ${err.text||err.message}\nDestino: ${mailDest}`);
+      toast(`✓ PDF descargado.\nError al enviar email: ${err.text||err.message}\nDestino: ${mailDest}`, 'success');
     }
   }
 }
@@ -982,7 +982,7 @@ async function editarEgreso(id){
 async function guardarEgreso(){
   const desc=document.getElementById('ne-descripcion').value.trim();
   const monto=parseFloat(document.getElementById('ne-monto').value)||0;
-  if(!desc||!monto){alert('Completá descripción y monto.');return;}
+  if(!desc||!monto){toast('Completá descripción y monto.', 'warn');return;}
   const pagado=document.getElementById('ne-pagado').value==='true';
   const payload={
     empresa_id:document.getElementById('ne-empresa').value,
@@ -1000,13 +1000,13 @@ async function guardarEgreso(){
   let error;
   if(egresoEditId){({error}=await db.from('egresos').update(payload).eq('id',egresoEditId));}
   else{({error}=await db.from('egresos').insert(payload));}
-  if(error){alert('Error: '+error.message);return;}
+  if(error){toast('Error: ', 'error');return;}
   cerrarModal('modal-egreso');
   cargarEgresos();
 }
 
 async function borrarEgreso(id){
-  if(!confirm('¿Borrar este egreso?')) return;
+  if(!(await confirmar('¿Borrar este egreso?'))) return;
   await db.from('egresos').delete().eq('id',id);
   cargarEgresos();
 }
@@ -1024,7 +1024,7 @@ async function confirmarPago(){
     fecha_pago_real:document.getElementById('mp-fecha').value,
     metodo_pago:document.getElementById('mp-metodo').value,
   }).eq('id',pagoEgresoId);
-  if(error){alert('Error: '+error.message);return;}
+  if(error){toast('Error: ', 'error');return;}
   cerrarModal('modal-pago');
   if(tabActual==='pendientes') cargarPendientes();
   else cargarEgresos();
@@ -1034,7 +1034,7 @@ function abrirNuevoProveedor(){ document.getElementById('modal-proveedor').class
 
 async function guardarProveedor(){
   const nombre=document.getElementById('np-nombre').value.trim();
-  if(!nombre){alert('Ingresá el nombre del proveedor.');return;}
+  if(!nombre){toast('Ingresá el nombre del proveedor.', 'warn');return;}
   const {error}=await db.from('proveedores').insert({
     empresa_id:document.getElementById('np-empresa').value,
     nombre:nombre.toUpperCase(),
@@ -1044,13 +1044,13 @@ async function guardarProveedor(){
     email:document.getElementById('np-email').value||null,
     activo:true,
   });
-  if(error){alert('Error: '+error.message);return;}
+  if(error){toast('Error: ', 'error');return;}
   cerrarModal('modal-proveedor');
   cargarProveedores();
 }
 
 async function borrarProveedor(id){
-  if(!confirm('¿Borrar este proveedor?')) return;
+  if(!(await confirmar('¿Borrar este proveedor?'))) return;
   await db.from('proveedores').update({activo:false}).eq('id',id);
   cargarProveedores();
 }
@@ -1080,7 +1080,7 @@ function abrirLiberar(id,desc,monto){
 
 async function confirmarLiberar(){
   const fecha=document.getElementById('lib-fecha').value;
-  if(!fecha){alert('Ingresá la fecha de vencimiento de pago.');return;}
+  if(!fecha){toast('Ingresá la fecha de vencimiento de pago.', 'warn');return;}
   const u=await getUsuario();
   const {error}=await db.from('egresos').update({
     liberado_pago:true,
@@ -1089,7 +1089,7 @@ async function confirmarLiberar(){
     liberado_at:new Date().toISOString(),
     observaciones:document.getElementById('lib-obs').value||null,
   }).eq('id',liberarId);
-  if(error){alert('Error: '+error.message);return;}
+  if(error){toast('Error: ', 'error');return;}
   cerrarModal('modal-liberar');
   actualizarBadgeLiberar();
   if(tabActual==='egresos') cargarEgresos();
@@ -1097,7 +1097,7 @@ async function confirmarLiberar(){
 }
 
 async function cancelarLiberar(id){
-  if(!confirm('¿Quitar la liberación de este egreso?')) return;
+  if(!(await confirmar('¿Quitar la liberación de este egreso?'))) return;
   await db.from('egresos').update({
     liberado_pago:false,fecha_vencimiento_pago:null,liberado_por:null,liberado_at:null
   }).eq('id',id);
@@ -1379,7 +1379,7 @@ async function confirmarImportAFIP(){
   }
 
   const txtUSD=importRowsCompras.filter(r=>r.moneda==='USD').length;
-  alert(`OK: ${ok} comprobantes importados${txtUSD?` (${txtUSD} en USD)`:''}.\n${skip} omitidos (ya existian).`);
+  toast(`✓ ${ok} comprobantes importados${txtUSD?' ('+txtUSD+' en USD)':''}. ${skip} omitidos (duplicados).`, 'success');
   mostrarImportarAFIP();
 }
 

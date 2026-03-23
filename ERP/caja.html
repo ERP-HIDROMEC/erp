@@ -757,7 +757,7 @@ async function procesarExtracto(json){
   for(let i=0;i<Math.min(json.length,5);i++){
     if(json[i]&&json[i][0]&&String(json[i][0]).includes('Fecha')){headerRow=i;break;}
   }
-  if(headerRow<0){alert('No encontré el encabezado. Verificá que sea el formato correcto del banco.');return;}
+  if(headerRow<0){toast('No encontré el encabezado. Verificá que sea el formato correcto del banco.', 'warn');return;}
 
   const rows=json.slice(headerRow+1).filter(r=>r&&r[0]);
   const movimientos=rows.map(r=>{
@@ -905,10 +905,10 @@ async function confirmarImport(){
     ({error}=await db.from('cheques').insert(nuevos));
   }
 
-  if(error){alert('Error al importar: '+error.message);if(btn){btn.disabled=false;btn.textContent='Reintentar';}return;}
+  if(error){toast('Error al importar: ', 'error');if(btn){btn.disabled=false;btn.textContent='Reintentar';}return;}
 
   previewData=[];
-  alert(`✓ ${nuevos.length} registros importados correctamente.`);
+  toast(`✓ ${nuevos.length} registros importados correctamente.`, 'success');
   mostrarImportar();
 }
 
@@ -923,7 +923,7 @@ function abrirNuevoMovimiento(){
 async function guardarMovimiento(){
   const desc=document.getElementById('nm-desc').value.trim();
   const monto=parseFloat(document.getElementById('nm-monto').value)||0;
-  if(!desc||!monto){alert('Completá descripción y monto.');return;}
+  if(!desc||!monto){toast('Completá descripción y monto.', 'warn');return;}
   const empId=document.getElementById('nm-empresa').value;
   const cuenta=document.getElementById('nm-cuenta').value;
   const {error}=await db.from('caja_movimientos').insert({
@@ -931,13 +931,13 @@ async function guardarMovimiento(){
     origen:cuenta,categoria:document.getElementById('nm-categoria').value,
     descripcion:desc,monto,fecha:document.getElementById('nm-fecha').value,
   });
-  if(error){alert('Error: '+error.message);return;}
+  if(error){toast('Error: ', 'error');return;}
   cerrarModal('modal-mov');
   cargarTodo();
 }
 
 async function borrarMovimiento(id){
-  if(!confirm('¿Borrar este movimiento?')) return;
+  if(!(await confirmar('¿Borrar este movimiento?'))) return;
   await db.from('caja_movimientos').delete().eq('id',id);
   cargarMovimientos();
 }
@@ -949,7 +949,7 @@ function abrirNuevoCheque(){
 async function guardarCheque(){
   const numero=document.getElementById('nc-numero').value.trim();
   const monto=parseFloat(document.getElementById('nc-monto').value)||0;
-  if(!numero||!monto){alert('Completá número y monto.');return;}
+  if(!numero||!monto){toast('Completá número y monto.', 'warn');return;}
   const {error}=await db.from('cheques').insert({
     empresa_id:document.getElementById('nc-empresa').value,
     tipo:document.getElementById('nc-tipo').value,
@@ -959,7 +959,7 @@ async function guardarCheque(){
     fecha_emision:document.getElementById('nc-emision').value||null,
     fecha_vencimiento:document.getElementById('nc-vencimiento').value||null,
   });
-  if(error){alert('Error: '+error.message);return;}
+  if(error){toast('Error: ', 'error');return;}
   cerrarModal('modal-cheque');
   cargarCheques();
 }
@@ -970,7 +970,7 @@ async function actualizarCheque(id,estado){
 }
 
 async function borrarCheque(id){
-  if(!confirm('¿Borrar este cheque?')) return;
+  if(!(await confirmar('¿Borrar este cheque?'))) return;
   await db.from('cheques').delete().eq('id',id);
   cargarCheques();
 }
@@ -1043,7 +1043,7 @@ async function confirmarOrdenPago(){
   const fecha=document.getElementById('op-fecha').value;
   const metodo=document.getElementById('op-metodo').value;
   const obs=document.getElementById('op-obs').value;
-  if(!fecha){alert('Ingresá la fecha de pago.');return;}
+  if(!fecha){toast('Ingresá la fecha de pago.', 'warn');return;}
 
   const {count}=await db.from('egresos').select('*',{count:'exact',head:true}).not('orden_pago_nro','is',null);
   const nroOrden='OP-'+String((count||0)+1).padStart(4,'0')+'-'+new Date().getFullYear();
@@ -1058,7 +1058,7 @@ async function confirmarOrdenPago(){
     observaciones:obs||null,
   }).eq('id',ordenId).select('*,proveedores(nombre,cuit),empresas(nombre)').single();
 
-  if(error){alert('Error: '+error.message);return;}
+  if(error){toast('Error: ', 'error');return;}
   cerrarModal('modal-orden');
   actualizarBadgeOrdenes();
   generarPDFOrden(egreso,nroOrden,fecha,metodo,u?.email||'');
@@ -1318,7 +1318,7 @@ async function cargarFCI(){
 async function guardarFCI(){
   const monto=parseFloat(document.getElementById('nf-monto').value)||0;
   const fondo=document.getElementById('nf-fondo').value.trim();
-  if(!monto||!fondo){alert('Completa fondo y monto.');return;}
+  if(!monto||!fondo){toast('Completa fondo y monto.', 'warn');return;}
   const {error}=await db.from('caja_fci').insert({
     empresa_id:document.getElementById('nf-empresa').value,
     tipo:document.getElementById('nf-tipo').value,
@@ -1327,14 +1327,14 @@ async function guardarFCI(){
     monto,
     observaciones:document.getElementById('nf-obs').value||null,
   });
-  if(error){alert('Error: '+error.message);return;}
+  if(error){toast('Error: ', 'error');return;}
   cerrarModal('modal-fci');
   cargarFCI();
   cargarKpis();
 }
 
 async function borrarFCI(id){
-  if(!confirm('Borrar este movimiento FCI?')) return;
+  if(!(await confirmar('Borrar este movimiento FCI?'))) return;
   await db.from('caja_fci').delete().eq('id',id);
   cargarFCI();
   cargarKpis();
