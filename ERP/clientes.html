@@ -1,0 +1,465 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Hidromec ERP — Clientes</title>
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="erp-utils.js"></script>
+<style>
+  :root{--bg:#0f1117;--bg2:#181c27;--bg3:#1e2436;--border:rgba(255,255,255,0.07);--text:#e8eaf0;--muted:#7a8099;--blue:#3b82f6;--green:#10b981;--red:#ef4444;--orange:#f59e0b;--purple:#8b5cf6;--teal:#14b8a6;}
+  *{margin:0;padding:0;box-sizing:border-box;}
+  body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--text);min-height:100vh;}
+  .sidebar{position:fixed;left:0;top:0;bottom:0;width:220px;background:var(--bg2);border-right:1px solid var(--border);display:flex;flex-direction:column;z-index:100;overflow-y:auto;}
+  .sidebar-logo{padding:24px 20px 20px;border-bottom:1px solid var(--border);}
+  .sidebar-logo h1{font-size:16px;font-weight:600;}
+  .sidebar-logo span{font-size:11px;color:var(--muted);font-family:'DM Mono',monospace;}
+  .nav-section{padding:16px 16px 6px;font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:1.2px;color:var(--muted);}
+  .nav-item{display:flex;align-items:center;gap:10px;padding:9px 12px;margin:1px 8px;border-radius:8px;font-size:13.5px;color:var(--muted);cursor:pointer;transition:all 0.15s;text-decoration:none;}
+  .nav-item:hover{background:var(--bg3);color:var(--text);}
+  .nav-item.active{background:rgba(59,130,246,0.12);color:var(--blue);}
+  .nav-item svg{width:16px;height:16px;flex-shrink:0;}
+  .nav-bottom{padding:16px 12px;border-top:1px solid var(--border);margin-top:auto;position:sticky;bottom:0;background:var(--bg2);}
+  .btn-logout{width:100%;padding:8px;background:rgba(239,68,68,0.1);border:1px solid rgba(239,68,68,0.2);border-radius:8px;color:var(--red);cursor:pointer;font-size:13px;font-family:'DM Sans',sans-serif;}
+  .main{margin-left:220px;padding:28px 32px;}
+  .page-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:24px;}
+  .page-header h2{font-size:24px;font-weight:600;}
+  .tabs{display:flex;gap:4px;background:var(--bg2);padding:4px;border-radius:10px;margin-bottom:20px;width:fit-content;}
+  .tab{padding:7px 16px;border-radius:7px;border:none;background:transparent;color:var(--muted);cursor:pointer;font-size:13px;font-family:'DM Sans',sans-serif;transition:all 0.15s;white-space:nowrap;}
+  .tab:hover{color:var(--text);}
+  .tab.active{background:var(--bg3);color:var(--text);font-weight:500;}
+  .filtros{display:flex;gap:8px;margin-bottom:16px;flex-wrap:wrap;align-items:center;}
+  .filtros select,.filtros input{padding:8px 12px;background:var(--bg2);border:1px solid var(--border);border-radius:8px;color:var(--text);font-size:13px;font-family:'DM Sans',sans-serif;outline:none;}
+  .filtros select:focus,.filtros input:focus{border-color:var(--blue);}
+  .kpis{display:flex;gap:12px;margin-bottom:20px;flex-wrap:wrap;}
+  .kpi-card{background:var(--bg2);border:1px solid var(--border);border-radius:10px;padding:14px 18px;min-width:150px;flex:1;}
+  .kpi-card.blue{border-top:3px solid var(--blue);}
+  .kpi-card.green{border-top:3px solid var(--green);}
+  .kpi-card.orange{border-top:3px solid var(--orange);}
+  .kpi-card.red{border-top:3px solid var(--red);}
+  .kpi-card.teal{border-top:3px solid var(--teal);}
+  .kpi-label{font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:0.6px;margin-bottom:6px;}
+  .kpi-value{font-size:22px;font-weight:600;font-family:'DM Mono',monospace;}
+  .panel{background:var(--bg2);border:1px solid var(--border);border-radius:10px;overflow:hidden;margin-bottom:16px;}
+  .panel-header{display:flex;align-items:center;justify-content:space-between;padding:14px 20px;border-bottom:1px solid var(--border);}
+  .panel-header h3{font-size:14px;font-weight:500;}
+  table{width:100%;border-collapse:collapse;}
+  th{padding:10px 14px;font-size:11px;font-weight:500;text-transform:uppercase;letter-spacing:0.6px;color:var(--muted);text-align:left;border-bottom:1px solid var(--border);background:var(--bg3);}
+  td{padding:11px 14px;border-bottom:1px solid var(--border);vertical-align:middle;}
+  tr:last-child td{border-bottom:none;}
+  tr:hover td{background:rgba(255,255,255,0.02);}
+  .mono{font-family:'DM Mono',monospace;font-size:13px;}
+  .btn{padding:8px 16px;border-radius:8px;border:none;cursor:pointer;font-size:13px;font-family:'DM Sans',sans-serif;font-weight:500;transition:all 0.15s;}
+  .btn-primary{background:var(--blue);color:#fff;}
+  .btn-primary:hover{opacity:0.9;}
+  .btn-ghost{background:transparent;color:var(--text);border:1px solid var(--border);}
+  .btn-ghost:hover{background:var(--bg3);}
+  .btn-danger{background:transparent;color:var(--red);border:1px solid rgba(239,68,68,0.3);}
+  .btn-sm{padding:5px 10px;font-size:12px;}
+  .modal-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,0.6);z-index:200;align-items:center;justify-content:center;padding:20px;}
+  .modal-overlay.show{display:flex;}
+  .modal{background:var(--bg2);border:1px solid var(--border);border-radius:12px;padding:24px;width:100%;max-width:600px;max-height:90vh;overflow-y:auto;}
+  .modal h3{font-size:16px;font-weight:600;margin-bottom:20px;}
+  .form-row{display:flex;gap:12px;margin-bottom:14px;flex-wrap:wrap;}
+  .form-group{flex:1;min-width:180px;}
+  .form-group.full{flex:0 0 100%;}
+  .form-group label{display:block;font-size:12px;color:var(--muted);margin-bottom:5px;}
+  .form-group input,.form-group select,.form-group textarea{width:100%;padding:9px 12px;background:var(--bg3);border:1px solid var(--border);border-radius:8px;color:var(--text);font-size:13px;font-family:'DM Sans',sans-serif;outline:none;}
+  .form-group textarea{min-height:70px;resize:vertical;}
+  .form-group input:focus,.form-group select:focus,.form-group textarea:focus{border-color:var(--blue);}
+  .modal-footer{display:flex;gap:8px;justify-content:flex-end;margin-top:20px;padding-top:16px;border-top:1px solid var(--border);}
+  .spinner-wrap{display:flex;align-items:center;justify-content:center;padding:60px;color:var(--muted);gap:12px;}
+  .spinner{width:20px;height:20px;border:2px solid var(--border);border-top-color:var(--blue);border-radius:50%;animation:spin 0.8s linear infinite;}
+  @keyframes spin{to{transform:rotate(360deg);}}
+  .badge{display:inline-block;padding:2px 8px;border-radius:20px;font-size:11px;}
+  .badge-activo{background:rgba(16,185,129,0.15);color:var(--green);}
+  .badge-inactivo{background:rgba(239,68,68,0.15);color:var(--red);}
+  .detalle-card{background:var(--bg3);border:1px solid var(--border);border-radius:8px;padding:12px 16px;margin-bottom:8px;}
+  .detalle-label{font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:0.6px;margin-bottom:4px;}
+  .detalle-value{font-size:14px;color:var(--text);}
+</style>
+</head>
+<body>
+<nav class="sidebar">
+  <div class="sidebar-logo"><h1>Hidromec ERP</h1><span>v1.0 — 2026</span></div>
+  <div data-seccion="dashboard" class="nav-section">Home</div>
+  <a data-modulo="dashboard" class="nav-item" href="index.html"><svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6"/></svg>Dashboard</a>
+  <div data-seccion="proyectos,contratos,remitos,presupuestos" class="nav-section">Operaciones</div>
+  <a data-modulo="proyectos" class="nav-item" href="proyectos.html"><svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"/></svg>Proyectos</a>
+  <a data-modulo="contratos" class="nav-item" href="contratos.html"><svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>Contratos</a>
+  <a data-modulo="remitos" class="nav-item" href="remitos.html"><svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>Remitos</a>
+  <a data-modulo="presupuestos" class="nav-item" href="presupuestos.html"><svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 7h6m0 10v-3m-3 3h.01M9 17h.01M9 14h.01M12 14h.01M15 11h.01M12 11h.01M9 11h.01M7 21h10a2 2 0 002-2V5a2 2 0 00-2-2H7a2 2 0 00-2 2v14a2 2 0 002 2z"/></svg>Presupuestos</a>
+  <div data-seccion="facturas,compras,impuestos,caja,clientes" class="nav-section">Gestión</div>
+  <a data-modulo="facturas" class="nav-item" href="facturas.html"><svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 9V7a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2m2 4h10a2 2 0 002-2v-6a2 2 0 00-2-2H9a2 2 0 00-2 2v6a2 2 0 002 2zm7-5a2 2 0 11-4 0 2 2 0 014 0z"/></svg>Facturación</a>
+  <a data-modulo="compras" class="nav-item" href="compras.html"><svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 3h2l.4 2M7 13h10l4-8H5.4M7 13L5.4 5M7 13l-2.293 2.293c-.63.63-.184 1.707.707 1.707H17m0 0a2 2 0 100 4 2 2 0 000-4zm-8 2a2 2 0 11-4 0 2 2 0 014 0z"/></svg>Compras</a>
+  <a data-modulo="caja" class="nav-item" href="caja.html"><svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>Caja</a>
+  <a data-modulo="impuestos" class="nav-item" href="impuestos.html"><svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 14l6-6m-5.5.5h.01m4.99 5h.01M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16l3.5-2 3.5 2 3.5-2 3.5 2z"/></svg>Impuestos</a>
+  <a data-modulo="clientes" class="nav-item active" href="clientes.html"><svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 21V19a4 4 0 00-4-4H9a4 4 0 00-4 4v2M12 11a4 4 0 100-8 4 4 0 000 8z"/></svg>Clientes</a>
+  <div data-seccion="empleados,syh" class="nav-section">RRHH</div>
+  <a data-modulo="empleados" class="nav-item" href="empleados.html"><svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z"/></svg>Empleados</a>
+  <a data-modulo="syh" class="nav-item" href="syh.html"><svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"/></svg>Seg. e Higiene</a>
+  <div class="nav-bottom"><button class="btn-logout" onclick="logout()">Cerrar sesión</button></div>
+</nav>
+
+<main class="main">
+  <div class="page-header">
+    <h2>Clientes</h2>
+    <button class="btn btn-primary" id="btn-nuevo" onclick="abrirNuevo()">+ Nuevo cliente</button>
+  </div>
+
+  <div class="tabs">
+    <button class="tab active" onclick="cambiarTab('lista',this)">Lista de clientes</button>
+    <button class="tab" onclick="cambiarTab('detalle',this)" id="tab-detalle" style="display:none">Ver cliente</button>
+  </div>
+
+  <div class="filtros">
+    <select id="f-empresa" onchange="cargarClientes()">
+      <option value="">Todas las empresas</option>
+      <option value="a1000000-0000-0000-0000-000000000001">Hidromec</option>
+      <option value="a2000000-0000-0000-0000-000000000002">Placemem</option>
+    </select>
+    <select id="f-activo" onchange="cargarClientes()">
+      <option value="">Todos</option>
+      <option value="true">Activos</option>
+      <option value="false">Inactivos</option>
+    </select>
+    <input type="text" id="f-buscar" placeholder="Buscar por nombre, CUIT..." oninput="cargarClientes()" style="width:240px">
+  </div>
+
+  <div id="kpis" class="kpis"></div>
+  <div id="contenido"></div>
+</main>
+
+<!-- MODAL CLIENTE -->
+<div class="modal-overlay" id="modal-cliente">
+  <div class="modal">
+    <h3 id="cli-titulo">Nuevo cliente</h3>
+    <div class="form-row">
+      <div class="form-group">
+        <label>Empresa (Hidromec/Placemem)</label>
+        <select id="nc-empresa">
+          <option value="a1000000-0000-0000-0000-000000000001">Hidromec</option>
+          <option value="a2000000-0000-0000-0000-000000000002">Placemem</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label>Razón social / Nombre *</label>
+        <input type="text" id="nc-nombre" placeholder="Ej: Ternium Argentina S.A.">
+      </div>
+    </div>
+    <div class="form-row">
+      <div class="form-group">
+        <label>CUIT</label>
+        <input type="text" id="nc-cuit" placeholder="30-12345678-9">
+      </div>
+      <div class="form-group">
+        <label>Condición IVA</label>
+        <select id="nc-iva">
+          <option value="responsable_inscripto">Responsable Inscripto</option>
+          <option value="monotributo">Monotributo</option>
+          <option value="exento">Exento</option>
+          <option value="consumidor_final">Consumidor Final</option>
+        </select>
+      </div>
+    </div>
+    <div class="form-row">
+      <div class="form-group">
+        <label>Email de facturación</label>
+        <input type="email" id="nc-email" placeholder="facturacion@empresa.com">
+      </div>
+      <div class="form-group">
+        <label>Teléfono</label>
+        <input type="text" id="nc-telefono" placeholder="+54 11 1234-5678">
+      </div>
+    </div>
+    <div class="form-row">
+      <div class="form-group">
+        <label>Contacto principal</label>
+        <input type="text" id="nc-contacto" placeholder="Nombre del contacto habitual">
+      </div>
+      <div class="form-group">
+        <label>Email contacto</label>
+        <input type="email" id="nc-email-contacto" placeholder="contacto@empresa.com">
+      </div>
+    </div>
+    <div class="form-row">
+      <div class="form-group full">
+        <label>Dirección</label>
+        <input type="text" id="nc-direccion" placeholder="Calle, número, ciudad, provincia">
+      </div>
+    </div>
+    <div class="form-row">
+      <div class="form-group">
+        <label>Localidad</label>
+        <input type="text" id="nc-localidad" placeholder="Ej: Zárate">
+      </div>
+      <div class="form-group">
+        <label>Provincia</label>
+        <input type="text" id="nc-provincia" placeholder="Ej: Buenos Aires">
+      </div>
+    </div>
+    <div class="form-row">
+      <div class="form-group full">
+        <label>Observaciones</label>
+        <textarea id="nc-obs" placeholder="Notas internas, condiciones comerciales, contactos adicionales..."></textarea>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" onclick="cerrarModal('modal-cliente')">Cancelar</button>
+      <button class="btn btn-primary" onclick="guardarCliente()">Guardar</button>
+    </div>
+  </div>
+</div>
+
+<script>
+let tabActual = 'lista';
+let clienteSelId = null;
+let clienteEditId = null;
+
+async function init(){
+  const acceso = await verificarAcceso('clientes');
+  if(!acceso) return;
+  cargarClientes();
+}
+
+function cambiarTab(tab, btn){
+  tabActual = tab;
+  document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+  if(btn) btn.classList.add('active');
+  document.getElementById('btn-nuevo').style.display = tab === 'detalle' ? 'none' : '';
+  if(tab === 'lista') cargarClientes();
+  else if(tab === 'detalle' && clienteSelId) cargarDetalle(clienteSelId);
+}
+
+async function cargarClientes(){
+  document.getElementById('kpis').innerHTML = '';
+  document.getElementById('contenido').innerHTML = '<div class="spinner-wrap"><div class="spinner"></div>Cargando...</div>';
+  const emp = document.getElementById('f-empresa').value;
+  const activo = document.getElementById('f-activo').value;
+  const buscar = document.getElementById('f-buscar').value.toLowerCase();
+
+  let q = db.from('clientes').select('*,empresas(nombre)').order('nombre');
+  if(emp) q = q.eq('empresa_id', emp);
+  if(activo !== '') q = q.eq('activo', activo === 'true');
+  const {data} = await q;
+  let rows = data || [];
+  if(buscar) rows = rows.filter(r =>
+    (r.nombre||'').toLowerCase().includes(buscar) ||
+    (r.cuit||'').includes(buscar) ||
+    (r.localidad||'').toLowerCase().includes(buscar)
+  );
+
+  const activos = rows.filter(r => r.activo !== false).length;
+  const inactivos = rows.filter(r => r.activo === false).length;
+
+  document.getElementById('kpis').innerHTML = `
+    <div class="kpi-card blue"><div class="kpi-label">Total clientes</div><div class="kpi-value">${rows.length}</div></div>
+    <div class="kpi-card green"><div class="kpi-label">Activos</div><div class="kpi-value">${activos}</div></div>
+    <div class="kpi-card red"><div class="kpi-label">Inactivos</div><div class="kpi-value">${inactivos}</div></div>`;
+
+  document.getElementById('contenido').innerHTML = `
+    <div class="panel">
+      <div style="overflow-x:auto"><table>
+        <thead><tr>
+          <th>Empresa</th><th>Razón social</th><th>CUIT</th><th>Condición IVA</th>
+          <th>Contacto</th><th>Email</th><th>Localidad</th><th>Estado</th><th>Acciones</th>
+        </tr></thead>
+        <tbody>${rows.length ? rows.map(r => `<tr>
+          <td style="font-size:12px">${r.empresas?.nombre||'—'}</td>
+          <td style="font-weight:500;cursor:pointer;color:var(--blue)" onclick="verDetalle('${r.id}')">${r.nombre}</td>
+          <td class="mono" style="font-size:12px">${r.cuit||'—'}</td>
+          <td style="font-size:12px;color:var(--muted)">${formatIVA(r.condicion_iva||r.iva||'')}</td>
+          <td style="font-size:12px">${r.contacto||'—'}</td>
+          <td style="font-size:12px;color:var(--muted)">${r.email||r.email_facturacion||'—'}</td>
+          <td style="font-size:12px">${r.localidad||'—'}</td>
+          <td><span class="badge ${r.activo===false?'badge-inactivo':'badge-activo'}">${r.activo===false?'Inactivo':'Activo'}</span></td>
+          <td><div style="display:flex;gap:6px">
+            <button class="btn btn-sm btn-ghost" onclick="verDetalle('${r.id}')">Ver</button>
+            <button class="btn btn-sm btn-ghost" onclick="editarCliente('${r.id}')">Editar</button>
+            <button class="btn btn-sm btn-danger" onclick="toggleActivo('${r.id}',${r.activo!==false})">${r.activo===false?'Activar':'Dar de baja'}</button>
+          </div></td>
+        </tr>`).join('') : '<tr><td colspan="9" style="text-align:center;padding:40px;color:var(--muted)">Sin clientes. Creá el primero con el botón +</td></tr>'}</tbody>
+      </table></div>
+    </div>`;
+}
+
+function formatIVA(v){
+  const m = {responsable_inscripto:'Resp. Inscripto',monotributo:'Monotributo',exento:'Exento',consumidor_final:'Cons. Final'};
+  return m[v] || v || '—';
+}
+
+async function verDetalle(id){
+  clienteSelId = id;
+  document.getElementById('tab-detalle').style.display = '';
+  const tab = document.getElementById('tab-detalle');
+  tab.style.display = '';
+  cambiarTab('detalle', tab);
+}
+
+async function cargarDetalle(id){
+  document.getElementById('contenido').innerHTML = '<div class="spinner-wrap"><div class="spinner"></div>Cargando...</div>';
+  const {data:cli} = await db.from('clientes').select('*,empresas(nombre)').eq('id', id).single();
+  if(!cli){document.getElementById('contenido').innerHTML='<div style="padding:40px;text-align:center;color:var(--muted)">Cliente no encontrado</div>';return;}
+
+  // Load stats in parallel
+  const [
+    {data:facturas, error: fe},
+    {data:remitos},
+    {data:contratos},
+    {data:proyectos}
+  ] = await Promise.all([
+    db.from('facturas_emitidas').select('id,numero_factura,monto_total,estado,fecha_emision').eq('cliente_id', id).order('fecha_emision',{ascending:false}).limit(5),
+    db.from('remitos_v2').select('id,numero_formateado,total_valorizado,estado,fecha').eq('cliente_id', id).order('fecha',{ascending:false}).limit(5),
+    db.from('contratos').select('id,numero_contrato,estado,monto_total,fecha_inicio').eq('cliente_id', id).order('created_at',{ascending:false}).limit(5),
+    db.from('proyectos').select('id,nombre,estado,fecha_inicio').eq('cliente_id', id).order('created_at',{ascending:false}).limit(5),
+  ]);
+
+  const totalFac = (facturas||[]).filter(f=>f.estado!=='anulada').reduce((s,f)=>s+Number(f.monto_total||0),0);
+  const totalCont = (contratos||[]).reduce((s,c)=>s+Number(c.monto_total||0),0);
+
+  document.getElementById('contenido').innerHTML = `
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">
+      <button class="btn btn-ghost btn-sm" onclick="cambiarTab('lista',document.querySelector('.tab'))">← Volver a la lista</button>
+      <button class="btn btn-ghost btn-sm" onclick="editarCliente('${id}')">Editar cliente</button>
+    </div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:20px">
+      <div class="panel">
+        <div class="panel-header"><h3>Datos del cliente</h3></div>
+        <div style="padding:16px;display:grid;grid-template-columns:1fr 1fr;gap:12px">
+          ${campo('Razón social', cli.nombre)}
+          ${campo('CUIT', cli.cuit)}
+          ${campo('Condición IVA', formatIVA(cli.condicion_iva||cli.iva))}
+          ${campo('Empresa', cli.empresas?.nombre)}
+          ${campo('Email facturación', cli.email||cli.email_facturacion)}
+          ${campo('Teléfono', cli.telefono)}
+          ${campo('Contacto principal', cli.contacto)}
+          ${campo('Email contacto', cli.email_contacto)}
+          ${campo('Dirección', cli.direccion, true)}
+          ${campo('Localidad', cli.localidad)}
+          ${campo('Provincia', cli.provincia)}
+        </div>
+        ${cli.observaciones?`<div style="padding:0 16px 16px"><div class="detalle-label">Observaciones</div><div style="font-size:13px;color:var(--muted)">${cli.observaciones}</div></div>`:''}
+      </div>
+      <div>
+        <div class="kpis" style="flex-direction:column">
+          <div class="kpi-card blue"><div class="kpi-label">Facturado total (ultimas 5)</div><div class="kpi-value" style="font-size:18px">${fmt(totalFac)}</div></div>
+          <div class="kpi-card green"><div class="kpi-label">Contratos</div><div class="kpi-value">${(contratos||[]).length}</div></div>
+          <div class="kpi-card orange"><div class="kpi-label">Proyectos activos</div><div class="kpi-value">${(proyectos||[]).filter(p=>p.estado==='activo').length}</div></div>
+          <div class="kpi-card teal"><div class="kpi-label">Remitos emitidos</div><div class="kpi-value">${(remitos||[]).length}</div></div>
+        </div>
+      </div>
+    </div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px">
+      ${tablaHistorial('Últimas facturas', facturas||[], [
+        {k:'numero_factura',l:'N° Factura'},{k:'fecha_emision',l:'Fecha',fmt:'fecha'},{k:'monto_total',l:'Monto',fmt:'moneda'},{k:'estado',l:'Estado'}
+      ], 'facturas.html')}
+      ${tablaHistorial('Últimos remitos', remitos||[], [
+        {k:'numero_formateado',l:'N° Remito'},{k:'fecha',l:'Fecha',fmt:'fecha'},{k:'total_valorizado',l:'Valorizado',fmt:'moneda'},{k:'estado',l:'Estado'}
+      ], 'remitos.html')}
+    </div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-top:16px">
+      ${tablaHistorial('Contratos', contratos||[], [
+        {k:'numero_contrato',l:'N° Contrato'},{k:'monto_total',l:'Monto',fmt:'moneda'},{k:'estado',l:'Estado'}
+      ], 'contratos.html')}
+      ${tablaHistorial('Proyectos', proyectos||[], [
+        {k:'nombre',l:'Proyecto'},{k:'estado',l:'Estado'},{k:'fecha_inicio',l:'Inicio',fmt:'fecha'}
+      ], 'proyectos.html')}
+    </div>`;
+}
+
+function campo(label, value, full=false){
+  if(!value) return '';
+  return `<div${full?' style="grid-column:span 2"':''}>
+    <div class="detalle-label">${label}</div>
+    <div class="detalle-value">${value}</div>
+  </div>`;
+}
+
+function tablaHistorial(titulo, rows, cols, link){
+  if(!rows.length) return `<div class="panel"><div class="panel-header"><h3>${titulo}</h3></div><div style="padding:24px;text-align:center;color:var(--muted);font-size:13px">Sin registros</div></div>`;
+  return `<div class="panel">
+    <div class="panel-header">
+      <h3>${titulo}</h3>
+      <a href="${link}" class="btn btn-ghost btn-sm">Ver todos</a>
+    </div>
+    <table><thead><tr>${cols.map(c=>`<th>${c.l}</th>`).join('')}</tr></thead>
+    <tbody>${rows.map(r=>`<tr>${cols.map(c=>{
+      let v = r[c.k];
+      if(c.fmt==='moneda') v = v ? fmt(v) : '—';
+      else if(c.fmt==='fecha') v = v ? fmtF(v) : '—';
+      else v = v || '—';
+      return `<td style="font-size:12px">${v}</td>`;
+    }).join('')}</tr>`).join('')}</tbody></table>
+  </div>`;
+}
+
+function abrirNuevo(){
+  clienteEditId = null;
+  document.getElementById('cli-titulo').textContent = 'Nuevo cliente';
+  ['nc-nombre','nc-cuit','nc-email','nc-telefono','nc-contacto','nc-email-contacto','nc-direccion','nc-localidad','nc-provincia','nc-obs'].forEach(id => document.getElementById(id).value = '');
+  document.getElementById('nc-iva').value = 'responsable_inscripto';
+  document.getElementById('modal-cliente').classList.add('show');
+}
+
+async function editarCliente(id){
+  const {data:r} = await db.from('clientes').select('*').eq('id', id).single();
+  if(!r) return;
+  clienteEditId = id;
+  document.getElementById('cli-titulo').textContent = 'Editar cliente';
+  document.getElementById('nc-empresa').value = r.empresa_id || 'a1000000-0000-0000-0000-000000000001';
+  document.getElementById('nc-nombre').value = r.nombre || '';
+  document.getElementById('nc-cuit').value = r.cuit || '';
+  document.getElementById('nc-iva').value = r.condicion_iva || r.iva || 'responsable_inscripto';
+  document.getElementById('nc-email').value = r.email || r.email_facturacion || '';
+  document.getElementById('nc-telefono').value = r.telefono || '';
+  document.getElementById('nc-contacto').value = r.contacto || '';
+  document.getElementById('nc-email-contacto').value = r.email_contacto || '';
+  document.getElementById('nc-direccion').value = r.direccion || '';
+  document.getElementById('nc-localidad').value = r.localidad || '';
+  document.getElementById('nc-provincia').value = r.provincia || '';
+  document.getElementById('nc-obs').value = r.observaciones || '';
+  document.getElementById('modal-cliente').classList.add('show');
+}
+
+async function guardarCliente(){
+  const nombre = document.getElementById('nc-nombre').value.trim();
+  if(!nombre){ alert('El nombre es obligatorio.'); return; }
+  const payload = {
+    empresa_id: document.getElementById('nc-empresa').value,
+    nombre,
+    cuit: document.getElementById('nc-cuit').value.trim() || null,
+    condicion_iva: document.getElementById('nc-iva').value,
+    email: document.getElementById('nc-email').value.trim() || null,
+    email_facturacion: document.getElementById('nc-email').value.trim() || null,
+    telefono: document.getElementById('nc-telefono').value.trim() || null,
+    contacto: document.getElementById('nc-contacto').value.trim() || null,
+    email_contacto: document.getElementById('nc-email-contacto').value.trim() || null,
+    direccion: document.getElementById('nc-direccion').value.trim() || null,
+    localidad: document.getElementById('nc-localidad').value.trim() || null,
+    provincia: document.getElementById('nc-provincia').value.trim() || null,
+    observaciones: document.getElementById('nc-obs').value || null,
+    activo: true,
+  };
+  let error;
+  if(clienteEditId){ ({error} = await db.from('clientes').update(payload).eq('id', clienteEditId)); }
+  else { ({error} = await db.from('clientes').insert(payload)); }
+  if(error){ alert('Error: ' + error.message); return; }
+  cerrarModal('modal-cliente');
+  cargarClientes();
+}
+
+async function toggleActivo(id, estaActivo){
+  const msg = estaActivo ? '¿Dar de baja este cliente?' : '¿Reactivar este cliente?';
+  if(!confirm(msg)) return;
+  await db.from('clientes').update({activo: !estaActivo}).eq('id', id);
+  cargarClientes();
+}
+
+function cerrarModal(id){ document.getElementById(id).classList.remove('show'); }
+async function logout(){ await db.auth.signOut(); window.location.href = 'login.html'; }
+
+init();
+</script>
+</body>
+</html>

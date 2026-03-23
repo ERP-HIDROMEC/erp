@@ -38,11 +38,11 @@ const hoy  = () => new Date().toISOString().split('T')[0];
 
 const PERMISOS = {
   admin_general:       ['*'],
-  gestion_caja:        ['dashboard','facturas','compras','contratos','remitos','impuestos','caja'],
-  operaciones_dash:    ['dashboard','proyectos','remitos','contratos','presupuestos'],
-  gestion:             ['facturas','compras','contratos','remitos','impuestos'],
-  operaciones:         ['proyectos','remitos','contratos','presupuestos'],
-  gestion_operaciones: ['facturas','compras','contratos','remitos','impuestos','proyectos','presupuestos'],
+  gestion_caja:        ['dashboard','facturas','compras','contratos','remitos','impuestos','caja','clientes'],
+  operaciones_dash:    ['dashboard','proyectos','remitos','contratos','presupuestos','clientes'],
+  gestion:             ['facturas','compras','contratos','remitos','impuestos','clientes'],
+  operaciones:         ['proyectos','remitos','contratos','presupuestos','clientes'],
+  gestion_operaciones: ['facturas','compras','contratos','remitos','impuestos','proyectos','presupuestos','clientes'],
   rrhh:                ['empleados','syh'],
   syh:                 ['syh'],
 };
