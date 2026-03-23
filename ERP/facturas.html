@@ -416,8 +416,7 @@ async function cargarFacturas(){
   const mes=document.getElementById('f-mes').value;
   const buscar=document.getElementById('f-buscar').value.toLowerCase();
 
-  const facData=await FacturasAPI.getFacturas({}); let q={data:facData}; //
-    .order('fecha_emision',{ascending:false});
+  const facData=await FacturasAPI.getFacturas({}); let q={data:facData};
   if(emp) q=q.eq('empresa_id',emp);
   if(estado) q=q.eq('estado',estado);
   if(tipo) q=q.eq('tipo',tipo);
@@ -868,14 +867,9 @@ async function cargarRemitosParaFactura(){
   const empId=document.getElementById('nf-empresa').value;
   const cliId=document.getElementById('nf-cliente').value;
   // Buscar por empresa; si hay cliente también filtrar por cliente
-  const remVincData=await RemitosAPI.getRemitosParaVincular(emp); let q={data:remVincData}; //
-    .select('id,numero_formateado,fecha,estado,cliente_id')
-    .eq('empresa_id',empId)
-    .neq('estado','anulado')
-    .order('fecha',{ascending:false});
-  if(cliId) q=q.eq('cliente_id',cliId);
-  const {data}=await q;
-  _remitosDisponibles=data||[];
+  const data=await RemitosAPI.getRemitosParaVincular(empId);
+  const filteredData = cliId ? data.filter(r=>r.cliente_id===cliId) : data;
+  _remitosDisponibles=filteredData||[];
   const sel=document.getElementById('nf-remito-sel');
   if(!sel) return;
   sel.innerHTML='<option value="">Seleccionar remito...</option>'+

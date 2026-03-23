@@ -511,17 +511,13 @@ async function cargarFlujo(){
   const en90Str=en90.toISOString().split('T')[0];
 
   // Facturas por cobrar
-  const flujo=await CajaAPI.getFlujoCajaProyectado(empId,fechaDesde,fechaHasta); let qF={data:flujo.porCobrar}; //
-    .not('estado','in','("cobrada","anulada")').gte('fecha_cobro_estimada',hoyStr).lte('fecha_cobro_estimada',en90Str).order('fecha_cobro_estimada');
+  const flujo=await CajaAPI.getFlujoCajaProyectado(empId,fechaDesde,fechaHasta); let qF={data:flujo.porCobrar};
   // Egresos pendientes
-  let qE={data:flujo.porPagar}; //
-    .eq('pagado',false).gte('fecha_egreso',hoyStr).lte('fecha_egreso',en90Str).order('fecha_egreso');
+  let qE={data:flujo.porPagar};
   // Cheques recibidos pendientes (cobros)
-  let qCR={data:flujo.chqCartera}; //
-    .eq('tipo','recibido').eq('estado','pendiente').gte('fecha_vencimiento',hoyStr).lte('fecha_vencimiento',en90Str).order('fecha_vencimiento');
+  let qCR={data:flujo.chqCartera};
   // Cheques emitidos pendientes (pagos)
-  let qCE={data:flujo.chqEmitidos}; //
-    .eq('tipo','emitido').eq('estado','pendiente').gte('fecha_vencimiento',hoyStr).lte('fecha_vencimiento',en90Str).order('fecha_vencimiento');
+  let qCE={data:flujo.chqEmitidos};
 
   if(emp){qF=qF.eq('empresa_id',emp);qE=qE.eq('empresa_id',emp);qCR=qCR.eq('empresa_id',emp);qCE=qCE.eq('empresa_id',emp);}
 
@@ -714,9 +710,7 @@ async function procesarExtracto(json){
   const fechas=[...new Set(movimientos.map(m=>m.fecha))];
   let existentes=new Set();
   if(fechas.length){
-    const data=await CajaAPI.getMovimientosParaExportar(empId,fechaDesde,fechaHasta); //
-      .eq('empresa_id',empresaId).eq('origen',cuenta)
-      .gte('fecha',fechas[0]).lte('fecha',fechas[fechas.length-1]);
+    const data=await CajaAPI.getMovimientosParaExportar(empId,fechaDesde,fechaHasta);
     (data||[]).forEach(r=>existentes.add(`${r.fecha}|${r.monto}`));
   }
 
@@ -908,9 +902,7 @@ async function borrarCheque(id){
 
 // ── BADGE órdenes ─────────────────────────────────────────────
 async function actualizarBadgeOrdenes(){
-  const count=await EgresosAPI.contarEgresosConOP(empId); //
-    .select('*',{count:'exact',head:true})
-    .eq('pagado',false).eq('liberado_pago',true);
+  const count=await EgresosAPI.contarEgresosConOP(empId);
   const badge=document.getElementById('badge-ordenes');
   if(badge){ if(count>0){badge.textContent=count;badge.style.display='inline';} else{badge.style.display='none';} }
 }
@@ -924,10 +916,7 @@ async function cargarOrdenes(){
   container.innerHTML='<div style="display:flex;align-items:center;justify-content:center;padding:40px;color:var(--muted)"><div style="width:16px;height:16px;border:2px solid var(--border);border-top-color:var(--blue);border-radius:50%;animation:spin 0.8s linear infinite;margin-right:10px"></div>Cargando...</div>';
 
   const hoyStr=new Date().toISOString().split('T')[0];
-  const data=await EgresosAPI.getEgresos({pagado:false}); //
-    .select('*,proveedores(nombre,cuit,email),empresas(nombre)')
-    .eq('pagado',false).eq('liberado_pago',true)
-    .order('fecha_vencimiento_pago',{ascending:true});
+  const data=await EgresosAPI.getEgresos({pagado:false,liberado_pago:true});
   const rows=data||[];
   const total=rows.reduce((s,r)=>s+Number(r.monto||0),0);
 

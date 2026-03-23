@@ -494,10 +494,7 @@ async function cargarDocsCliente(clienteId){
   const en30 = new Date(); en30.setDate(en30.getDate()+30);
   const en30Str = en30.toISOString().split('T')[0];
 
-  const data=await ClientesAPI.getDocsCliente(clienteSelId); //
-    .select('*')
-    .eq('cliente_id', clienteId)
-    .order('fecha_vencimiento', {ascending:true, nullsFirst:false});
+  const data=await ClientesAPI.getDocsCliente(clienteSelId);
   const docs = data || [];
 
   const vencidos = docs.filter(d=>d.fecha_vencimiento&&d.fecha_vencimiento<hoyStr).length;

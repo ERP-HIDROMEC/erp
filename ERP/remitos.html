@@ -236,8 +236,7 @@ async function init(){
 }
 
 async function verificarCAI(){
-  caiActual=await RemitosAPI.getTalonarioActivo('a1000000-0000-0000-0000-000000000001'); //
-    .eq('activo',true).order('created_at',{ascending:false}).limit(1);
+  caiActual=await RemitosAPI.getTalonarioActivo(empId||'a1000000-0000-0000-0000-000000000001');
   const alerta=document.getElementById('alerta-cai');
   if(!data||!data.length){
     alerta.style.display='block';
@@ -282,14 +281,13 @@ async function cargarRemitos(){
   const mes=document.getElementById('f-mes').value;
   const buscar=document.getElementById('f-buscar').value.toLowerCase();
 
-  const remData=await RemitosAPI.getRemitos({}); let q={data:remData}; //
-    .order('numero',{ascending:false}).limit(500);
-  if(emp) q=q.eq('empresa_id',emp);
-  if(tipo) q=q.eq('tipo',tipo);
-  if(estado) q=q.eq('estado',estado);
-  // histórico = migrados, todos = no migrados
-  if(tabActual==='historico') q=q.eq('migrado',true);
-  if(tabActual==='todos') q=q.eq('migrado',false);
+  const filtros={limit:500};
+  if(emp) filtros.empresaId=emp;
+  if(tipo) filtros.tipo=tipo;
+  if(estado) filtros.estado=estado;
+  if(tabActual==='historico') filtros.migrado=true;
+  if(tabActual==='todos') filtros.migrado=false;
+  const remData=await RemitosAPI.getRemitos(filtros); let q={data:remData};
   if(mes){q=q.gte('fecha',mes+'-01');const f=new Date(mes+'-01');f.setMonth(f.getMonth()+1);q=q.lt('fecha',f.toISOString().split('T')[0]);}
 
   const {data}=await q;
@@ -346,16 +344,14 @@ async function cargarPendientes(){
   const emp=document.getElementById('f-empresa').value;
 
   // Pendientes normales (no migrados)
-  const remData1=await RemitosAPI.getRemitos({estados:['emitido','aceptado']}); let q1={data:remData1}; //
-    .in('estado',['emitido','enviado','aceptado']).neq('tipo','interno').eq('migrado',false)
-    .order('fecha',{ascending:true});
-  if(emp) q1=q1.eq('empresa_id',emp);
+  const filtros1={estados:['emitido','aceptado']};
+  if(emp) filtros1.empresaId=emp;
+  const remData1=await RemitosAPI.getRemitos(filtros1); let q1={data:remData1};
 
   // Pendientes históricos (migrados, no facturados)
-  const remData2=await RemitosAPI.getRemitos({estado:'facturado'}); let q2={data:remData2}; //
-    .eq('migrado',true).neq('estado','facturado').neq('estado','anulado')
-    .order('fecha',{ascending:true});
-  if(emp) q2=q2.eq('empresa_id',emp);
+  const filtros2={estados:['emitido','aceptado','facturado']};
+  if(emp) filtros2.empresaId=emp;
+  const remData2=await RemitosAPI.getRemitos(filtros2); let q2={data:remData2};
 
   const [{data:d1},{data:d2}]=await Promise.all([q1,q2]);
   const normales=d1||[];

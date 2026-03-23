@@ -988,9 +988,7 @@ function cerrarModal(id){ document.getElementById(id).classList.remove('show'); 
 
 // ── BADGE contador ────────────────────────────────────────────
 async function actualizarBadgeLiberar(){
-  const count=await EgresosAPI.contarEgresosConOP(empId); //
-    .select('*',{count:'exact',head:true})
-    .eq('pagado',false).eq('liberado_pago',false);
+  const count=await EgresosAPI.contarEgresosConOP(empId);
   const badge=document.getElementById('badge-liberar');
   if(count>0){badge.textContent=count;badge.style.display='inline';}
   else{badge.style.display='none';}
@@ -1040,8 +1038,7 @@ async function cargarParaLiberar(){
   const prov=document.getElementById('fl-proveedor').value;
   const estado=document.getElementById('fl-estado').value;
 
-  const egOpData=await EgresosAPI.getEgresos({pagado:false}); let q={data:egOpData}; //
-    .eq('pagado',false).order('fecha_vencimiento_pago',{ascending:true,nullsFirst:false});
+  const egOpData=await EgresosAPI.getEgresos({pagado:false}); let q={data:egOpData};
   if(emp) q=q.eq('empresa_id',emp);
   if(prov) q=q.eq('proveedor_id',prov);
   if(estado==='liberado') q=q.eq('liberado_pago',true);
@@ -1282,9 +1279,7 @@ async function confirmarImportAFIP(){
     let prov=listaProvs.find(p=>p.cuit&&p.cuit===r.cuit)
            ||listaProvs.find(p=>p.nombre&&(p.nombre.includes(r.proveedor)||r.proveedor.includes(p.nombre)));
     if(!prov&&r.proveedor){
-      const np=await EgresosAPI.buscarOCrearProveedor(empId,r.proveedor,r.cuit||null); //
-        .insert({empresa_id:empId,nombre:r.proveedor,cuit:r.cuit||null,activo:true})
-        .select().maybeSingle();
+      const np=await EgresosAPI.buscarOCrearProveedor(empId,r.proveedor,r.cuit||null);
       if(np){prov=np;listaProvs.push(np);}
     }
 

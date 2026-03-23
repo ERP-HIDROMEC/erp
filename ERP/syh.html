@@ -1248,10 +1248,9 @@ async function guardarPortalDoc(){
     const nombre=document.getElementById('mp-portal-nombre').value.trim();
     if(!nombre){toast('Ingresa el nombre del portal.', 'warn');return;}
     const url=document.getElementById('mp-portal-url').value.trim()||null;
-    let np=null,pe=null; try{ np=await SyhAPI.crearPortal({
-      .insert({empresa_id:empId,nombre,url_portal:url,activo:true})
-      .select().single();
-    if(pe){toast('Error al crear portal: ', 'error');return;}
+    let np=null,pe=null; try{ np=await SyhAPI.crearPortal({empresa_id:empId,nombre,url_portal:url,activo:true});
+    }catch(e){pe=e;}
+    if(pe){toast('Error al crear portal: '+pe.message, 'error');return;}
     portalId=np.id;
   }
 
@@ -1288,9 +1287,7 @@ async function cargarPortales(){
   const en60Str=en60.toISOString().split('T')[0];
 
   // Load all portal docs with joins
-  const portalData=await SyhAPI.getDocumentosPortal({}); let q={data:portalData}; //
-    .select('*,portales_clientes(nombre,url_portal),empleados(nombre),vehiculos(descripcion,patente),empresas(nombre)')
-    .order('fecha_vencimiento',{ascending:true});
+  const portalData=await SyhAPI.getDocumentosPortal({}); let q={data:portalData};
   if(emp) q=q.eq('empresa_id',emp);
   const {data}=await q;
   let rows=data||[];

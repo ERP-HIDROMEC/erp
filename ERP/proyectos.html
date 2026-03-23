@@ -1021,9 +1021,7 @@ async function cambiarEstadoOT(id,estado){
 }
 
 async function imprimirOTById(id){
-  const r=await ProyectosAPI.getOrdenTrabajoById(otEditId); //
-    .select('*,proyectos(nombre,numero_oc,descripcion,contratos(numero_contrato),clientes(nombre),empresas(nombre))')
-    .eq('id',id).single();
+  const r=await ProyectosAPI.getOrdenTrabajoById(otEditId);
   if(r) generarPDFOrdenTrabajo(r);
 }
 

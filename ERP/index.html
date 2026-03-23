@@ -222,14 +222,11 @@ function renderKPIs() {
 
 async function cargarVencidas() {
   const hoy = new Date().toISOString().split('T')[0];
-  const facMensData=await FacturasAPI.getFacturaMensual(empresaActiva,mesIni,mesFin); let q={data:facMensData}; //
-    .select('numero_factura,fecha_cobro_estimada,monto_total,empresa_id,clientes(nombre),empresas(nombre)')
-    .not('estado','in','("cobrada","anulada")')
-    .lt('fecha_cobro_estimada',hoy)
-    .order('fecha_cobro_estimada');
-  if(empresaActiva!=='todas') q = q.eq('empresa_id',empresaActiva);
-  const { data } = await q;
-  vencData = (data||[]).map(r=>({
+  const filtros = { excluirAnuladas:false, soloVencidas:true };
+  if(empresaActiva !== 'todas') filtros.empresaId = empresaActiva;
+  const data = await FacturasAPI.getFacturasVencidasDetalle(200);
+  const datFiltrada = empresaActiva === 'todas' ? data : data.filter(r=>r.empresa_id===empresaActiva);
+  vencData = (datFiltrada||[]).map(r=>({
     ...r,
     cliente: r.clientes?.nombre||'—',
     empresa: r.empresas?.nombre||'—',
@@ -251,10 +248,12 @@ async function cargarVencidas() {
 
 async function cargarMensual() {
   const desde = new Date(); desde.setMonth(desde.getMonth()-5); desde.setDate(1);
-  const data=await FacturasAPI.getFacturasPorCliente(empresaActiva,mesIni,mesFin); //
-    .select('fecha_emision,monto_total,empresas(nombre)')
-    .neq('estado','anulada')
-    .gte('fecha_emision',desde.toISOString().split('T')[0]);
+  const desdeStr = desde.toISOString().split('T')[0];
+  const filtros = { excluirAnuladas:true, fechaDesde:desdeStr };
+  if(empresaActiva !== 'todas') filtros.empresaId = empresaActiva;
+  const data = await FacturasAPI.getFacturaMensual(
+    empresaActiva === 'todas' ? null : empresaActiva, desdeStr, new Date().toISOString().split('T')[0]
+  );
   const agg = {};
   (data||[]).forEach(r=>{
     const mes = r.fecha_emision.substring(0,7);
@@ -287,12 +286,12 @@ function renderGrafico() {
 }
 
 async function cargarClientes() {
-  const facMensData2=await FacturasAPI.getFacturas({empresaId:empresaActiva}); let q={data:facMensData2}; //
-    .select('monto_total,empresa_id,clientes(nombre),empresas(nombre)')
-    .neq('estado','anulada')
-    .gte('fecha_emision',new Date().getFullYear()+'-01-01');
-  if(empresaActiva!=='todas') q = q.eq('empresa_id',empresaActiva);
-  const { data } = await q;
+  const anioIni = new Date().getFullYear() + '-01-01';
+  const filtros = { excluirAnuladas:true, fechaDesde:anioIni };
+  if(empresaActiva !== 'todas') filtros.empresaId = empresaActiva;
+  const data = await FacturasAPI.getFacturasPorCliente(
+    empresaActiva === 'todas' ? null : empresaActiva, anioIni, new Date().toISOString().split('T')[0]
+  );
   const agg = {};
   (data||[]).forEach(r=>{
     const k = (r.clientes?.nombre||'—')+'|'+(r.empresas?.nombre||'—');
@@ -339,12 +338,7 @@ async function cargarAlertas() {
   const hace60Str = hace60.toISOString().split('T')[0];
 
   // 1. Facturas vencidas hace más de 30 días
-  const facVenc=await FacturasAPI.getFacturasVencidasDetalle(20); //
-    .select('numero_factura,monto_total,fecha_cobro_estimada,clientes(nombre),empresas(nombre)')
-    .not('estado','in','("cobrada","anulada")')
-    .lt('fecha_cobro_estimada', hace30Str)
-    .not('tipo','in','("NC","ND")')
-    .order('fecha_cobro_estimada');
+  const facVenc = await FacturasAPI.getFacturasVencidasDetalle(50);
   if(facVenc?.length) {
     const total = facVenc.reduce((s,r)=>s+Number(r.monto_total||0),0);
     alertas.push({
@@ -357,15 +351,12 @@ async function cargarAlertas() {
   }
 
   // 2. Proyectos con horas reales > horas estimadas
-  const proyectos=await ProyectosAPI.getProyectos({estados:['activo','pausado']}); //
-    .select('id,nombre,hs_ayudante,hs_oficial,hs_oficial_esp,hs_supervisor,hs_higiene,empresas(nombre)')
-    .eq('estado','activo');
+  const proyectos = await ProyectosAPI.getProyectos({estados:['activo','pausado']});
   if(proyectos?.length) {
     for(const p of proyectos) {
       const hsEst=(p.hs_ayudante||0)+(p.hs_oficial||0)+(p.hs_oficial_esp||0)+(p.hs_supervisor||0)+(p.hs_higiene||0);
       if(hsEst<=0) continue;
-      const horas=await ProyectosAPI.getImputacionHoras({proyectoId:p.id}); //
-        .select('horas,cantidad_personas').eq('proyecto_id',p.id);
+      const horas = await ProyectosAPI.getImputacionHoras({proyectoId:p.id});
       const hsReal=(horas||[]).reduce((s,h)=>s+(Number(h.horas||0)*Number(h.cantidad_personas||1)),0);
       if(hsReal > hsEst*0.9) {
         const pct = Math.round(hsReal/hsEst*100);
@@ -381,11 +372,7 @@ async function cargarAlertas() {
   }
 
   // 3. Remitos pendientes de facturar hace más de 60 días
-  const remPend=await RemitosAPI.getRemitoPendienteDashboard(10); //
-    .select('numero_formateado,fecha,clientes(nombre)')
-    .in('estado',['emitido','enviado','aceptado'])
-    .neq('tipo','interno')
-    .lt('fecha', hace60Str);
+  const remPend = await RemitosAPI.getRemitoPendienteDashboard(10);
   if(remPend?.length) {
     alertas.push({
       nivel:'naranja',
@@ -397,9 +384,7 @@ async function cargarAlertas() {
   }
 
   // 4. CAI de remitos próximo a vencer (menos de 100 remitos)
-  const cai=await RemitosAPI.getTalonarioDashboard(); //
-    .select('cai,fecha_vencimiento,nro_actual,nro_hasta,empresas(nombre)')
-    .eq('activo',true);
+  const cai = await RemitosAPI.getTalonarioDashboard();
   (cai||[]).forEach(t => {
     const restantes = t.nro_hasta - t.nro_actual + 1;
     const diasVto = Math.floor((new Date(t.fecha_vencimiento)-new Date())/86400000);
@@ -420,10 +405,7 @@ async function cargarAlertas() {
   });
 
   // 5. Egresos sin pagar hace más de 60 días
-  const egrVenc=await EgresosAPI.getEgresosVencidosDashboard(10); //
-    .select('descripcion,monto,fecha_egreso,empresas(nombre)')
-    .eq('pagado',false)
-    .lt('fecha_egreso', hace60Str);
+  const egrVenc = await EgresosAPI.getEgresosVencidosDashboard(10);
   if(egrVenc?.length) {
     const total = egrVenc.reduce((s,r)=>s+Number(r.monto||0),0);
     alertas.push({
@@ -441,9 +423,7 @@ async function cargarAlertas() {
   const en15Str = en15.toISOString().split('T')[0];
   const en30Str2 = new Date(Date.now()+30*86400000).toISOString().split('T')[0];
 
-  const docsVenc=await ClientesAPI.getDocsClientesProxVencer(0); //
-    .select('nombre,fecha_vencimiento,clientes(nombre)')
-    .lt('fecha_vencimiento', hoyDocStr);
+  const docsVenc = await ClientesAPI.getDocsClientesProxVencer(0);
   if(docsVenc?.length){
     alertas.push({
       nivel:'rojo',
@@ -454,11 +434,7 @@ async function cargarAlertas() {
     });
   }
 
-  const docsProx=await ClientesAPI.getDocsClientesProxVencer(60); //
-    .select('nombre,fecha_vencimiento,clientes(nombre)')
-    .gte('fecha_vencimiento', hoyDocStr)
-    .lte('fecha_vencimiento', en30Str2)
-    .order('fecha_vencimiento');
+  const docsProx = await ClientesAPI.getDocsClientesProxVencer(30);
   if(docsProx?.length){
     alertas.push({
       nivel:'naranja',

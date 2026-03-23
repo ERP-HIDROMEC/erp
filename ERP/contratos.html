@@ -233,10 +233,7 @@ async function cargarContratos(){
 
   if(todosIds.length){
     // Remitos vinculados directamente al contrato
-    const rems=await ContratosAPI.getRemitosDeContrato(contratoSelId); //
-      .select('contrato_id,total_valorizado')
-      .in('contrato_id',todosIds)
-      .neq('estado','anulado');
+    const rems=await ContratosAPI.getRemitosDeContrato(contratoSelId);
     (rems||[]).forEach(r=>{
       if(r.contrato_id)
         certificadoMap[r.contrato_id]=(certificadoMap[r.contrato_id]||0)+Number(r.total_valorizado||0);
@@ -514,9 +511,7 @@ async function cargarHistorial(){
   document.getElementById('kpis').innerHTML='';
   document.getElementById('contenido').innerHTML='<div class="spinner-wrap"><div class="spinner"></div>Cargando...</div>';
 
-  const histData=await ContratosAPI.getHistorialPrecios({itemId:contratoSelId}); let q={data:histData}; //
-    .select('*,contrato_items(descripcion,contratos(numero_contrato))')
-    .order('created_at',{ascending:false}).limit(200);
+  const histData=await ContratosAPI.getHistorialPrecios({itemId:contratoSelId}); let q={data:histData};
   const {data}=await q;
   const rows=data||[];
 

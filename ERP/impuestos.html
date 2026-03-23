@@ -352,33 +352,13 @@ async function cargarIVA(){
   const perIni=tipo==='mes'?periodo:`${anio}-01`;
   const perFin=tipo==='mes'?periodo:`${anio}-12`;
 
-  const facturas=await ImpuestosAPI.getDatosIVA(empId,periodoDesde,periodoHasta).then(d=>d.facturas); //
-    .select('monto_neto,monto_iva,fecha_emision,tipo')
-    .eq('empresa_id',empId)
-    .gte('fecha_emision',fechaIni)
-    .lte('fecha_emision',fechaFin)
-    .neq('estado','anulada');
+  const { facturas, compras: comprasIva, retenciones, pagos: pagosIva } = await ImpuestosAPI.getDatosIVA(empId,periodoDesde,periodoHasta);
 
-  const compras=await EgresosAPI.getEgresosImpuestos(empId,periodoDesde,periodoHasta); //
-    .select('monto,fecha_egreso')
-    .eq('empresa_id',empId)
-    .not('numero_factura','is',null)
-    .gte('fecha_egreso',fechaIni)
-    .lte('fecha_egreso',fechaFin);
+  const compras = comprasIva;
 
-  const retenciones=await ImpuestosAPI.getRetenciones({empresaId:empId,tipo:'iva'}); //
-    .select('monto,periodo')
-    .eq('empresa_id',empId)
-    .eq('tipo','iva')
-    .gte('periodo',perIni)
-    .lte('periodo',perFin);
+  // retenciones already loaded above
 
-  const pagosIva=await ImpuestosAPI.getPagosImpuestos({empresaId:empId,tipo:'iva'}); //
-    .select('monto,periodo')
-    .eq('empresa_id',empId)
-    .eq('tipo','iva')
-    .gte('periodo',perIni)
-    .lte('periodo',perFin);
+  // pagosIva already loaded above
 
   // Armar filas según vista
   const periodos=tipo==='mes'
@@ -475,26 +455,12 @@ async function cargarIIBB(){
   const perIni=tipo==='mes'?periodoSel:`${anio}-01`;
   const perFin=tipo==='mes'?periodoSel:`${anio}-12`;
 
-  const facturas=await FacturasAPI.getFacturasImpuestos(empId,periodoDesde,periodoHasta); //
-    .select('monto_neto,fecha_emision,tipo,cliente_id,clientes(nombre,alicuota_iibb)')
-    .eq('empresa_id',empId)
-    .gte('fecha_emision',fechaIni)
-    .lte('fecha_emision',fechaFin)
-    .neq('estado','anulada');
+  const { facturas: facturasIIBB, retenciones: retIIBB2, pagos: pagosIIBB2 } = await ImpuestosAPI.getDatosIIBB(empId,periodoDesde,periodoHasta);
+const facturas = facturasIIBB;
 
-  const retIIBB=await ImpuestosAPI.getRetenciones({empresaId:empId,tipo:'iibb'}); //
-    .select('monto,periodo')
-    .eq('empresa_id',empId)
-    .eq('tipo','iibb')
-    .gte('periodo',perIni)
-    .lte('periodo',perFin);
+  const retIIBB = retIIBB2;
 
-  const pagosIIBB=await ImpuestosAPI.getPagosImpuestos({empresaId:empId,tipo:'iibb'}); //
-    .select('monto,periodo')
-    .eq('empresa_id',empId)
-    .eq('tipo','iibb')
-    .gte('periodo',perIni)
-    .lte('periodo',perFin);
+  const pagosIIBB = pagosIIBB2;
 
   const periodos=tipo==='mes'
     ? [{mes:label,periodo:periodoSel}]
@@ -586,12 +552,8 @@ async function cargarRetenciones(){
   const anio=document.getElementById('f-anio').value;
   const perIni=tipo==='mes'?perSel:`${anio}-01`;
   const perFin=tipo==='mes'?perSel:`${anio}-12`;
-  const data=await ImpuestosAPI.getRetenciones({empresaId:empId}); //
-    .select('*,clientes(nombre),empresas(nombre)')
-    .eq('empresa_id',empId)
-    .gte('periodo',perIni)
-    .lte('periodo',perFin)
-    .order('fecha',{ascending:false});
+  const data=await ImpuestosAPI.getRetenciones({empresaId:empId});
+    // filters applied above
   const rows=data||[];
 
   const porTipo={};
@@ -629,12 +591,8 @@ async function cargarPagos(){
   const anio=document.getElementById('f-anio').value;
   const perIni=tipo==='mes'?perSel:`${anio}-01`;
   const perFin=tipo==='mes'?perSel:`${anio}-12`;
-  const data=await ImpuestosAPI.getPagosImpuestos({empresaId:empId}); //
-    .select('*,empresas(nombre)')
-    .eq('empresa_id',empId)
-    .gte('periodo',perIni)
-    .lte('periodo',perFin)
-    .order('fecha_pago',{ascending:false});
+  const data=await ImpuestosAPI.getPagosImpuestos({empresaId:empId});
+    // filters applied above
   const rows=data||[];
   const total=rows.reduce((s,r)=>s+Number(r.monto||0),0);
 
@@ -749,10 +707,8 @@ async function cargarVarios(){
   const perIni=tipo==='mes'?perSel:`${anio}-01`;
   const perFin=tipo==='mes'?perSel:`${anio}-12`;
 
-  const variosData=await ImpuestosAPI.getImpuestosVarios({}); let q={data:variosData}; //
-    .select('*,empresas(nombre)')
-    .gte('periodo',perIni).lte('periodo',perFin)
-    .order('fecha',{ascending:false});
+  const variosData=await ImpuestosAPI.getImpuestosVarios({empresaId:empId}); let q={data:variosData};
+    // filters applied above
   if(empId) q=q.eq('empresa_id',empId);
   const {data}=await q;
   const rows=data||[];

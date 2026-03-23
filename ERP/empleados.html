@@ -463,9 +463,7 @@ async function init(){
   // Badge documentos vencidos
   const hoyStr=new Date().toISOString().split('T')[0];
   const en30=new Date();en30.setDate(en30.getDate()+30);
-  const docsAlert=await EmpleadosAPI.getDocsAlerta(empId,10); //
-    .select('id',{count:'exact',head:true})
-    .lte('fecha_vencimiento',en30.toISOString().split('T')[0]);
+  const docsAlert=await EmpleadosAPI.getDocsAlerta(empId,10);
   const badge=document.getElementById('badge-docs-venc');
   if(badge&&docsAlert){badge.textContent=docsAlert.length||'';badge.style.display=docsAlert.length>0?'inline':'none';}
 }
@@ -923,10 +921,7 @@ async function cargarDocumentos(categoria){
   const en30=new Date();en30.setDate(en30.getDate()+30);
   const en30Str=en30.toISOString().split('T')[0];
 
-  const docEmpData=await EmpleadosAPI.getDocumentosEmpleado({}); let q={data:docEmpData}; //
-    .select('*,empleados(nombre),vehiculos(descripcion,patente),empresas(nombre)')
-    .eq('categoria',categoria)
-    .order('fecha_vencimiento',{ascending:true,nullsFirst:false});
+  const docEmpData=await EmpleadosAPI.getDocumentosEmpleado({categoria}); let q={data:docEmpData};
   if(emp) q=q.eq('empresa_id',emp);
   const {data}=await q;
   let rows=data||[];
@@ -1044,10 +1039,7 @@ async function cargarAnalisisAusentismo(){
   const emp=document.getElementById('f-empresa').value;
   const anio=new Date().getFullYear();
 
-  const ausData=await EmpleadosAPI.getAusencias({}); let q={data:ausData}; //
-    .select('*,empleados(nombre)')
-    .eq('estado','aprobada')
-    .gte('fecha_inicio',`${anio}-01-01`);
+  const ausData=await EmpleadosAPI.getAusencias({estado:'aprobada'}); let q={data:ausData};
   if(emp) q=q.eq('empresa_id',emp);
   const {data}=await q;
   const rows=data||[];
@@ -1152,9 +1144,7 @@ async function cargarAusencias(){
   const buscar=document.getElementById('f-buscar').value.toLowerCase();
   const hoyStr=new Date().toISOString().split('T')[0];
 
-  const ausData2=await EmpleadosAPI.getAusencias({}); let q={data:ausData2}; //
-    .select('*,empleados(nombre),empresas(nombre)')
-    .order('fecha_inicio',{ascending:false});
+  const ausData2=await EmpleadosAPI.getAusencias({}); let q={data:ausData2};
   if(emp) q=q.eq('empresa_id',emp);
   const {data}=await q;
   let rows=data||[];
