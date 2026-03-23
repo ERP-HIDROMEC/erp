@@ -287,6 +287,7 @@
 </div>
 
 <script>
+
 const fmt=v=>new Intl.NumberFormat('es-AR',{style:'currency',currency:'ARS',maximumFractionDigits:0}).format(v||0);
 const fmtF=d=>d?new Date(d+'T12:00:00').toLocaleDateString('es-AR'):'—';
 const hoy=()=>new Date().toISOString().split('T')[0];
