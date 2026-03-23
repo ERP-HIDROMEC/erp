@@ -20,7 +20,8 @@ const hoy  = () => new Date().toISOString().split('T')[0];
 //   operaciones_dash → dashboard + proyectos, remitos, contratos, presupuestos (plgomez)
 //   gestion        → facturas, compras, contratos, remitos, impuestos  → redirige a facturas.html
 //   operaciones    → proyectos, remitos, contratos, presupuestos       → redirige a proyectos.html
-//   rrhh           → empleados                                         → redirige a empleados.html
+//   rrhh           → empleados + syh                                    → redirige a empleados.html
+//   syh            → syh                                                → redirige a syh.html
 //
 // USUARIOS:
 //   lmgomez@hidromecsrl.com     → admin_general      (dashboard completo)
@@ -42,7 +43,8 @@ const PERMISOS = {
   gestion:             ['facturas','compras','contratos','remitos','impuestos'],
   operaciones:         ['proyectos','remitos','contratos','presupuestos'],
   gestion_operaciones: ['facturas','compras','contratos','remitos','impuestos','proyectos','presupuestos'],
-  rrhh:                ['empleados'],
+  rrhh:                ['empleados','syh'],
+  syh:                 ['syh'],
 };
 
 // Página de inicio por rol (para los que no tienen dashboard)
@@ -51,6 +53,7 @@ const INICIO_POR_ROL = {
   gestion_operaciones: 'facturas.html',
   operaciones:         'proyectos.html',
   rrhh:                'empleados.html',
+  syh:                 'syh.html',
 };
 
 let _usuario = null;

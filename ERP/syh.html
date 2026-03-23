@@ -1,0 +1,1508 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Hidromec ERP — Seg. e Higiene</title>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js"></script>
+<script src="erp-utils.js"></script>
+<style>
+*{box-sizing:border-box;margin:0;padding:0;}
+body{display:flex;min-height:100vh;background:var(--bg1);color:var(--text);font-family:'DM Sans',sans-serif;font-size:14px;}
+.sidebar{width:200px;min-height:100vh;background:var(--bg2);border-right:1px solid var(--border);display:flex;flex-direction:column;position:fixed;top:0;left:0;}
+.sidebar-logo{padding:20px 16px 12px;border-bottom:1px solid var(--border);}
+.sidebar-logo h1{font-size:15px;font-weight:600;color:var(--text);}
+.sidebar-logo span{font-size:11px;color:var(--muted);}
+.nav-section{padding:16px 12px 4px;font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:1px;color:var(--muted);}
+.nav-item{display:flex;align-items:center;gap:10px;padding:9px 12px;margin:1px 8px;border-radius:8px;font-size:13.5px;color:var(--muted);cursor:pointer;transition:all 0.15s;text-decoration:none;}
+.nav-item:hover{background:var(--bg3);color:var(--text);}
+.nav-item.active{background:rgba(59,130,246,0.15);color:var(--blue);}
+.nav-item svg{width:16px;height:16px;flex-shrink:0;}
+.nav-bottom{margin-top:auto;padding:12px;}
+.btn-logout{width:100%;padding:8px;background:rgba(239,68,68,0.1);border:1px solid rgba(239,68,68,0.2);border-radius:8px;color:var(--red);cursor:pointer;font-size:13px;font-family:'DM Sans',sans-serif;}
+.main{margin-left:200px;flex:1;padding:24px;max-width:1400px;}
+.page-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:20px;}
+.page-header h2{font-size:24px;font-weight:600;}
+.tabs{display:flex;gap:4px;background:var(--bg2);padding:4px;border-radius:10px;margin-bottom:20px;flex-wrap:wrap;}
+.tab{padding:8px 16px;border-radius:8px;border:none;background:transparent;color:var(--muted);cursor:pointer;font-size:13px;font-family:'DM Sans',sans-serif;transition:all 0.15s;white-space:nowrap;}
+.tab:hover{color:var(--text);background:var(--bg3);}
+.tab.active{background:var(--bg1);color:var(--text);font-weight:500;box-shadow:0 1px 3px rgba(0,0,0,0.1);}
+.filtros{display:flex;gap:8px;margin-bottom:16px;flex-wrap:wrap;}
+.filtros select,.filtros input{padding:8px 12px;background:var(--bg2);border:1px solid var(--border);border-radius:8px;color:var(--text);font-size:13px;font-family:'DM Sans',sans-serif;outline:none;}
+.filtros select:focus,.filtros input:focus{border-color:var(--blue);}
+.kpi-row,.kpis{display:flex;gap:12px;margin-bottom:20px;flex-wrap:wrap;}
+.kpi-card{background:var(--bg2);border:1px solid var(--border);border-radius:10px;padding:14px 18px;min-width:160px;flex:1;}
+.kpi-card.blue{border-top:3px solid var(--blue);}
+.kpi-card.green{border-top:3px solid var(--green);}
+.kpi-card.orange{border-top:3px solid var(--orange);}
+.kpi-card.red{border-top:3px solid var(--red);}
+.kpi-card.teal{border-top:3px solid #14b8a6;}
+.kpi-label{font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:0.6px;margin-bottom:6px;}
+.kpi-value{font-size:22px;font-weight:600;font-family:'DM Mono',monospace;}
+.panel{background:var(--bg2);border:1px solid var(--border);border-radius:10px;overflow:hidden;}
+.panel-header{display:flex;align-items:center;justify-content:space-between;padding:14px 20px;border-bottom:1px solid var(--border);}
+.panel-header h3{font-size:14px;font-weight:500;}
+table{width:100%;border-collapse:collapse;}
+th{padding:10px 14px;font-size:11px;font-weight:500;text-transform:uppercase;letter-spacing:0.6px;color:var(--muted);text-align:left;border-bottom:1px solid var(--border);background:var(--bg3);}
+td{padding:11px 14px;border-bottom:1px solid var(--border);vertical-align:middle;}
+tr:last-child td{border-bottom:none;}
+tr:hover td{background:var(--bg3);}
+.mono{font-family:'DM Mono',monospace;font-size:13px;}
+.btn{padding:8px 16px;border-radius:8px;border:none;cursor:pointer;font-size:13px;font-family:'DM Sans',sans-serif;font-weight:500;transition:all 0.15s;}
+.btn-primary{background:var(--blue);color:#fff;}
+.btn-primary:hover{opacity:0.9;}
+.btn-ghost{background:transparent;color:var(--text);border:1px solid var(--border);}
+.btn-ghost:hover{background:var(--bg3);}
+.btn-success{background:var(--green);color:#fff;}
+.btn-danger{background:transparent;color:var(--red);border:1px solid rgba(239,68,68,0.3);}
+.btn-sm{padding:5px 10px;font-size:12px;}
+.modal-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,0.5);z-index:100;align-items:center;justify-content:center;padding:20px;}
+.modal-overlay.show{display:flex;}
+.modal{background:var(--bg2);border:1px solid var(--border);border-radius:12px;padding:24px;width:100%;max-width:580px;max-height:90vh;overflow-y:auto;}
+.modal h3{font-size:16px;font-weight:600;margin-bottom:20px;}
+.form-row{display:flex;gap:12px;margin-bottom:14px;}
+.form-row.full,.form-row.three{flex-wrap:wrap;}
+.form-group{flex:1;min-width:140px;}
+.form-group label{display:block;font-size:12px;color:var(--muted);margin-bottom:5px;}
+.form-group input,.form-group select,.form-group textarea{width:100%;padding:9px 12px;background:var(--bg3);border:1px solid var(--border);border-radius:8px;color:var(--text);font-size:13px;font-family:'DM Sans',sans-serif;outline:none;}
+.form-group textarea{min-height:70px;resize:vertical;}
+.form-group input:focus,.form-group select:focus,.form-group textarea:focus{border-color:var(--blue);}
+.modal-footer{display:flex;gap:8px;justify-content:flex-end;margin-top:20px;padding-top:16px;border-top:1px solid var(--border);}
+.spinner-wrap{display:flex;align-items:center;justify-content:center;padding:60px;color:var(--muted);gap:12px;}
+.spinner{width:20px;height:20px;border:2px solid var(--border);border-top-color:var(--blue);border-radius:50%;animation:spin 0.8s linear infinite;}
+@keyframes spin{to{transform:rotate(360deg);}}
+</style>
+</head>
+<body>
+<nav class="sidebar">
+  <div class="sidebar-logo"><h1>Hidromec ERP</h1><span>v1.0 — 2026</span></div>
+  <div class="nav-section">Home</div>
+  <a data-modulo="dashboard" class="nav-item" href="index.html"><svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6"/></svg>Dashboard</a>
+  <div class="nav-section">Operaciones</div>
+  <a data-modulo="proyectos" class="nav-item" href="proyectos.html"><svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"/></svg>Proyectos</a>
+  <a data-modulo="remitos" class="nav-item" href="remitos.html"><svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>Remitos</a>
+  <div class="nav-section">Gestion</div>
+  <a data-modulo="compras" class="nav-item" href="compras.html"><svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 3h2l.4 2M7 13h10l4-8H5.4M7 13L5.4 5M7 13l-2.293 2.293c-.63.63-.184 1.707.707 1.707H17m0 0a2 2 0 100 4 2 2 0 000-4zm-8 2a2 2 0 11-4 0 2 2 0 014 0z"/></svg>Compras</a>
+  <a data-modulo="caja" class="nav-item" href="caja.html"><svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>Caja</a>
+  <div class="nav-section">RRHH</div>
+  <a data-modulo="empleados" class="nav-item" href="empleados.html"><svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z"/></svg>Empleados</a>
+  <a data-modulo="syh" class="nav-item active" href="syh.html"><svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"/></svg>Seg. e Higiene</a>
+  <div class="nav-bottom"><button class="btn-logout" onclick="logout()">Cerrar sesion</button></div>
+</nav>
+
+<main class="main">
+  <div class="page-header">
+    <h2>Seguridad e Higiene</h2>
+    <button class="btn btn-primary" id="btn-nuevo" onclick="abrirNuevo()">+ Nuevo</button>
+  </div>
+
+  <div class="tabs">
+    <button class="tab active" onclick="cambiarTab('docs-empresa',this)">Docs Empresa <span id="badge-syh-emp" style="display:none;background:var(--red);color:#fff;border-radius:20px;padding:1px 7px;font-size:11px;margin-left:4px"></span></button>
+    <button class="tab" onclick="cambiarTab('capacitaciones',this)">Capacitaciones</button>
+    <button class="tab" onclick="cambiarTab('epp',this)">Entrega EPP</button>
+    <button class="tab" onclick="cambiarTab('incidentes',this)">Incidentes</button>
+    <button class="tab" onclick="cambiarTab('vencimientos',this)">Alertas vencimientos</button>
+    <button class="tab" onclick="cambiarTab('portales',this)">Portales clientes <span id="badge-portales" style="display:none;background:var(--red);color:#fff;border-radius:20px;padding:1px 7px;font-size:11px;margin-left:4px"></span></button>
+  </div>
+
+  <div class="filtros" id="filtros-main">
+    <select id="f-empresa" onchange="recargar()">
+      <option value="">Todas las empresas</option>
+      <option value="a1000000-0000-0000-0000-000000000001">Hidromec</option>
+      <option value="a2000000-0000-0000-0000-000000000002">Placemem</option>
+    </select>
+    <input type="text" id="f-buscar" placeholder="Buscar..." oninput="recargar()" style="width:220px">
+  </div>
+
+  <div id="kpis" class="kpis"></div>
+  <div id="contenido"></div>
+</main>
+
+<!-- MODAL DOCUMENTO EMPRESA SYH -->
+<div class="modal-overlay" id="modal-doc-empresa">
+  <div class="modal" style="max-width:560px">
+    <h3>Subir documento empresa SyH</h3>
+    <div class="form-row">
+      <div class="form-group">
+        <label>Empresa</label>
+        <select id="sde-empresa">
+          <option value="a1000000-0000-0000-0000-000000000001">Hidromec</option>
+          <option value="a2000000-0000-0000-0000-000000000002">Placemem</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label>Tipo de documento</label>
+        <select id="sde-tipo">
+          <option value="aviso_obra">Aviso de obra</option>
+          <option value="programa_seguridad">Programa de seguridad</option>
+          <option value="ats">ATS — Analisis de tarea segura</option>
+          <option value="permiso_trabajo">Permiso de trabajo</option>
+          <option value="permiso_altura">Permiso trabajo en altura</option>
+          <option value="permiso_espacio">Permiso espacio confinado</option>
+          <option value="plan_emergencia">Plan de emergencia</option>
+          <option value="evaluacion_riesgo">Evaluacion de riesgo</option>
+          <option value="memoria_descriptiva">Memoria descriptiva SyH</option>
+          <option value="art_coordinacion">ART — Coordinacion con contratistas</option>
+          <option value="acta_comite">Acta de comite mixto</option>
+          <option value="informe_accidente">Informe de accidente/incidente</option>
+          <option value="cert_habilitacion">Certificado habilitacion empresa</option>
+          <option value="auditoria_ministerio">Auditoria Ministerio Trabajo</option>
+          <option value="otro">Otro</option>
+        </select>
+      </div>
+    </div>
+    <div class="form-row">
+      <div class="form-group">
+        <label>Descripcion / Referencia</label>
+        <input type="text" id="sde-desc" placeholder="Ej: Programa Seg. Obra Ternium 2026, ATS trabajo en caliente...">
+      </div>
+      <div class="form-group">
+        <label>Cliente / Obra (opcional)</label>
+        <input type="text" id="sde-cliente" placeholder="Ej: Ternium, Siderca, Murchison...">
+      </div>
+    </div>
+    <div class="form-row">
+      <div class="form-group">
+        <label>Fecha del documento</label>
+        <input type="date" id="sde-fecha">
+      </div>
+      <div class="form-group">
+        <label>Fecha de vencimiento</label>
+        <input type="date" id="sde-vencimiento">
+      </div>
+    </div>
+    <div class="form-row full">
+      <div class="form-group">
+        <label>Archivo (PDF o imagen)</label>
+        <input type="file" id="sde-archivo" accept=".pdf,.jpg,.jpeg,.png" style="padding:8px;background:var(--bg3);border:1px solid var(--border);border-radius:8px;color:var(--text);width:100%">
+      </div>
+    </div>
+    <div id="sde-progress" style="display:none;margin-top:8px">
+      <div style="height:4px;background:var(--bg3);border-radius:2px"><div id="sde-bar" style="height:100%;background:var(--blue);border-radius:2px;width:0%;transition:width 0.3s"></div></div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" onclick="cerrarModal('modal-doc-empresa')">Cancelar</button>
+      <button class="btn btn-primary" onclick="guardarDocEmpresa()">Guardar</button>
+    </div>
+  </div>
+</div>
+
+<!-- MODAL CAPACITACION -->
+<div class="modal-overlay" id="modal-capacitacion">
+  <div class="modal" style="max-width:620px">
+    <h3>Registrar capacitacion</h3>
+    <div class="form-row">
+      <div class="form-group">
+        <label>Empresa</label>
+        <select id="sc-empresa" onchange="cargarEmpleadosSYH()">
+          <option value="a1000000-0000-0000-0000-000000000001">Hidromec</option>
+          <option value="a2000000-0000-0000-0000-000000000002">Placemem</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label>Tipo</label>
+        <select id="sc-tipo">
+          <option value="trabajo_altura">Trabajo en altura</option>
+          <option value="espacio_confinado">Espacio confinado</option>
+          <option value="uso_epp">Uso correcto de EPP</option>
+          <option value="primeros_auxilios">Primeros auxilios</option>
+          <option value="extincion_incendio">Extincion de incendios</option>
+          <option value="izaje">Izaje y eslingado</option>
+          <option value="soldadura_segura">Soldadura segura</option>
+          <option value="manipulacion_quimicos">Manipulacion de quimicos</option>
+          <option value="riesgo_electrico">Riesgo electrico</option>
+          <option value="orden_limpieza">Orden y limpieza</option>
+          <option value="evacuacion">Plan de evacuacion</option>
+          <option value="induccion">Induccion SyH</option>
+          <option value="otro">Otro</option>
+        </select>
+      </div>
+    </div>
+    <div class="form-row">
+      <div class="form-group">
+        <label>Descripcion / Modulo</label>
+        <input type="text" id="sc-desc" placeholder="Ej: Induccion seguridad Ternium Planta 2">
+      </div>
+      <div class="form-group">
+        <label>Dictada por</label>
+        <input type="text" id="sc-dictante" placeholder="Nombre del instructor / empresa">
+      </div>
+    </div>
+    <div class="form-row">
+      <div class="form-group">
+        <label>Fecha</label>
+        <input type="date" id="sc-fecha">
+      </div>
+      <div class="form-group">
+        <label>Duracion (horas)</label>
+        <input type="number" id="sc-duracion" placeholder="2">
+      </div>
+      <div class="form-group">
+        <label>Vencimiento certificado</label>
+        <input type="date" id="sc-vencimiento">
+      </div>
+    </div>
+    <div style="font-size:12px;font-weight:500;color:var(--muted);text-transform:uppercase;letter-spacing:0.7px;margin-bottom:8px">Asistentes</div>
+    <div id="sc-asistentes-wrap" style="max-height:180px;overflow-y:auto;border:1px solid var(--border);border-radius:8px;padding:8px;background:var(--bg3);margin-bottom:12px">
+      <div style="color:var(--muted);font-size:13px;text-align:center;padding:12px" id="sc-emp-loading">Cargando empleados...</div>
+    </div>
+    <div class="form-row full">
+      <div class="form-group">
+        <label>Adjuntar lista de asistencia / certificado (opcional)</label>
+        <input type="file" id="sc-archivo" accept=".pdf,.jpg,.jpeg,.png" style="padding:8px;background:var(--bg3);border:1px solid var(--border);border-radius:8px;color:var(--text);width:100%">
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" onclick="cerrarModal('modal-capacitacion')">Cancelar</button>
+      <button class="btn btn-primary" onclick="guardarCapacitacion()">Guardar</button>
+    </div>
+  </div>
+</div>
+
+<!-- MODAL EPP -->
+<div class="modal-overlay" id="modal-epp">
+  <div class="modal" style="max-width:620px">
+    <h3>Registrar entrega de EPP</h3>
+    <div class="form-row">
+      <div class="form-group">
+        <label>Empresa</label>
+        <select id="se-empresa" onchange="cargarEmpleadosEPP()">
+          <option value="a1000000-0000-0000-0000-000000000001">Hidromec</option>
+          <option value="a2000000-0000-0000-0000-000000000002">Placemem</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label>Empleado</label>
+        <select id="se-empleado" onchange="cargarHistorialEPP()"></select>
+      </div>
+    </div>
+    <div style="font-size:12px;font-weight:500;color:var(--muted);text-transform:uppercase;letter-spacing:0.7px;margin-bottom:8px">Elementos entregados</div>
+    <div id="se-items">
+      <div class="form-row" id="epp-item-0">
+        <div class="form-group" style="flex:2">
+          <label>Producto / EPP</label>
+          <input type="text" placeholder="Ej: Casco de seguridad, Guantes de nitrilo...">
+        </div>
+        <div class="form-group">
+          <label>Tipo/Modelo</label>
+          <input type="text" placeholder="Ej: MSA V-Gard">
+        </div>
+        <div class="form-group">
+          <label>Marca</label>
+          <input type="text" placeholder="Ej: MSA">
+        </div>
+        <div class="form-group" style="max-width:80px">
+          <label>Cant.</label>
+          <input type="number" value="1" min="1">
+        </div>
+        <div class="form-group" style="max-width:90px">
+          <label>Certif.</label>
+          <select><option value="SI">SI</option><option value="NO">NO</option></select>
+        </div>
+      </div>
+    </div>
+    <button class="btn btn-ghost btn-sm" onclick="agregarFilaEPP()" style="margin-bottom:16px">+ Agregar item</button>
+    <div class="form-row">
+      <div class="form-group">
+        <label>Fecha de entrega</label>
+        <input type="date" id="se-fecha">
+      </div>
+      <div class="form-group">
+        <label>Descripcion del puesto</label>
+        <input type="text" id="se-puesto" placeholder="Ej: Soldador, Oficial mecanico...">
+      </div>
+    </div>
+    <div class="form-row full">
+      <div class="form-group">
+        <label>Elementos necesarios para el puesto</label>
+        <textarea id="se-necesarios" placeholder="Listar los EPP requeridos para el puesto de trabajo..."></textarea>
+      </div>
+    </div>
+    <div id="se-historial-wrap" style="display:none;margin-bottom:12px">
+      <div style="font-size:12px;color:var(--muted);font-weight:500;text-transform:uppercase;letter-spacing:0.7px;margin-bottom:6px">Entregas anteriores de este empleado</div>
+      <div id="se-historial" style="font-size:12px;color:var(--muted)"></div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" onclick="cerrarModal('modal-epp')">Cancelar</button>
+      <button class="btn btn-ghost" onclick="previsualizarPDFEPP()" style="border-color:var(--blue);color:var(--blue)">Vista previa PDF</button>
+      <button class="btn btn-primary" onclick="guardarEPP()">Guardar y generar PDF</button>
+    </div>
+  </div>
+</div>
+
+<!-- MODAL INCIDENTE -->
+<div class="modal-overlay" id="modal-incidente">
+  <div class="modal" style="max-width:580px">
+    <h3>Registrar incidente / accidente</h3>
+    <div class="form-row">
+      <div class="form-group">
+        <label>Empresa</label>
+        <select id="si-empresa" onchange="cargarEmpleadosIncidente()">
+          <option value="a1000000-0000-0000-0000-000000000001">Hidromec</option>
+          <option value="a2000000-0000-0000-0000-000000000002">Placemem</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label>Empleado involucrado</label>
+        <select id="si-empleado"></select>
+      </div>
+    </div>
+    <div class="form-row">
+      <div class="form-group">
+        <label>Tipo</label>
+        <select id="si-tipo">
+          <option value="incidente">Incidente (sin lesion)</option>
+          <option value="accidente_leve">Accidente leve</option>
+          <option value="accidente_grave">Accidente grave</option>
+          <option value="casi_accidente">Casi accidente</option>
+          <option value="enfermedad_laboral">Enfermedad laboral</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label>Fecha y hora</label>
+        <input type="datetime-local" id="si-fecha">
+      </div>
+    </div>
+    <div class="form-row full">
+      <div class="form-group">
+        <label>Lugar / Obra</label>
+        <input type="text" id="si-lugar" placeholder="Ej: Planta Ternium Sala de calderas">
+      </div>
+    </div>
+    <div class="form-row full">
+      <div class="form-group">
+        <label>Descripcion del hecho</label>
+        <textarea id="si-descripcion" placeholder="Describir que ocurrio, como, condiciones..." style="min-height:90px"></textarea>
+      </div>
+    </div>
+    <div class="form-row">
+      <div class="form-group">
+        <label>Dias perdidos (0 si ninguno)</label>
+        <input type="number" id="si-dias" value="0" min="0">
+      </div>
+      <div class="form-group">
+        <label>Requirio ART</label>
+        <select id="si-art">
+          <option value="no">No</option>
+          <option value="si">Si</option>
+        </select>
+      </div>
+    </div>
+    <div class="form-row full">
+      <div class="form-group">
+        <label>Medidas correctivas tomadas</label>
+        <textarea id="si-correctivas" placeholder="Acciones tomadas para evitar que se repita..." style="min-height:70px"></textarea>
+      </div>
+    </div>
+    <div class="form-row full">
+      <div class="form-group">
+        <label>Adjuntar informe / fotos (opcional)</label>
+        <input type="file" id="si-archivo" accept=".pdf,.jpg,.jpeg,.png" style="padding:8px;background:var(--bg3);border:1px solid var(--border);border-radius:8px;color:var(--text);width:100%">
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" onclick="cerrarModal('modal-incidente')">Cancelar</button>
+      <button class="btn btn-primary" onclick="guardarIncidente()">Guardar</button>
+    </div>
+  </div>
+</div>
+
+
+<!-- MODAL DOCUMENTO PORTAL -->
+<div class="modal-overlay" id="modal-portal-doc">
+  <div class="modal" style="max-width:620px">
+    <h3 id="mp-titulo">Cargar documento en portal</h3>
+    <div class="form-row">
+      <div class="form-group">
+        <label>Empresa</label>
+        <select id="mp-empresa">
+          <option value="a1000000-0000-0000-0000-000000000001">Hidromec</option>
+          <option value="a2000000-0000-0000-0000-000000000002">Placemem</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label>Portal / Cliente <span style="color:var(--red)">*</span></label>
+        <div style="display:flex;gap:8px">
+          <select id="mp-portal-sel" onchange="onPortalChange()" style="flex:1">
+            <option value="">— Seleccionar portal —</option>
+            <option value="__nuevo__">+ Agregar nuevo portal</option>
+          </select>
+        </div>
+      </div>
+    </div>
+    <div id="mp-nuevo-portal-row" style="display:none">
+      <div class="form-row">
+        <div class="form-group">
+          <label>Nombre del portal / cliente</label>
+          <input type="text" id="mp-portal-nombre" placeholder="Ej: Ternium, Siderca, Murchison...">
+        </div>
+        <div class="form-group">
+          <label>URL del portal (opcional)</label>
+          <input type="url" id="mp-portal-url" placeholder="https://portal.ternium.com/...">
+        </div>
+      </div>
+    </div>
+    <div class="form-row">
+      <div class="form-group">
+        <label>Tipo de documento</label>
+        <select id="mp-tipo">
+          <optgroup label="Empresa">
+            <option value="art_empresa">ART empresa</option>
+            <option value="habilitacion_empresa">Habilitacion empresa</option>
+            <option value="programa_seguridad">Programa de seguridad</option>
+            <option value="no_repeticion">No repeticion siniestros</option>
+            <option value="seguro_rc">Seguro responsabilidad civil</option>
+            <option value="cert_fiscal">Certificado fiscal</option>
+          </optgroup>
+          <optgroup label="Empleado">
+            <option value="preocupacional">Apto preocupacional</option>
+            <option value="art_empleado">ART empleado</option>
+            <option value="capacitacion_altura">Capacitacion altura</option>
+            <option value="capacitacion_esp_conf">Capacitacion espacio confinado</option>
+            <option value="induccion_cliente">Induccion cliente</option>
+            <option value="dni">DNI</option>
+            <option value="examen_periodico">Examen medico periodico</option>
+          </optgroup>
+          <optgroup label="Vehiculo / Equipo">
+            <option value="seguro_vehiculo">Seguro vehiculo</option>
+            <option value="vtv">VTV / RTO</option>
+            <option value="habilitacion_equipo">Habilitacion equipo</option>
+            <option value="cert_grua">Certificacion grua/izaje</option>
+          </optgroup>
+          <optgroup label="Formulario propio del portal">
+            <option value="formulario_ingreso">Formulario ingreso personal</option>
+            <option value="formulario_vehiculo">Formulario ingreso vehiculo</option>
+            <option value="formulario_empresa">Formulario empresa / contratista</option>
+            <option value="otro_portal">Otro formulario del portal</option>
+          </optgroup>
+        </select>
+      </div>
+      <div class="form-group">
+        <label>Aplica a</label>
+        <select id="mp-aplica" onchange="onAplicaChange()">
+          <option value="empresa">Empresa general</option>
+          <option value="empleado">Empleado especifico</option>
+          <option value="vehiculo">Vehiculo / Equipo</option>
+        </select>
+      </div>
+    </div>
+    <div id="mp-row-empleado" style="display:none">
+      <div class="form-row">
+        <div class="form-group">
+          <label>Empleado</label>
+          <select id="mp-empleado"></select>
+        </div>
+      </div>
+    </div>
+    <div id="mp-row-vehiculo" style="display:none">
+      <div class="form-row">
+        <div class="form-group">
+          <label>Vehiculo / Equipo</label>
+          <select id="mp-vehiculo"></select>
+        </div>
+      </div>
+    </div>
+    <div class="form-row">
+      <div class="form-group">
+        <label>Descripcion / Referencia</label>
+        <input type="text" id="mp-desc" placeholder="Ej: Preocupacional Juan Perez - Ternium 2026">
+      </div>
+      <div class="form-group">
+        <label>Fecha de vencimiento <span style="color:var(--red)">*</span></label>
+        <input type="date" id="mp-vencimiento">
+      </div>
+    </div>
+    <div class="form-row">
+      <div class="form-group">
+        <label>Fecha de carga en portal</label>
+        <input type="date" id="mp-fecha-carga">
+      </div>
+      <div class="form-group">
+        <label>Estado en el portal</label>
+        <select id="mp-estado-portal">
+          <option value="aprobado">Aprobado / Vigente</option>
+          <option value="pendiente">Pendiente aprobacion</option>
+          <option value="rechazado">Rechazado</option>
+          <option value="cargado">Cargado (sin respuesta)</option>
+        </select>
+      </div>
+    </div>
+    <div class="form-row full">
+      <div class="form-group">
+        <label>Observaciones</label>
+        <input type="text" id="mp-obs" placeholder="Notas, N° de tramite, contacto en el portal...">
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" onclick="cerrarModal('modal-portal-doc')">Cancelar</button>
+      <button class="btn btn-primary" onclick="guardarPortalDoc()">Guardar</button>
+    </div>
+  </div>
+</div>
+
+<script>
+let tabActual='docs-empresa';
+let eppItemIdx=1;
+
+async function init(){
+  const acceso=await verificarAcceso('syh');
+  if(!acceso) return;
+  document.getElementById('se-fecha').value=hoy();
+  document.getElementById('sc-fecha').value=hoy();
+  document.getElementById('sde-fecha').value=hoy();
+  await cargarEmpleadosSYH();
+  await cargarEmpleadosEPP();
+  await cargarEmpleadosIncidente();
+  cargarDocEmpresa();
+}
+
+function cambiarTab(tab,btn){
+  tabActual=tab;
+  document.querySelectorAll('.tab').forEach(t=>t.classList.remove('active'));
+  btn.classList.add('active');
+  const btnN=document.getElementById('btn-nuevo');
+  const noBtn=['vencimientos','portales-semaforo'];
+  if(tab==='docs-empresa') btnN.textContent='+ Subir documento';
+  else if(tab==='capacitaciones') btnN.textContent='+ Nueva capacitacion';
+  else if(tab==='epp') btnN.textContent='+ Registrar entrega EPP';
+  else if(tab==='incidentes') btnN.textContent='+ Registrar incidente';
+  else if(tab==='portales') btnN.textContent='+ Cargar documento portal';
+  else btnN.textContent='+ Nuevo';
+  btnN.style.display=noBtn.includes(tab)?'none':'';
+  recargar();
+}
+
+function recargar(){
+  if(tabActual==='docs-empresa') cargarDocEmpresa();
+  else if(tabActual==='capacitaciones') cargarCapacitaciones();
+  else if(tabActual==='epp') cargarEPP();
+  else if(tabActual==='incidentes') cargarIncidentes();
+  else if(tabActual==='portales') cargarPortales();
+  else cargarVencimientos();
+}
+
+function abrirNuevo(){
+  if(tabActual==='docs-empresa') document.getElementById('modal-doc-empresa').classList.add('show');
+  else if(tabActual==='capacitaciones') document.getElementById('modal-capacitacion').classList.add('show');
+  else if(tabActual==='epp') document.getElementById('modal-epp').classList.add('show');
+  else if(tabActual==='incidentes') document.getElementById('modal-incidente').classList.add('show');
+  else if(tabActual==='portales'){ prepararModalPortal(); document.getElementById('modal-portal-doc').classList.add('show'); }
+}
+
+// ── DOCS EMPRESA ─────────────────────────────────────────────
+const SDE_TIPO_L={
+  aviso_obra:'Aviso de obra',programa_seguridad:'Prog. seguridad',ats:'ATS',
+  permiso_trabajo:'Permiso trabajo',permiso_altura:'Permiso altura',
+  permiso_espacio:'Espacio confinado',plan_emergencia:'Plan emergencia',
+  evaluacion_riesgo:'Eval. riesgo',memoria_descriptiva:'Memoria descriptiva',
+  art_coordinacion:'ART coordinacion',acta_comite:'Acta comite',
+  informe_accidente:'Informe accidente',cert_habilitacion:'Cert. habilitacion',
+  auditoria_ministerio:'Auditoria ministerio',otro:'Otro'
+};
+
+async function cargarDocEmpresa(){
+  document.getElementById('kpis').innerHTML='';
+  document.getElementById('contenido').innerHTML='<div class="spinner-wrap"><div class="spinner"></div>Cargando...</div>';
+  const emp=document.getElementById('f-empresa').value;
+  const buscar=document.getElementById('f-buscar').value.toLowerCase();
+  const hoyStr=new Date().toISOString().split('T')[0];
+  const en30=new Date();en30.setDate(en30.getDate()+30);
+  const en30Str=en30.toISOString().split('T')[0];
+
+  let q=db.from('syh_documentos').select('*,empresas(nombre)').order('fecha_vencimiento',{ascending:true,nullsFirst:false});
+  if(emp) q=q.eq('empresa_id',emp);
+  const {data}=await q;
+  let rows=data||[];
+  if(buscar) rows=rows.filter(r=>(r.tipo||'').toLowerCase().includes(buscar)||(r.descripcion||'').toLowerCase().includes(buscar)||(r.cliente_obra||'').toLowerCase().includes(buscar));
+
+  const venc=rows.filter(r=>r.fecha_vencimiento&&r.fecha_vencimiento<hoyStr);
+  const prox=rows.filter(r=>r.fecha_vencimiento&&r.fecha_vencimiento>=hoyStr&&r.fecha_vencimiento<=en30Str);
+  const badge=document.getElementById('badge-syh-emp');
+  if(badge){badge.textContent=venc.length+prox.length;badge.style.display=(venc.length+prox.length)>0?'inline':'none';}
+
+  document.getElementById('kpis').innerHTML=`
+    <div class="kpi-card red"><div class="kpi-label">Vencidos</div><div class="kpi-value">${venc.length}</div></div>
+    <div class="kpi-card orange"><div class="kpi-label">Vencen 30 dias</div><div class="kpi-value">${prox.length}</div></div>
+    <div class="kpi-card green"><div class="kpi-label">Vigentes</div><div class="kpi-value">${rows.length-venc.length-prox.length}</div></div>
+    <div class="kpi-card blue"><div class="kpi-label">Total</div><div class="kpi-value">${rows.length}</div></div>`;
+
+  document.getElementById('contenido').innerHTML=`
+    <div class="panel"><div style="overflow-x:auto"><table>
+      <thead><tr><th>Empresa</th><th>Tipo</th><th>Descripcion</th><th>Cliente/Obra</th><th>Fecha doc.</th><th>Vencimiento</th><th>Estado</th><th>Acciones</th></tr></thead>
+      <tbody>${rows.length?rows.map(r=>{
+        const v=r.fecha_vencimiento;
+        const esV=v&&v<hoyStr;const esP=v&&v>=hoyStr&&v<=en30Str;
+        const dias=v?Math.ceil((new Date(v+'T12:00:00')-new Date())/(1000*60*60*24)):null;
+        return`<tr>
+          <td style="font-size:12px">${r.empresas?.nombre||'—'}</td>
+          <td><span style="font-size:11px;padding:2px 8px;border-radius:4px;background:var(--bg3);color:var(--muted)">${SDE_TIPO_L[r.tipo]||r.tipo}</span></td>
+          <td style="font-size:12px">${r.descripcion||'—'}</td>
+          <td style="font-size:12px;color:var(--muted)">${r.cliente_obra||'—'}</td>
+          <td class="mono" style="font-size:12px">${r.fecha_documento?new Date(r.fecha_documento+'T12:00:00').toLocaleDateString('es-AR'):'—'}</td>
+          <td class="mono" style="color:${esV?'var(--red)':esP?'var(--orange)':'var(--text)'}">
+            ${v?new Date(v+'T12:00:00').toLocaleDateString('es-AR'):'Sin venc.'}
+            ${esV?'<div style="font-size:10px;color:var(--red)">VENCIDO</div>':''}
+            ${esP?`<div style="font-size:10px;color:var(--orange)">En ${dias}d</div>`:''}
+          </td>
+          <td>${esV?'<span style="font-size:11px;padding:2px 10px;border-radius:20px;background:rgba(239,68,68,0.15);color:var(--red)">Vencido</span>':
+              esP?'<span style="font-size:11px;padding:2px 10px;border-radius:20px;background:rgba(245,158,11,0.15);color:var(--orange)">Por vencer</span>':
+              '<span style="font-size:11px;padding:2px 10px;border-radius:20px;background:rgba(16,185,129,0.15);color:var(--green)">Vigente</span>'}</td>
+          <td><div style="display:flex;gap:6px">
+            ${r.archivo_url?`<a href="${r.archivo_url}" target="_blank" class="btn btn-sm btn-ghost">Ver</a>`:''}
+            <button class="btn btn-sm btn-danger" onclick="borrarDocSYH('${r.id}','${r.archivo_path||''}')">Borrar</button>
+          </div></td>
+        </tr>`;
+      }).join(''):'<tr><td colspan="8" style="text-align:center;padding:40px;color:var(--muted)">Sin documentos cargados</td></tr>'}</tbody>
+    </table></div></div>`;
+}
+
+async function guardarDocEmpresa(){
+  const empId=document.getElementById('sde-empresa').value;
+  const file=document.getElementById('sde-archivo').files[0];
+  let archivoUrl=null,archivoPatch=null;
+  if(file){
+    const ext=file.name.split('.').pop();
+    const path=`syh/empresa/${empId}_${Date.now()}.${ext}`;
+    document.getElementById('sde-progress').style.display='block';
+    document.getElementById('sde-bar').style.width='50%';
+    const {error:ue}=await db.storage.from('syh-docs').upload(path,file,{contentType:file.type,upsert:false});
+    if(!ue){
+      const {data:ud}=db.storage.from('syh-docs').getPublicUrl(path);
+      archivoUrl=ud?.publicUrl||null;archivoPatch=path;
+    }
+    document.getElementById('sde-bar').style.width='100%';
+    document.getElementById('sde-progress').style.display='none';
+  }
+  const {error}=await db.from('syh_documentos').insert({
+    empresa_id:empId,tipo:document.getElementById('sde-tipo').value,
+    descripcion:document.getElementById('sde-desc').value||null,
+    cliente_obra:document.getElementById('sde-cliente').value||null,
+    fecha_documento:document.getElementById('sde-fecha').value||null,
+    fecha_vencimiento:document.getElementById('sde-vencimiento').value||null,
+    archivo_url:archivoUrl,archivo_path:archivoPatch,
+  });
+  if(error){alert('Error: '+error.message);return;}
+  cerrarModal('modal-doc-empresa');
+  document.getElementById('sde-archivo').value='';
+  cargarDocEmpresa();
+}
+
+async function borrarDocSYH(id,path){
+  if(!confirm('Borrar este documento?')) return;
+  if(path) await db.storage.from('syh-docs').remove([path]);
+  await db.from('syh_documentos').delete().eq('id',id);
+  recargar();
+}
+
+// ── CAPACITACIONES ────────────────────────────────────────────
+async function cargarEmpleadosSYH(){
+  const empId=document.getElementById('sc-empresa').value;
+  const {data}=await db.from('empleados').select('id,nombre').eq('empresa_id',empId).eq('activo',true).order('nombre');
+  const wrap=document.getElementById('sc-asistentes-wrap');
+  if(!wrap) return;
+  wrap.innerHTML=(data||[]).map(e=>`
+    <label style="display:flex;align-items:center;gap:8px;padding:6px 4px;cursor:pointer;border-radius:6px;font-size:13px">
+      <input type="checkbox" value="${e.id}" name="sc-asistente" style="width:14px;height:14px"> ${e.nombre}
+    </label>`).join('');
+}
+
+async function cargarCapacitaciones(){
+  document.getElementById('kpis').innerHTML='';
+  document.getElementById('contenido').innerHTML='<div class="spinner-wrap"><div class="spinner"></div>Cargando...</div>';
+  const emp=document.getElementById('f-empresa').value;
+  const buscar=document.getElementById('f-buscar').value.toLowerCase();
+
+  let q=db.from('syh_capacitaciones').select('*,empresas(nombre),syh_capacitacion_asistentes(empleados(nombre))').order('fecha',{ascending:false});
+  if(emp) q=q.eq('empresa_id',emp);
+  const {data}=await q;
+  let rows=data||[];
+  if(buscar) rows=rows.filter(r=>(r.tipo||'').toLowerCase().includes(buscar)||(r.descripcion||'').toLowerCase().includes(buscar));
+
+  const hoyStr=new Date().toISOString().split('T')[0];
+  const totalHs=rows.reduce((s,r)=>s+Number(r.duracion_horas||0),0);
+  const totalAsist=rows.reduce((s,r)=>s+(r.syh_capacitacion_asistentes?.length||0),0);
+  const vencCert=rows.filter(r=>r.fecha_vencimiento&&r.fecha_vencimiento<hoyStr).length;
+
+  document.getElementById('kpis').innerHTML=`
+    <div class="kpi-card blue"><div class="kpi-label">Capacitaciones</div><div class="kpi-value">${rows.length}</div></div>
+    <div class="kpi-card green"><div class="kpi-label">Total asistentes</div><div class="kpi-value">${totalAsist}</div></div>
+    <div class="kpi-card teal"><div class="kpi-label">Horas totales</div><div class="kpi-value">${totalHs}h</div></div>
+    <div class="kpi-card orange"><div class="kpi-label">Certs. vencidos</div><div class="kpi-value">${vencCert}</div></div>`;
+
+  const SC_TIPO_L={trabajo_altura:'Trabajo en altura',espacio_confinado:'Espacio confinado',
+    uso_epp:'Uso EPP',primeros_auxilios:'Primeros auxilios',extincion_incendio:'Extincion incendio',
+    izaje:'Izaje',soldadura_segura:'Soldadura segura',manipulacion_quimicos:'Quimicos',
+    riesgo_electrico:'Riesgo electrico',orden_limpieza:'Orden y limpieza',
+    evacuacion:'Evacuacion',induccion:'Induccion',otro:'Otro'};
+
+  document.getElementById('contenido').innerHTML=`
+    <div class="panel"><div style="overflow-x:auto"><table>
+      <thead><tr><th>Empresa</th><th>Tipo</th><th>Descripcion</th><th>Fecha</th><th>Dictada por</th><th>Duracion</th><th>Vence cert.</th><th>Asistentes</th><th>Acciones</th></tr></thead>
+      <tbody>${rows.length?rows.map(r=>{
+        const asistentes=(r.syh_capacitacion_asistentes||[]).map(a=>a.empleados?.nombre).filter(Boolean);
+        const vence=r.fecha_vencimiento&&r.fecha_vencimiento<hoyStr;
+        return`<tr>
+          <td style="font-size:12px">${r.empresas?.nombre||'—'}</td>
+          <td><span style="font-size:11px;padding:2px 8px;border-radius:4px;background:var(--bg3);color:var(--muted)">${SC_TIPO_L[r.tipo]||r.tipo}</span></td>
+          <td style="font-size:12px">${r.descripcion||'—'}</td>
+          <td class="mono">${r.fecha?new Date(r.fecha+'T12:00:00').toLocaleDateString('es-AR'):'—'}</td>
+          <td style="font-size:12px;color:var(--muted)">${r.dictada_por||'—'}</td>
+          <td class="mono">${r.duracion_horas||'—'}h</td>
+          <td class="mono" style="color:${vence?'var(--red)':'var(--text)'}">${r.fecha_vencimiento?new Date(r.fecha_vencimiento+'T12:00:00').toLocaleDateString('es-AR'):'—'}${vence?' ⚠':''}</td>
+          <td>
+            <div style="font-size:12px">${asistentes.length} personas</div>
+            <div style="font-size:11px;color:var(--muted)">${asistentes.slice(0,2).join(', ')}${asistentes.length>2?` +${asistentes.length-2} mas`:''}</div>
+          </td>
+          <td><div style="display:flex;gap:6px">
+            ${r.archivo_url?`<a href="${r.archivo_url}" target="_blank" class="btn btn-sm btn-ghost">Ver</a>`:''}
+            <button class="btn btn-sm btn-danger" onclick="borrarCapacitacion('${r.id}','${r.archivo_path||''}')">Borrar</button>
+          </div></td>
+        </tr>`;
+      }).join(''):'<tr><td colspan="9" style="text-align:center;padding:40px;color:var(--muted)">Sin capacitaciones registradas</td></tr>'}</tbody>
+    </table></div></div>`;
+}
+
+async function guardarCapacitacion(){
+  const empId=document.getElementById('sc-empresa').value;
+  const tipo=document.getElementById('sc-tipo').value;
+  const fecha=document.getElementById('sc-fecha').value;
+  if(!fecha){alert('Ingresa la fecha.');return;}
+
+  const asistentes=[...document.querySelectorAll('input[name="sc-asistente"]:checked')].map(c=>c.value);
+
+  let archivoUrl=null,archivoPatch=null;
+  const file=document.getElementById('sc-archivo').files[0];
+  if(file){
+    const ext=file.name.split('.').pop();
+    const path=`syh/capacitaciones/${empId}_${Date.now()}.${ext}`;
+    const {error:ue}=await db.storage.from('syh-docs').upload(path,file,{contentType:file.type,upsert:false});
+    if(!ue){const {data:ud}=db.storage.from('syh-docs').getPublicUrl(path);archivoUrl=ud?.publicUrl||null;archivoPatch=path;}
+  }
+
+  const {data:cap,error}=await db.from('syh_capacitaciones').insert({
+    empresa_id:empId,tipo,
+    descripcion:document.getElementById('sc-desc').value||null,
+    dictada_por:document.getElementById('sc-dictante').value||null,
+    fecha,
+    duracion_horas:parseFloat(document.getElementById('sc-duracion').value)||null,
+    fecha_vencimiento:document.getElementById('sc-vencimiento').value||null,
+    archivo_url:archivoUrl,archivo_path:archivoPatch,
+  }).select().single();
+
+  if(error){alert('Error: '+error.message);return;}
+
+  // Insert asistentes
+  if(asistentes.length&&cap){
+    await db.from('syh_capacitacion_asistentes').insert(
+      asistentes.map(eid=>({capacitacion_id:cap.id,empleado_id:eid,empresa_id:empId}))
+    );
+  }
+
+  cerrarModal('modal-capacitacion');
+  document.getElementById('sc-archivo').value='';
+  cargarCapacitaciones();
+}
+
+async function borrarCapacitacion(id,path){
+  if(!confirm('Borrar esta capacitacion?')) return;
+  if(path) await db.storage.from('syh-docs').remove([path]);
+  await db.from('syh_capacitacion_asistentes').delete().eq('capacitacion_id',id);
+  await db.from('syh_capacitaciones').delete().eq('id',id);
+  cargarCapacitaciones();
+}
+
+// ── EPP ───────────────────────────────────────────────────────
+async function cargarEmpleadosEPP(){
+  const empId=document.getElementById('se-empresa').value;
+  const {data}=await db.from('empleados').select('id,nombre').eq('empresa_id',empId).eq('activo',true).order('nombre');
+  document.getElementById('se-empleado').innerHTML=(data||[]).map(e=>`<option value="${e.id}">${e.nombre}</option>`).join('');
+}
+
+async function cargarEmpleadosIncidente(){
+  const empId=document.getElementById('si-empresa').value;
+  const {data}=await db.from('empleados').select('id,nombre').eq('empresa_id',empId).eq('activo',true).order('nombre');
+  document.getElementById('si-empleado').innerHTML=(data||[]).map(e=>`<option value="${e.id}">${e.nombre}</option>`).join('');
+}
+
+async function cargarHistorialEPP(){
+  const empId=document.getElementById('se-empleado').value;
+  if(!empId) return;
+  const {data}=await db.from('syh_epp_entregas').select('fecha_entrega,items').eq('empleado_id',empId).order('fecha_entrega',{ascending:false}).limit(3);
+  const wrap=document.getElementById('se-historial-wrap');
+  const hist=document.getElementById('se-historial');
+  if(!data||!data.length){wrap.style.display='none';return;}
+  wrap.style.display='block';
+  hist.innerHTML=data.map(e=>`
+    <div style="padding:6px 0;border-bottom:1px solid var(--border)">
+      <span style="color:var(--text)">${new Date(e.fecha_entrega+'T12:00:00').toLocaleDateString('es-AR')}</span>
+      <span style="margin-left:8px">${(e.items||[]).map(i=>i.producto).join(', ')}</span>
+    </div>`).join('');
+}
+
+function agregarFilaEPP(){
+  const idx=eppItemIdx++;
+  const div=document.createElement('div');
+  div.className='form-row';div.id=`epp-item-${idx}`;
+  div.innerHTML=`
+    <div class="form-group" style="flex:2"><input type="text" placeholder="Producto / EPP"></div>
+    <div class="form-group"><input type="text" placeholder="Tipo/Modelo"></div>
+    <div class="form-group"><input type="text" placeholder="Marca"></div>
+    <div class="form-group" style="max-width:80px"><input type="number" value="1" min="1"></div>
+    <div class="form-group" style="max-width:90px"><select><option value="SI">SI</option><option value="NO">NO</option></select></div>
+    <button onclick="this.parentElement.remove()" style="align-self:flex-end;padding:8px;background:rgba(239,68,68,0.1);border:1px solid rgba(239,68,68,0.2);border-radius:6px;color:var(--red);cursor:pointer">x</button>`;
+  document.getElementById('se-items').appendChild(div);
+}
+
+function recogerItemsEPP(){
+  const rows=document.querySelectorAll('[id^="epp-item-"]');
+  const items=[];
+  rows.forEach(row=>{
+    const inputs=row.querySelectorAll('input,select');
+    const prod=inputs[0]?.value?.trim();
+    if(!prod) return;
+    items.push({
+      producto:prod,
+      tipo_modelo:inputs[1]?.value?.trim()||'',
+      marca:inputs[2]?.value?.trim()||'',
+      cantidad:parseInt(inputs[3]?.value)||1,
+      certificacion:inputs[4]?.value||'SI',
+    });
+  });
+  return items;
+}
+
+async function guardarEPP(){
+  const empleadoId=document.getElementById('se-empleado').value;
+  const fecha=document.getElementById('se-fecha').value;
+  if(!empleadoId||!fecha){alert('Selecciona empleado y fecha.');return;}
+  const items=recogerItemsEPP();
+  if(!items.length){alert('Agrega al menos un elemento EPP.');return;}
+  const empId=document.getElementById('se-empresa').value;
+
+  // Get empleado data
+  const {data:emp}=await db.from('empleados').select('nombre,dni').eq('id',empleadoId).single();
+  const u=await getUsuario();
+
+  const {data:entrega,error}=await db.from('syh_epp_entregas').insert({
+    empresa_id:empId,empleado_id:empleadoId,
+    fecha_entrega:fecha,puesto:document.getElementById('se-puesto').value||null,
+    elementos_necesarios:document.getElementById('se-necesarios').value||null,
+    items:items,
+  }).select().single();
+
+  if(error){alert('Error: '+error.message);return;}
+
+  // Generate PDF
+  generarPDFEPP(entrega,emp,items,empId);
+  cerrarModal('modal-epp');
+  cargarEPP();
+}
+
+async function cargarEPP(){
+  document.getElementById('kpis').innerHTML='';
+  document.getElementById('contenido').innerHTML='<div class="spinner-wrap"><div class="spinner"></div>Cargando...</div>';
+  const emp=document.getElementById('f-empresa').value;
+  const buscar=document.getElementById('f-buscar').value.toLowerCase();
+
+  let q=db.from('syh_epp_entregas').select('*,empleados(nombre),empresas(nombre)').order('fecha_entrega',{ascending:false});
+  if(emp) q=q.eq('empresa_id',emp);
+  const {data}=await q;
+  let rows=data||[];
+  if(buscar) rows=rows.filter(r=>(r.empleados?.nombre||'').toLowerCase().includes(buscar));
+
+  const totalItems=rows.reduce((s,r)=>s+(r.items?.length||0),0);
+  const empleadosConEPP=new Set(rows.map(r=>r.empleado_id)).size;
+
+  document.getElementById('kpis').innerHTML=`
+    <div class="kpi-card blue"><div class="kpi-label">Entregas registradas</div><div class="kpi-value">${rows.length}</div></div>
+    <div class="kpi-card green"><div class="kpi-label">Empleados con EPP</div><div class="kpi-value">${empleadosConEPP}</div></div>
+    <div class="kpi-card teal"><div class="kpi-label">Items entregados</div><div class="kpi-value">${totalItems}</div></div>`;
+
+  document.getElementById('contenido').innerHTML=`
+    <div class="panel"><div style="overflow-x:auto"><table>
+      <thead><tr><th>Empleado</th><th>Empresa</th><th>Fecha</th><th>Puesto</th><th>Items</th><th>Acciones</th></tr></thead>
+      <tbody>${rows.length?rows.map(r=>`<tr>
+        <td style="font-weight:500">${r.empleados?.nombre||'—'}</td>
+        <td style="font-size:12px">${r.empresas?.nombre||'—'}</td>
+        <td class="mono">${r.fecha_entrega?new Date(r.fecha_entrega+'T12:00:00').toLocaleDateString('es-AR'):'—'}</td>
+        <td style="font-size:12px;color:var(--muted)">${r.puesto||'—'}</td>
+        <td>
+          <div style="font-size:12px">${(r.items||[]).length} items</div>
+          <div style="font-size:11px;color:var(--muted)">${(r.items||[]).slice(0,2).map(i=>i.producto).join(', ')}${(r.items||[]).length>2?` +${(r.items||[]).length-2}`:''}</div>
+        </td>
+        <td><div style="display:flex;gap:6px">
+          <button class="btn btn-sm btn-ghost" onclick="reimprimirEPP('${r.id}')">PDF</button>
+          <button class="btn btn-sm btn-danger" onclick="borrarEPP('${r.id}')">Borrar</button>
+        </div></td>
+      </tr>`).join(''):'<tr><td colspan="6" style="text-align:center;padding:40px;color:var(--muted)">Sin entregas registradas</td></tr>'}</tbody>
+    </table></div></div>`;
+}
+
+async function reimprimirEPP(id){
+  const {data:r}=await db.from('syh_epp_entregas').select('*,empleados(nombre,dni),empresas(nombre)').eq('id',id).single();
+  if(!r) return;
+  generarPDFEPP(r,r.empleados,r.items||[],r.empresa_id);
+}
+
+async function borrarEPP(id){
+  if(!confirm('Borrar esta entrega EPP?')) return;
+  await db.from('syh_epp_entregas').delete().eq('id',id);
+  cargarEPP();
+}
+
+function previsualizarPDFEPP(){
+  const items=recogerItemsEPP();
+  const empSel=document.getElementById('se-empleado');
+  const empNom=empSel.options[empSel.selectedIndex]?.text||'—';
+  generarPDFEPP({fecha_entrega:document.getElementById('se-fecha').value,puesto:document.getElementById('se-puesto').value,elementos_necesarios:document.getElementById('se-necesarios').value},{nombre:empNom,dni:''},items,document.getElementById('se-empresa').value);
+}
+
+// PDF EPP — Resolución 299/11 Anexo I
+function generarPDFEPP(entrega,emp,items,empIdOEmpresaNombre){
+  const {jsPDF}=window.jspdf;
+  const doc=new jsPDF({format:'a4',unit:'mm'});
+  const L=10,R=200,W=190,midX=105;
+  const fmtD=d=>d?new Date(d+'T12:00:00').toLocaleDateString('es-AR'):'';
+
+  // Obtener nombre empresa
+  const esHidro=empIdOEmpresaNombre==='a1000000-0000-0000-0000-000000000001'||empIdOEmpresaNombre==='Hidromec';
+  const razonSocial=esHidro?'HIDROMEC SRL':'PLACEMEM SRL';
+  const cuit=esHidro?'30-71232493-3':'30-XXXXXXXX-X';
+
+  // Encabezado legal
+  doc.setFontSize(9);doc.setFont('helvetica','italic');doc.setTextColor(100,100,100);
+  doc.text('Resolucion 299/11, Anexo I',L,10);
+  doc.setLineWidth(0.5);doc.setDrawColor(0,0,0);doc.line(L,12,R,12);
+
+  doc.setFontSize(13);doc.setFont('helvetica','bold');doc.setTextColor(0,0,0);
+  doc.text('ENTREGA DE ROPA DE TRABAJO Y ELEMENTOS DE PROTECCION PERSONAL',midX,18,{align:'center'});
+  doc.setLineWidth(0.4);doc.line(L,20,R,20);
+
+  // Datos empresa
+  const y1=26;
+  doc.setFontSize(9);doc.setFont('helvetica','normal');
+  doc.text('Razon Social:',L,y1);doc.setFont('helvetica','bold');doc.text(razonSocial,L+26,y1);
+  doc.setFont('helvetica','normal');doc.text('C.U.I.T.:',L+120,y1);doc.setFont('helvetica','bold');doc.text(cuit,L+136,y1);
+  doc.setFont('helvetica','normal');
+  doc.line(L,y1+3,R,y1+3);
+
+  const y2=y1+9;
+  doc.text('Direccion:',L,y2);doc.setFont('helvetica','bold');doc.text('Colectora Oeste 1525, Zarate, Bs. As.',L+20,y2);
+  doc.setFont('helvetica','normal');doc.text('Localidad: Zarate',L+110,y2);doc.text('CP: 2800',L+150,y2);doc.text('Prov: Bs. As.',L+165,y2);
+  doc.line(L,y2+3,R,y2+3);
+
+  const y3=y2+9;
+  doc.text('Nombre y Apellido del Trabajador:',L,y3);
+  doc.setFont('helvetica','bold');doc.text(emp?.nombre||'—',L+64,y3);
+  doc.setFont('helvetica','normal');doc.text('D.N.I.:',L+145,y3);
+  doc.setFont('helvetica','bold');doc.text(emp?.dni||'—',L+157,y3);
+  doc.line(L,y3+3,R,y3+3);
+
+  const y4=y3+9;
+  doc.setFont('helvetica','normal');
+  doc.text('Descripcion breve del puesto:',L,y4);
+  doc.setFont('helvetica','bold');
+  doc.text(entrega.puesto||'—',L+58,y4);
+  doc.line(L,y4+3,R,y4+3);
+
+  const y5=y4+9;
+  doc.setFont('helvetica','normal');
+  doc.text('Elementos de proteccion personal necesarios para el puesto:',L,y5);
+  if(entrega.elementos_necesarios){
+    doc.setFont('helvetica','italic');
+    const lines=doc.splitTextToSize(entrega.elementos_necesarios,W-4);
+    doc.text(lines,L,y5+6);
+  }
+
+  // Tabla EPP
+  const yT=y5+(entrega.elementos_necesarios?18:8);
+  doc.setLineWidth(0.3);doc.setDrawColor(0,0,0);
+
+  // Header tabla
+  doc.setFillColor(220,220,220);doc.rect(L,yT,W,7,'F');
+  doc.setFontSize(8);doc.setFont('helvetica','bold');doc.setTextColor(0,0,0);
+  const cols=[
+    {x:L+1,w:4,label:'N'},
+    {x:L+6,w:44,label:'Producto'},
+    {x:L+52,w:34,label:'Tipo / Modelo'},
+    {x:L+88,w:24,label:'Marca'},
+    {x:L+114,w:22,label:'Certificacion'},
+    {x:L+138,w:12,label:'Cant.'},
+    {x:L+152,w:26,label:'Fecha entrega'},
+    {x:L+180,w:18,label:'Firma'},
+  ];
+  cols.forEach(c=>doc.text(c.label,c.x+1,yT+5));
+  doc.setLineWidth(0.2);
+  doc.rect(L,yT,W,7);
+  let xLine=L;
+  cols.forEach(c=>{xLine+=c.w;if(xLine<R) doc.line(xLine,yT,xLine,yT+7);});
+
+  // Rows — 18 filas (igual que planilla original)
+  doc.setFont('helvetica','normal');doc.setFontSize(8);
+  for(let i=0;i<18;i++){
+    const ry=yT+7+(i*8);
+    const item=items[i]||null;
+    if(i%2===0){doc.setFillColor(252,252,252);}else{doc.setFillColor(246,246,246);}
+    doc.rect(L,ry,W,8,'F');
+    doc.setTextColor(0,0,0);
+    doc.text(String(i+1),cols[0].x+1,ry+5.5);
+    if(item){
+      doc.text(doc.splitTextToSize(item.producto||'',cols[1].w-2)[0],cols[1].x+1,ry+5.5);
+      doc.text(doc.splitTextToSize(item.tipo_modelo||'',cols[2].w-2)[0],cols[2].x+1,ry+5.5);
+      doc.text(doc.splitTextToSize(item.marca||'',cols[3].w-2)[0],cols[3].x+1,ry+5.5);
+      doc.text(item.certificacion||'',cols[4].x+6,ry+5.5,{align:'center'});
+      doc.text(String(item.cantidad||1),cols[5].x+4,ry+5.5,{align:'center'});
+      doc.text(fmtD(entrega.fecha_entrega),cols[6].x+1,ry+5.5);
+    }
+    // Grid lines
+    doc.setLineWidth(0.2);doc.rect(L,ry,W,8);
+    let xL=L;cols.forEach(c=>{xL+=c.w;if(xL<R) doc.line(xL,ry,xL,ry+8);});
+  }
+
+  const yF=yT+7+(18*8)+6;
+  doc.setFontSize(8);doc.setFont('helvetica','normal');
+  doc.text('Informacion adicional:',L,yF);
+  doc.setLineWidth(0.3);doc.line(L,yF+8,R,yF+8);
+
+  // Firma
+  const yFirma=yF+16;
+  doc.line(L+20,yFirma,L+80,yFirma);
+  doc.line(L+110,yFirma,L+175,yFirma);
+  doc.setFontSize(8);
+  doc.text('Firma del responsable de entrega',L+20,yFirma+5);
+  doc.text('Firma del trabajador / Aclaracion',L+110,yFirma+5);
+
+  doc.setFontSize(7);doc.setTextColor(100,100,100);
+  doc.text(`Sistema ERP Hidromec/Placemem  |  Generado: ${new Date().toLocaleString('es-AR')}`,midX,yFirma+14,{align:'center'});
+
+  doc.save(`EPP_${(emp?.nombre||'trabajador').replace(/ /g,'_')}_${entrega.fecha_entrega||'fecha'}.pdf`);
+}
+
+// ── INCIDENTES ────────────────────────────────────────────────
+async function cargarIncidentes(){
+  document.getElementById('kpis').innerHTML='';
+  document.getElementById('contenido').innerHTML='<div class="spinner-wrap"><div class="spinner"></div>Cargando...</div>';
+  const emp=document.getElementById('f-empresa').value;
+  const buscar=document.getElementById('f-buscar').value.toLowerCase();
+
+  let q=db.from('syh_incidentes').select('*,empleados(nombre),empresas(nombre)').order('fecha',{ascending:false});
+  if(emp) q=q.eq('empresa_id',emp);
+  const {data}=await q;
+  let rows=data||[];
+  if(buscar) rows=rows.filter(r=>(r.empleados?.nombre||'').toLowerCase().includes(buscar)||(r.descripcion||'').toLowerCase().includes(buscar));
+
+  const graves=rows.filter(r=>r.tipo==='accidente_grave').length;
+  const leves=rows.filter(r=>r.tipo==='accidente_leve').length;
+  const totalDias=rows.reduce((s,r)=>s+Number(r.dias_perdidos||0),0);
+
+  document.getElementById('kpis').innerHTML=`
+    <div class="kpi-card red"><div class="kpi-label">Accidentes graves</div><div class="kpi-value">${graves}</div></div>
+    <div class="kpi-card orange"><div class="kpi-label">Accidentes leves</div><div class="kpi-value">${leves}</div></div>
+    <div class="kpi-card blue"><div class="kpi-label">Total incidentes</div><div class="kpi-value">${rows.length}</div></div>
+    <div class="kpi-card teal"><div class="kpi-label">Dias perdidos</div><div class="kpi-value">${totalDias}</div></div>`;
+
+  const TIPO_L={incidente:'Incidente',accidente_leve:'Acc. leve',accidente_grave:'Acc. grave',casi_accidente:'Casi acc.',enfermedad_laboral:'Enf. laboral'};
+  const TIPO_C={incidente:'var(--blue)',accidente_leve:'var(--orange)',accidente_grave:'var(--red)',casi_accidente:'var(--muted)',enfermedad_laboral:'var(--purple,#8b5cf6)'};
+
+  document.getElementById('contenido').innerHTML=`
+    <div class="panel"><div style="overflow-x:auto"><table>
+      <thead><tr><th>Empresa</th><th>Empleado</th><th>Tipo</th><th>Fecha</th><th>Lugar</th><th>Dias perdidos</th><th>ART</th><th>Acciones</th></tr></thead>
+      <tbody>${rows.length?rows.map(r=>`<tr>
+        <td style="font-size:12px">${r.empresas?.nombre||'—'}</td>
+        <td style="font-weight:500">${r.empleados?.nombre||'—'}</td>
+        <td><span style="font-size:11px;padding:2px 10px;border-radius:20px;background:${TIPO_C[r.tipo]}22;color:${TIPO_C[r.tipo]}">${TIPO_L[r.tipo]||r.tipo}</span></td>
+        <td class="mono">${r.fecha?new Date(r.fecha).toLocaleDateString('es-AR'):'—'}</td>
+        <td style="font-size:12px;color:var(--muted)">${r.lugar||'—'}</td>
+        <td class="mono" style="color:${r.dias_perdidos>0?'var(--red)':'var(--muted)'}">${r.dias_perdidos||0}d</td>
+        <td><span style="font-size:11px">${r.requirio_art==='si'?'Si':'No'}</span></td>
+        <td><div style="display:flex;gap:6px">
+          ${r.archivo_url?`<a href="${r.archivo_url}" target="_blank" class="btn btn-sm btn-ghost">Ver</a>`:''}
+          <button class="btn btn-sm btn-danger" onclick="borrarIncidente('${r.id}','${r.archivo_path||''}')">Borrar</button>
+        </div></td>
+      </tr>`).join(''):'<tr><td colspan="8" style="text-align:center;padding:40px;color:var(--muted)">Sin incidentes registrados</td></tr>'}</tbody>
+    </table></div></div>`;
+}
+
+async function guardarIncidente(){
+  const empId=document.getElementById('si-empresa').value;
+  const empleadoId=document.getElementById('si-empleado').value;
+  const fecha=document.getElementById('si-fecha').value;
+  if(!fecha){alert('Ingresa la fecha.');return;}
+
+  let archivoUrl=null,archivoPatch=null;
+  const file=document.getElementById('si-archivo').files[0];
+  if(file){
+    const ext=file.name.split('.').pop();
+    const path=`syh/incidentes/${empId}_${Date.now()}.${ext}`;
+    const {error:ue}=await db.storage.from('syh-docs').upload(path,file,{contentType:file.type,upsert:false});
+    if(!ue){const {data:ud}=db.storage.from('syh-docs').getPublicUrl(path);archivoUrl=ud?.publicUrl||null;archivoPatch=path;}
+  }
+
+  const {error}=await db.from('syh_incidentes').insert({
+    empresa_id:empId,empleado_id:empleadoId||null,
+    tipo:document.getElementById('si-tipo').value,
+    fecha:fecha,lugar:document.getElementById('si-lugar').value||null,
+    descripcion:document.getElementById('si-descripcion').value||null,
+    dias_perdidos:parseInt(document.getElementById('si-dias').value)||0,
+    requirio_art:document.getElementById('si-art').value,
+    medidas_correctivas:document.getElementById('si-correctivas').value||null,
+    archivo_url:archivoUrl,archivo_path:archivoPatch,
+  });
+  if(error){alert('Error: '+error.message);return;}
+  cerrarModal('modal-incidente');
+  document.getElementById('si-archivo').value='';
+  cargarIncidentes();
+}
+
+async function borrarIncidente(id,path){
+  if(!confirm('Borrar este incidente?')) return;
+  if(path) await db.storage.from('syh-docs').remove([path]);
+  await db.from('syh_incidentes').delete().eq('id',id);
+  cargarIncidentes();
+}
+
+// ── VENCIMIENTOS UNIFICADOS ───────────────────────────────────
+async function cargarVencimientos(){
+  document.getElementById('kpis').innerHTML='';
+  document.getElementById('contenido').innerHTML='<div class="spinner-wrap"><div class="spinner"></div>Calculando...</div>';
+  const emp=document.getElementById('f-empresa').value;
+  const hoyStr=new Date().toISOString().split('T')[0];
+  const en60=new Date();en60.setDate(en60.getDate()+60);
+  const en60Str=en60.toISOString().split('T')[0];
+
+  const queries=[
+    db.from('syh_documentos').select('tipo,descripcion,fecha_vencimiento,empresas(nombre)').lte('fecha_vencimiento',en60Str).neq('fecha_vencimiento',null),
+    db.from('empleados_documentos').select('tipo,descripcion,fecha_vencimiento,empleados(nombre),empresas(nombre)').lte('fecha_vencimiento',en60Str).neq('fecha_vencimiento',null),
+    db.from('syh_capacitaciones').select('tipo,descripcion,fecha_vencimiento,empresas(nombre)').lte('fecha_vencimiento',en60Str).neq('fecha_vencimiento',null),
+    db.from('empleados_documentos').select('tipo,descripcion,fecha_vencimiento,vehiculos(descripcion),empresas(nombre)').eq('categoria','vehiculo').lte('fecha_vencimiento',en60Str).neq('fecha_vencimiento',null),
+  ];
+  if(emp) queries.forEach(q=>q.eq('empresa_id',emp));
+
+  const results=await Promise.all(queries);
+  const todas=[
+    ...(results[0].data||[]).map(r=>({...r,origen:'Docs empresa SyH',entidad:r.empresas?.nombre})),
+    ...(results[1].data||[]).map(r=>({...r,origen:'Docs personal',entidad:r.empleados?.nombre||'—'})),
+    ...(results[2].data||[]).map(r=>({...r,origen:'Certificado capacitacion',entidad:r.empresas?.nombre})),
+    ...(results[3].data||[]).map(r=>({...r,origen:'Doc vehiculo',entidad:r.vehiculos?.descripcion||'—'})),
+  ].sort((a,b)=>a.fecha_vencimiento>b.fecha_vencimiento?1:-1);
+
+  const vencidos=todas.filter(r=>r.fecha_vencimiento<hoyStr);
+  const en30=todas.filter(r=>r.fecha_vencimiento>=hoyStr&&r.fecha_vencimiento<=new Date(Date.now()+30*86400000).toISOString().split('T')[0]);
+  const en60d=todas.filter(r=>r.fecha_vencimiento>new Date(Date.now()+30*86400000).toISOString().split('T')[0]);
+
+  document.getElementById('kpis').innerHTML=`
+    <div class="kpi-card red"><div class="kpi-label">Vencidos</div><div class="kpi-value">${vencidos.length}</div></div>
+    <div class="kpi-card orange"><div class="kpi-label">Vencen en 30 dias</div><div class="kpi-value">${en30.length}</div></div>
+    <div class="kpi-card blue"><div class="kpi-label">Vencen en 60 dias</div><div class="kpi-value">${en60d.length}</div></div>`;
+
+  document.getElementById('contenido').innerHTML=`
+    <div class="panel"><div style="overflow-x:auto"><table>
+      <thead><tr><th>Origen</th><th>Entidad</th><th>Tipo</th><th>Descripcion</th><th>Vencimiento</th><th>Estado</th></tr></thead>
+      <tbody>${todas.length?todas.map(r=>{
+        const esV=r.fecha_vencimiento<hoyStr;
+        const dias=Math.ceil((new Date(r.fecha_vencimiento+'T12:00:00')-new Date())/(1000*60*60*24));
+        return`<tr>
+          <td><span style="font-size:11px;padding:2px 8px;border-radius:4px;background:var(--bg3);color:var(--muted)">${r.origen}</span></td>
+          <td style="font-weight:500">${r.entidad||'—'}</td>
+          <td style="font-size:12px;color:var(--muted)">${r.tipo}</td>
+          <td style="font-size:12px">${r.descripcion||'—'}</td>
+          <td class="mono" style="color:${esV?'var(--red)':dias<=30?'var(--orange)':'var(--text)'}">
+            ${new Date(r.fecha_vencimiento+'T12:00:00').toLocaleDateString('es-AR')}
+            ${esV?'<div style="font-size:10px;color:var(--red)">VENCIDO</div>':`<div style="font-size:10px;color:${dias<=30?'var(--orange)':'var(--muted)'}">${dias}d</div>`}
+          </td>
+          <td>${esV?'<span style="font-size:11px;padding:2px 10px;border-radius:20px;background:rgba(239,68,68,0.15);color:var(--red)">Vencido</span>':
+              dias<=30?'<span style="font-size:11px;padding:2px 10px;border-radius:20px;background:rgba(245,158,11,0.15);color:var(--orange)">Por vencer</span>':
+              '<span style="font-size:11px;padding:2px 10px;border-radius:20px;background:rgba(59,130,246,0.15);color:var(--blue)">Proximo</span>'}</td>
+        </tr>`;
+      }).join(''):'<tr><td colspan="6" style="text-align:center;padding:40px;color:var(--muted)">Sin vencimientos proximos</td></tr>'}</tbody>
+    </table></div></div>`;
+}
+
+
+// ═══════════════ PORTALES DE CLIENTES ════════════════════════
+let _portalesCache=[];
+
+const MP_TIPO_L={
+  art_empresa:'ART empresa',habilitacion_empresa:'Habilitacion empresa',
+  programa_seguridad:'Programa seguridad',no_repeticion:'No repeticion',
+  seguro_rc:'Seguro RC',cert_fiscal:'Cert. fiscal',
+  preocupacional:'Preocupacional',art_empleado:'ART empleado',
+  capacitacion_altura:'Cap. altura',capacitacion_esp_conf:'Cap. esp. confinado',
+  induccion_cliente:'Induccion cliente',dni:'DNI',examen_periodico:'Examen periodico',
+  seguro_vehiculo:'Seguro vehiculo',vtv:'VTV / RTO',
+  habilitacion_equipo:'Habilitacion equipo',cert_grua:'Cert. grua/izaje',
+  formulario_ingreso:'Form. ingreso personal',formulario_vehiculo:'Form. ingreso vehiculo',
+  formulario_empresa:'Form. empresa',otro_portal:'Otro',
+};
+
+const MP_ESTADO_STYLE={
+  aprobado:'background:rgba(16,185,129,0.15);color:var(--green)',
+  pendiente:'background:rgba(245,158,11,0.15);color:var(--orange)',
+  rechazado:'background:rgba(239,68,68,0.15);color:var(--red)',
+  cargado:'background:rgba(59,130,246,0.15);color:var(--blue)',
+};
+
+async function prepararModalPortal(){
+  document.getElementById('mp-fecha-carga').value=hoy();
+  document.getElementById('mp-aplica').value='empresa';
+  document.getElementById('mp-row-empleado').style.display='none';
+  document.getElementById('mp-row-vehiculo').style.display='none';
+  document.getElementById('mp-nuevo-portal-row').style.display='none';
+  await cargarSelectPortales();
+  await cargarEmpleadosPortal();
+  await cargarVehiculosPortal();
+}
+
+async function cargarSelectPortales(){
+  const empId=document.getElementById('mp-empresa').value;
+  const {data}=await db.from('portales_clientes').select('id,nombre').eq('empresa_id',empId).eq('activo',true).order('nombre');
+  _portalesCache=data||[];
+  const sel=document.getElementById('mp-portal-sel');
+  sel.innerHTML='<option value="">— Seleccionar portal —</option>'+
+    _portalesCache.map(p=>`<option value="${p.id}">${p.nombre}</option>`).join('')+
+    '<option value="__nuevo__">+ Agregar nuevo portal</option>';
+}
+
+function onPortalChange(){
+  const v=document.getElementById('mp-portal-sel').value;
+  document.getElementById('mp-nuevo-portal-row').style.display=v==='__nuevo__'?'block':'none';
+}
+
+function onAplicaChange(){
+  const v=document.getElementById('mp-aplica').value;
+  document.getElementById('mp-row-empleado').style.display=v==='empleado'?'block':'none';
+  document.getElementById('mp-row-vehiculo').style.display=v==='vehiculo'?'block':'none';
+}
+
+async function cargarEmpleadosPortal(){
+  const empId=document.getElementById('mp-empresa').value;
+  const {data}=await db.from('empleados').select('id,nombre').eq('empresa_id',empId).eq('activo',true).order('nombre');
+  document.getElementById('mp-empleado').innerHTML=(data||[]).map(e=>`<option value="${e.id}">${e.nombre}</option>`).join('');
+}
+
+async function cargarVehiculosPortal(){
+  const empId=document.getElementById('mp-empresa').value;
+  const {data}=await db.from('vehiculos').select('id,descripcion,patente').eq('empresa_id',empId).eq('activo',true).order('descripcion');
+  document.getElementById('mp-vehiculo').innerHTML=(data||[]).map(v=>`<option value="${v.id}">${v.descripcion}${v.patente?' — '+v.patente:''}</option>`).join('');
+}
+
+async function guardarPortalDoc(){
+  const empId=document.getElementById('mp-empresa').value;
+  const portalSelVal=document.getElementById('mp-portal-sel').value;
+  const venc=document.getElementById('mp-vencimiento').value;
+  if(!venc){alert('La fecha de vencimiento es obligatoria.');return;}
+
+  let portalId=portalSelVal;
+
+  // Crear portal nuevo si corresponde
+  if(portalSelVal==='__nuevo__'){
+    const nombre=document.getElementById('mp-portal-nombre').value.trim();
+    if(!nombre){alert('Ingresa el nombre del portal.');return;}
+    const url=document.getElementById('mp-portal-url').value.trim()||null;
+    const {data:np,error:pe}=await db.from('portales_clientes')
+      .insert({empresa_id:empId,nombre,url_portal:url,activo:true})
+      .select().single();
+    if(pe){alert('Error al crear portal: '+pe.message);return;}
+    portalId=np.id;
+  }
+
+  if(!portalId){alert('Selecciona un portal.');return;}
+
+  const aplica=document.getElementById('mp-aplica').value;
+  const {error}=await db.from('portal_documentos').insert({
+    empresa_id:empId,
+    portal_id:portalId,
+    tipo:document.getElementById('mp-tipo').value,
+    aplica_a:aplica,
+    empleado_id:aplica==='empleado'?(document.getElementById('mp-empleado').value||null):null,
+    vehiculo_id:aplica==='vehiculo'?(document.getElementById('mp-vehiculo').value||null):null,
+    descripcion:document.getElementById('mp-desc').value||null,
+    fecha_vencimiento:venc,
+    fecha_carga_portal:document.getElementById('mp-fecha-carga').value||null,
+    estado_portal:document.getElementById('mp-estado-portal').value,
+    observaciones:document.getElementById('mp-obs').value||null,
+  });
+  if(error){alert('Error: '+error.message);return;}
+  cerrarModal('modal-portal-doc');
+  cargarPortales();
+}
+
+async function cargarPortales(){
+  document.getElementById('kpis').innerHTML='';
+  document.getElementById('contenido').innerHTML='<div class="spinner-wrap"><div class="spinner"></div>Cargando...</div>';
+  const emp=document.getElementById('f-empresa').value;
+  const buscar=document.getElementById('f-buscar').value.toLowerCase();
+  const hoyStr=new Date().toISOString().split('T')[0];
+  const en30=new Date();en30.setDate(en30.getDate()+30);
+  const en30Str=en30.toISOString().split('T')[0];
+  const en60=new Date();en60.setDate(en60.getDate()+60);
+  const en60Str=en60.toISOString().split('T')[0];
+
+  // Load all portal docs with joins
+  let q=db.from('portal_documentos')
+    .select('*,portales_clientes(nombre,url_portal),empleados(nombre),vehiculos(descripcion,patente),empresas(nombre)')
+    .order('fecha_vencimiento',{ascending:true});
+  if(emp) q=q.eq('empresa_id',emp);
+  const {data}=await q;
+  let rows=data||[];
+  if(buscar) rows=rows.filter(r=>
+    (r.portales_clientes?.nombre||'').toLowerCase().includes(buscar)||
+    (r.descripcion||'').toLowerCase().includes(buscar)||
+    (r.empleados?.nombre||'').toLowerCase().includes(buscar)
+  );
+
+  const vencidos=rows.filter(r=>r.fecha_vencimiento<hoyStr);
+  const enMes=rows.filter(r=>r.fecha_vencimiento>=hoyStr&&r.fecha_vencimiento<=en30Str);
+  const en2meses=rows.filter(r=>r.fecha_vencimiento>en30Str&&r.fecha_vencimiento<=en60Str);
+
+  // Badge
+  const badge=document.getElementById('badge-portales');
+  if(badge){
+    const n=vencidos.length+enMes.length;
+    badge.textContent=n;badge.style.display=n>0?'inline':'none';
+  }
+
+  document.getElementById('kpis').innerHTML=`
+    <div class="kpi-card red"><div class="kpi-label">Vencidos</div><div class="kpi-value">${vencidos.length}</div></div>
+    <div class="kpi-card orange"><div class="kpi-label">Vencen en 30 dias</div><div class="kpi-value">${enMes.length}</div></div>
+    <div class="kpi-card blue"><div class="kpi-label">Vencen en 60 dias</div><div class="kpi-value">${en2meses.length}</div></div>
+    <div class="kpi-card green"><div class="kpi-label">Total documentos</div><div class="kpi-value">${rows.length}</div></div>`;
+
+  // Group by portal for semaforo cards
+  const porPortal={};
+  rows.forEach(r=>{
+    const pid=r.portal_id;
+    const pnom=r.portales_clientes?.nombre||'Sin portal';
+    const purl=r.portales_clientes?.url_portal||null;
+    if(!porPortal[pid]) porPortal[pid]={nombre:pnom,url:purl,venc:0,prox:0,ok:0,pend:0,total:0};
+    if(r.fecha_vencimiento<hoyStr) porPortal[pid].venc++;
+    else if(r.fecha_vencimiento<=en30Str) porPortal[pid].prox++;
+    else porPortal[pid].ok++;
+    if(r.estado_portal==='pendiente') porPortal[pid].pend++;
+    porPortal[pid].total++;
+  });
+
+  const semaforos=Object.entries(porPortal).map(([pid,p])=>{
+    const color=p.venc>0?'var(--red)':p.prox>0?'var(--orange)':'var(--green)';
+    const bgColor=p.venc>0?'rgba(239,68,68,0.08)':p.prox>0?'rgba(245,158,11,0.08)':'rgba(16,185,129,0.08)';
+    const dot=p.venc>0?'var(--red)':p.prox>0?'var(--orange)':'var(--green)';
+    return`<div style="background:${bgColor};border:1px solid ${color}33;border-radius:10px;padding:16px;min-width:180px;cursor:pointer"
+      onclick="filtrarPorPortal('${pid}')">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">
+        <span style="font-weight:600;font-size:14px">${p.nombre}</span>
+        <span style="width:10px;height:10px;border-radius:50%;background:${dot};display:inline-block"></span>
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px;text-align:center">
+        <div style="background:rgba(239,68,68,0.1);border-radius:6px;padding:4px">
+          <div style="font-size:18px;font-weight:600;color:var(--red)">${p.venc}</div>
+          <div style="font-size:10px;color:var(--muted)">Vencidos</div>
+        </div>
+        <div style="background:rgba(245,158,11,0.1);border-radius:6px;padding:4px">
+          <div style="font-size:18px;font-weight:600;color:var(--orange)">${p.prox}</div>
+          <div style="font-size:10px;color:var(--muted)">Por vencer</div>
+        </div>
+        <div style="background:rgba(16,185,129,0.1);border-radius:6px;padding:4px">
+          <div style="font-size:18px;font-weight:600;color:var(--green)">${p.ok}</div>
+          <div style="font-size:10px;color:var(--muted)">OK</div>
+        </div>
+      </div>
+      ${p.pend>0?`<div style="margin-top:8px;font-size:11px;color:var(--orange)">${p.pend} pendiente${p.pend>1?'s':''} de aprobacion</div>`:''}
+      ${p.url?`<a href="${p.url}" target="_blank" onclick="event.stopPropagation()" style="font-size:11px;color:var(--blue);text-decoration:none;margin-top:6px;display:block">Ir al portal ↗</a>`:''}
+    </div>`;
+  }).join('');
+
+  document.getElementById('contenido').innerHTML=`
+    <div style="display:flex;gap:12px;flex-wrap:wrap;margin-bottom:20px">
+      ${semaforos||'<div style="color:var(--muted);font-size:13px;padding:20px">Sin portales cargados. Usa el boton para agregar el primer documento.</div>'}
+    </div>
+    <div class="panel">
+      <div class="panel-header">
+        <h3>${rows.length} documentos en portales</h3>
+        <div style="display:flex;gap:8px">
+          <select id="filtro-portal" onchange="cargarPortales()" style="padding:6px 10px;background:var(--bg3);border:1px solid var(--border);border-radius:6px;color:var(--text);font-size:12px;outline:none">
+            <option value="">Todos los portales</option>
+            ${Object.entries(porPortal).map(([pid,p])=>`<option value="${pid}">${p.nombre}</option>`).join('')}
+          </select>
+          <select id="filtro-estado-portal" onchange="cargarPortales()" style="padding:6px 10px;background:var(--bg3);border:1px solid var(--border);border-radius:6px;color:var(--text);font-size:12px;outline:none">
+            <option value="">Todos los estados</option>
+            <option value="vencido">Vencido</option>
+            <option value="por_vencer">Por vencer (30d)</option>
+            <option value="aprobado">Aprobado</option>
+            <option value="pendiente">Pendiente</option>
+            <option value="rechazado">Rechazado</option>
+          </select>
+        </div>
+      </div>
+      <div style="overflow-x:auto"><table>
+        <thead><tr>
+          <th>Portal</th><th>Tipo</th><th>Aplica a</th><th>Entidad</th>
+          <th>Descripcion</th><th>Cargado</th><th>Vencimiento</th>
+          <th>Estado portal</th><th>Acciones</th>
+        </tr></thead>
+        <tbody>${rows.length?rows.map(r=>{
+          const esV=r.fecha_vencimiento<hoyStr;
+          const esP=r.fecha_vencimiento>=hoyStr&&r.fecha_vencimiento<=en30Str;
+          const dias=Math.ceil((new Date(r.fecha_vencimiento+'T12:00:00')-new Date())/(1000*60*60*24));
+          const entidad=r.aplica_a==='empleado'?(r.empleados?.nombre||'—'):
+                        r.aplica_a==='vehiculo'?(r.vehiculos?.descripcion||(r.vehiculos?.patente||'—')):
+                        (r.empresas?.nombre||'Empresa');
+          return`<tr>
+            <td>
+              <div style="font-weight:500;font-size:13px">${r.portales_clientes?.nombre||'—'}</div>
+              ${r.portales_clientes?.url_portal?`<a href="${r.portales_clientes.url_portal}" target="_blank" style="font-size:11px;color:var(--blue);text-decoration:none">Ir al portal ↗</a>`:''}
+            </td>
+            <td><span style="font-size:11px;padding:2px 8px;border-radius:4px;background:var(--bg3);color:var(--muted)">${MP_TIPO_L[r.tipo]||r.tipo}</span></td>
+            <td style="font-size:12px;color:var(--muted)">${r.aplica_a}</td>
+            <td style="font-size:13px">${entidad}</td>
+            <td style="font-size:12px;color:var(--muted);max-width:140px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${r.descripcion||'—'}</td>
+            <td class="mono" style="font-size:12px">${r.fecha_carga_portal?new Date(r.fecha_carga_portal+'T12:00:00').toLocaleDateString('es-AR'):'—'}</td>
+            <td class="mono" style="color:${esV?'var(--red)':esP?'var(--orange)':'var(--text)'}">
+              ${new Date(r.fecha_vencimiento+'T12:00:00').toLocaleDateString('es-AR')}
+              ${esV?'<div style="font-size:10px;color:var(--red)">VENCIDO</div>':''}
+              ${esP?`<div style="font-size:10px;color:var(--orange)">En ${dias}d</div>`:''}
+            </td>
+            <td><span style="font-size:11px;padding:2px 10px;border-radius:20px;${MP_ESTADO_STYLE[r.estado_portal]||''}">${r.estado_portal||'—'}</span></td>
+            <td><div style="display:flex;gap:6px">
+              <button class="btn btn-sm btn-ghost" onclick="editarVencimientoPortal('${r.id}')">Renovar</button>
+              <button class="btn btn-sm btn-danger" onclick="borrarPortalDoc('${r.id}')">×</button>
+            </div></td>
+          </tr>`;
+        }).join(''):'<tr><td colspan="9" style="text-align:center;padding:40px;color:var(--muted)">Sin documentos cargados en portales</td></tr>'}</tbody>
+      </table></div>
+    </div>`;
+}
+
+function filtrarPorPortal(portalId){
+  const sel=document.getElementById('filtro-portal');
+  if(sel) sel.value=portalId;
+  // Re-render filtered — simplest: just reload with that portal highlighted
+  const rows=document.querySelectorAll('tbody tr[data-portal]');
+}
+
+async function editarVencimientoPortal(id){
+  const nuevaFecha=prompt('Nueva fecha de vencimiento (YYYY-MM-DD):');
+  if(!nuevaFecha) return;
+  if(!/^\d{4}-\d{2}-\d{2}$/.test(nuevaFecha)){alert('Formato invalido. Usa YYYY-MM-DD');return;}
+  const {error}=await db.from('portal_documentos').update({
+    fecha_vencimiento:nuevaFecha,
+    estado_portal:'aprobado',
+    fecha_carga_portal:hoy(),
+  }).eq('id',id);
+  if(error){alert('Error: '+error.message);return;}
+  cargarPortales();
+}
+
+async function borrarPortalDoc(id){
+  if(!confirm('Borrar este documento del portal?')) return;
+  await db.from('portal_documentos').delete().eq('id',id);
+  cargarPortales();
+}
+
+function cerrarModal(id){document.getElementById(id).classList.remove('show');}
+async function logout(){await db.auth.signOut();window.location.href='login.html';}
+
+init();
+</script>
+</body>
+</html>

@@ -117,6 +117,7 @@
   <a class="nav-item active" href="caja.html"><svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>Caja y bancos</a>
   <div class="nav-section">RRHH</div>
   <a class="nav-item" href="empleados.html"><svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z"/></svg>Empleados</a>
+  <a class="nav-item" href="syh.html"><svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"/></svg>Seg. e Higiene</a>
   <div class="nav-bottom"><button class="btn-logout" onclick="logout()">Cerrar sesión</button></div>
 </nav>
 
@@ -159,6 +160,7 @@
     <button class="tab" onclick="cambiarTab('cheques',this)">Cheques</button>
     <button class="tab" onclick="cambiarTab('flujo',this)">Flujo proyectado</button>
     <button class="tab" onclick="cambiarTab('ordenes',this)">💳 Órdenes de pago <span id="badge-ordenes" style="display:none;background:var(--red);color:#fff;border-radius:20px;padding:1px 7px;font-size:11px;margin-left:4px"></span></button>
+    <button class="tab" onclick="cambiarTab('fci',this)">📈 FCI</button>
     <button class="tab" onclick="cambiarTab('importar',this)">↑ Importar banco</button>
   </div>
 
@@ -325,6 +327,53 @@
   </div>
 </div>
 
+<!-- MODAL FCI -->
+<div class="modal-overlay" id="modal-fci">
+  <div class="modal" style="max-width:480px">
+    <h3>Movimiento FCI</h3>
+    <div class="form-row">
+      <div class="form-group">
+        <label>Empresa</label>
+        <select id="nf-empresa">
+          <option value="a1000000-0000-0000-0000-000000000001">Hidromec</option>
+          <option value="a2000000-0000-0000-0000-000000000002">Placemem</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label>Tipo de movimiento</label>
+        <select id="nf-tipo">
+          <option value="deposito">Deposito (ingresa al FCI)</option>
+          <option value="rescate">Rescate (sale del FCI)</option>
+        </select>
+      </div>
+    </div>
+    <div class="form-row">
+      <div class="form-group">
+        <label>Fondo / Entidad</label>
+        <input type="text" id="nf-fondo" placeholder="Ej: Allaria, Balanz, Mariva...">
+      </div>
+      <div class="form-group">
+        <label>Fecha</label>
+        <input type="date" id="nf-fecha">
+      </div>
+    </div>
+    <div class="form-row">
+      <div class="form-group">
+        <label>Monto</label>
+        <input type="number" id="nf-monto" placeholder="0.00">
+      </div>
+      <div class="form-group">
+        <label>Observaciones (opcional)</label>
+        <input type="text" id="nf-obs" placeholder="Referencia, cuenta origen...">
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" onclick="cerrarModal('modal-fci')">Cancelar</button>
+      <button class="btn btn-primary" onclick="guardarFCI()">Guardar</button>
+    </div>
+  </div>
+</div>
+
 <script>
 // Mapeo cuentas → empresa
 const CUENTAS={
@@ -348,6 +397,7 @@ async function init(){
   const acceso = await verificarAcceso('caja');
   if (!acceso) return;
   document.getElementById('sel-mes').value=new Date().toISOString().substring(0,7);
+  document.getElementById('nf-fecha').value=hoy();
   document.getElementById('nm-fecha').value=hoy();
   document.getElementById('nc-emision').value=hoy();
   cargarTodo();
@@ -358,13 +408,13 @@ function cambiarTab(tab,btn){
   tabActual=tab;
   document.querySelectorAll('.tab').forEach(t=>t.classList.remove('active'));
   if(btn) btn.classList.add('active');
-  // Mostrar filtro estado solo en pestaña cheques
   const selEstado=document.getElementById('sel-estado-cheque');
   if(selEstado) selEstado.style.display=tab==='cheques'?'':'none';
   if(tab==='movimientos') cargarMovimientos();
   else if(tab==='cheques') cargarCheques();
   else if(tab==='flujo') cargarFlujo();
   else if(tab==='ordenes') cargarOrdenes();
+  else if(tab==='fci') cargarFCI();
   else mostrarImportar();
 }
 
@@ -373,6 +423,7 @@ async function cargarTodo(){
   else if(tabActual==='cheques') cargarCheques();
   else if(tabActual==='flujo') cargarFlujo();
   else if(tabActual==='ordenes') cargarOrdenes();
+  else if(tabActual==='fci') cargarFCI();
 }
 
 async function cargarKpis(){
@@ -394,11 +445,19 @@ async function cargarKpis(){
   const egresos=rows.filter(r=>r.tipo==='egreso').reduce((s,r)=>s+Number(r.monto||0),0);
   const neto=ingresos-egresos;
 
+  // FCI saldo total acumulado
+  let qFCI=db.from('caja_fci').select('tipo,monto');
+  if(emp) qFCI=qFCI.eq('empresa_id',emp);
+  const {data:fciData}=await qFCI;
+  const fciSaldo=(fciData||[]).reduce((s,r)=>s+(r.tipo==='deposito'?Number(r.monto||0):-Number(r.monto||0)),0);
+  const totalDisponible=neto+fciSaldo;
+
   document.getElementById('kpis').innerHTML=`
     <div class="kpi-card green"><div class="kpi-label">Ingresos del mes</div><div class="kpi-value" style="color:var(--green)">${fmt(ingresos)}</div></div>
     <div class="kpi-card red"><div class="kpi-label">Egresos del mes</div><div class="kpi-value" style="color:var(--red)">${fmt(egresos)}</div></div>
-    <div class="kpi-card ${neto>=0?'blue':'red'}"><div class="kpi-label">Resultado del mes</div><div class="kpi-value" style="color:${neto>=0?'var(--green)':'var(--red)'}">${fmt(neto)}</div></div>
-    <div class="kpi-card teal"><div class="kpi-label">Movimientos</div><div class="kpi-value">${rows.length}</div></div>`;
+    <div class="kpi-card ${neto>=0?'blue':'red'}"><div class="kpi-label">Resultado operativo</div><div class="kpi-value" style="color:${neto>=0?'var(--green)':'var(--red)'}">${fmt(neto)}</div></div>
+    <div class="kpi-card teal"><div class="kpi-label">FCI (saldo invertido)</div><div class="kpi-value" style="color:#14b8a6">${fmt(fciSaldo)}</div></div>
+    <div class="kpi-card blue"><div class="kpi-label">Total disponible (op. + FCI)</div><div class="kpi-value" style="color:${totalDisponible>=0?'var(--green)':'var(--red)'}">${fmt(totalDisponible)}</div></div>`;
 }
 
 async function cargarMovimientos(){
@@ -1185,6 +1244,99 @@ function generarPDFOrden(eg,nro,fecha,metodo,operador){
   doc.line(L+1,yP+20,R-1,yP+20);
 
   doc.save('OrdenPago_'+nro+'.pdf');
+}
+
+
+// ═══════════════ FCI — FONDO DE INVERSION ═══════════════════
+async function cargarFCI(){
+  document.getElementById('kpis').innerHTML='';
+  document.getElementById('contenido').innerHTML='<div class="spinner-wrap"><div class="spinner"></div>Cargando...</div>';
+  const emp=document.getElementById('sel-empresa').value;
+
+  let q=db.from('caja_fci').select('*,empresas(nombre)').order('fecha',{ascending:false});
+  if(emp) q=q.eq('empresa_id',emp);
+  const {data}=await q;
+  const rows=data||[];
+
+  const depositos=rows.filter(r=>r.tipo==='deposito').reduce((s,r)=>s+Number(r.monto||0),0);
+  const rescates=rows.filter(r=>r.tipo==='rescate').reduce((s,r)=>s+Number(r.monto||0),0);
+  const saldo=depositos-rescates;
+
+  // Saldo por fondo
+  const porFondo={};
+  rows.forEach(r=>{
+    if(!porFondo[r.fondo]) porFondo[r.fondo]={dep:0,res:0};
+    if(r.tipo==='deposito') porFondo[r.fondo].dep+=Number(r.monto||0);
+    else porFondo[r.fondo].res+=Number(r.monto||0);
+  });
+
+  document.getElementById('kpis').innerHTML=`
+    <div class="kpi-card green"><div class="kpi-label">Total depositado</div><div class="kpi-value" style="font-size:16px">${fmt(depositos)}</div></div>
+    <div class="kpi-card orange"><div class="kpi-label">Total rescatado</div><div class="kpi-value" style="font-size:16px">${fmt(rescates)}</div></div>
+    <div class="kpi-card blue"><div class="kpi-label">Saldo invertido actual</div><div class="kpi-value" style="color:var(--blue);font-size:16px">${fmt(saldo)}</div></div>
+    <div class="kpi-card teal"><div class="kpi-label">Movimientos</div><div class="kpi-value">${rows.length}</div></div>`;
+
+  const fondoCards=Object.entries(porFondo).map(([fondo,v])=>{
+    const s=v.dep-v.res;
+    return`<div style="background:var(--bg3);border:1px solid var(--border);border-radius:10px;padding:16px 18px;min-width:200px">
+      <div style="font-size:12px;color:var(--muted);margin-bottom:4px">${fondo||'Sin nombre'}</div>
+      <div style="font-size:20px;font-weight:600;font-family:'DM Mono',monospace;color:${s>0?'var(--green)':'var(--muted)'}">${fmt(s)}</div>
+      <div style="font-size:11px;color:var(--muted);margin-top:4px">Depositos: ${fmt(v.dep)} / Rescates: ${fmt(v.res)}</div>
+    </div>`;
+  }).join('');
+
+  document.getElementById('contenido').innerHTML=`
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px">
+      <h3 style="font-size:14px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:0.8px">Saldo por fondo</h3>
+      <button class="btn btn-primary btn-sm" onclick="document.getElementById('modal-fci').classList.add('show')">+ Movimiento FCI</button>
+    </div>
+    ${fondoCards?`<div style="display:flex;gap:12px;flex-wrap:wrap;margin-bottom:24px">${fondoCards}</div>`:''}
+    <div class="panel">
+      <div class="panel-header"><h3>${rows.length} movimientos</h3></div>
+      <div style="overflow-x:auto"><table>
+        <thead><tr><th>Empresa</th><th>Fecha</th><th>Tipo</th><th>Fondo / Entidad</th><th>Monto</th><th>Observaciones</th><th></th></tr></thead>
+        <tbody>${rows.length?rows.map(r=>`<tr>
+          <td style="font-size:12px">${r.empresas?.nombre||'—'}</td>
+          <td class="mono">${fmtF(r.fecha)}</td>
+          <td>
+            <span style="font-size:11px;padding:3px 10px;border-radius:20px;font-weight:500;background:${r.tipo==='deposito'?'rgba(16,185,129,0.15)':'rgba(245,158,11,0.15)'};color:${r.tipo==='deposito'?'var(--green)':'var(--orange)'}">
+              ${r.tipo==='deposito'?'Deposito':'Rescate'}
+            </span>
+          </td>
+          <td style="font-weight:500">${r.fondo||'—'}</td>
+          <td class="mono" style="color:${r.tipo==='deposito'?'var(--green)':'var(--orange)'}">
+            ${r.tipo==='deposito'?'+':'-'}${fmt(r.monto)}
+          </td>
+          <td style="font-size:12px;color:var(--muted)">${r.observaciones||'—'}</td>
+          <td><button class="btn btn-sm btn-danger" onclick="borrarFCI('${r.id}')">x</button></td>
+        </tr>`).join(''):'<tr><td colspan="7" style="text-align:center;padding:40px;color:var(--muted)">Sin movimientos FCI registrados</td></tr>'}</tbody>
+      </table></div>
+    </div>`;
+}
+
+async function guardarFCI(){
+  const monto=parseFloat(document.getElementById('nf-monto').value)||0;
+  const fondo=document.getElementById('nf-fondo').value.trim();
+  if(!monto||!fondo){alert('Completa fondo y monto.');return;}
+  const {error}=await db.from('caja_fci').insert({
+    empresa_id:document.getElementById('nf-empresa').value,
+    tipo:document.getElementById('nf-tipo').value,
+    fondo,
+    fecha:document.getElementById('nf-fecha').value,
+    monto,
+    observaciones:document.getElementById('nf-obs').value||null,
+  });
+  if(error){alert('Error: '+error.message);return;}
+  cerrarModal('modal-fci');
+  cargarFCI();
+  cargarKpis();
+}
+
+async function borrarFCI(id){
+  if(!confirm('Borrar este movimiento FCI?')) return;
+  await db.from('caja_fci').delete().eq('id',id);
+  cargarFCI();
+  cargarKpis();
 }
 
 function cerrarModal(id){document.getElementById(id).classList.remove('show');}

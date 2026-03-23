@@ -98,8 +98,9 @@
   <a data-modulo="compras" class="nav-item" href="compras.html"><svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 3h2l.4 2M7 13h10l4-8H5.4M7 13L5.4 5M7 13l-2.293 2.293c-.63.63-.184 1.707.707 1.707H17m0 0a2 2 0 100 4 2 2 0 000-4zm-8 2a2 2 0 11-4 0 2 2 0 014 0z"/></svg>Compras</a>
   <a data-modulo="caja" class="nav-item" href="caja.html"><svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>Caja</a>
   <a data-modulo="impuestos" class="nav-item" href="impuestos.html"><svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 14l6-6m-5.5.5h.01m4.99 5h.01M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16l3.5-2 3.5 2 3.5-2 3.5 2z"/></svg>Impuestos</a>
-  <div data-seccion="empleados" class="nav-section">RRHH</div>
+  <div data-seccion="empleados,syh" class="nav-section">RRHH</div>
   <a data-modulo="empleados" class="nav-item active" href="empleados.html"><svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z"/></svg>Empleados</a>
+  <a data-modulo="syh" class="nav-item" href="syh.html"><svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"/></svg>Seg. e Higiene</a>
   <div class="nav-bottom"><button class="btn-logout" onclick="logout()">Cerrar sesión</button></div>
 </nav>
 
@@ -112,10 +113,12 @@
   <div class="tabs">
     <button class="tab active" onclick="cambiarTab('empleados',this)">Empleados</button>
     <button class="tab" onclick="cambiarTab('sueldos',this)">Sueldos</button>
-    <button class="tab" onclick="cambiarTab('clientes',this)">Clientes</button>
     <button class="tab" onclick="cambiarTab('costos',this)">Costos por categoría</button>
-    <button class="tab" onclick="cambiarTab('documentos',this)">Documentos <span id="badge-docs-venc" style="display:none;background:var(--red);color:#fff;border-radius:20px;padding:1px 7px;font-size:11px;margin-left:4px"></span></button>
+    <button class="tab" onclick="cambiarTab('docs-empresa',this)">Docs Empresa <span id="badge-docs-venc" style="display:none;background:var(--red);color:#fff;border-radius:20px;padding:1px 7px;font-size:11px;margin-left:4px"></span></button>
+    <button class="tab" onclick="cambiarTab('docs-vehiculos',this)">Docs Vehiculos/Equipos</button>
+    <button class="tab" onclick="cambiarTab('docs-personal',this)">Docs Personal</button>
     <button class="tab" onclick="cambiarTab('ausencias',this)">Licencias y ausencias</button>
+    <button class="tab" onclick="cambiarTab('ausentismo',this)">Analisis ausentismo</button>
   </div>
 
   <div class="filtros">
@@ -268,32 +271,24 @@
     <div class="form-row">
       <div class="form-group">
         <label>Empresa</label>
-        <select id="nd-empresa" onchange="cargarEmpleadosDocModal()">
+        <select id="nd-empresa" onchange="prepararModalDoc()">
           <option value="a1000000-0000-0000-0000-000000000001">Hidromec</option>
           <option value="a2000000-0000-0000-0000-000000000002">Placemem</option>
         </select>
       </div>
-      <div class="form-group">
+      <div class="form-group" id="nd-row-empleado">
         <label>Empleado</label>
         <select id="nd-empleado"></select>
+      </div>
+      <div class="form-group" id="nd-row-vehiculo" style="display:none">
+        <label>Vehiculo / Equipo</label>
+        <select id="nd-vehiculo"></select>
       </div>
     </div>
     <div class="form-row">
       <div class="form-group">
         <label>Tipo de documento</label>
-        <select id="nd-tipo">
-          <option value="dni">DNI</option>
-          <option value="art">ART — Constancia de cobertura</option>
-          <option value="preocupacional">Apto preocupacional</option>
-          <option value="alta_afip">Alta AFIP</option>
-          <option value="cv">CV</option>
-          <option value="cert_capacitacion">Certificado de capacitación</option>
-          <option value="cert_altura">Habilitación trabajos en altura</option>
-          <option value="cert_espacio">Habilitación espacio confinado</option>
-          <option value="examen_periodico">Examen médico periódico</option>
-          <option value="carnet_manejo">Carnet de conducir</option>
-          <option value="otro">Otro</option>
-        </select>
+        <select id="nd-tipo"></select>
       </div>
       <div class="form-group">
         <label>Fecha de vencimiento</label>
@@ -302,8 +297,8 @@
     </div>
     <div class="form-row full">
       <div class="form-group">
-        <label>Descripción (opcional)</label>
-        <input type="text" id="nd-descripcion" placeholder="Ej: ART Galeno 2026, Carnet B1...">
+        <label>Descripcion (opcional)</label>
+        <input type="text" id="nd-descripcion" placeholder="Ej: ART Galeno 2026, patente ABC123...">
       </div>
     </div>
     <div class="form-row full">
@@ -380,6 +375,17 @@
       <div class="form-group">
         <label>Observaciones</label>
         <textarea id="na-obs" placeholder="Diagnóstico, número de expediente ART, etc."></textarea>
+      </div>
+    </div>
+    <div class="form-row full">
+      <div class="form-group">
+        <label>Certificado medico / justificacion (opcional)</label>
+        <input type="file" id="na-archivo" accept=".pdf,.jpg,.jpeg,.png" style="padding:8px;background:var(--bg3);border:1px solid var(--border);border-radius:8px;color:var(--text);width:100%">
+      </div>
+    </div>
+    <div id="na-upload-progress" style="display:none;margin-top:4px">
+      <div style="height:4px;background:var(--bg3);border-radius:2px">
+        <div id="na-progress-bar" style="height:100%;background:var(--blue);border-radius:2px;width:0%;transition:width 0.3s"></div>
       </div>
     </div>
     <div class="modal-footer">
@@ -465,14 +471,18 @@ function cambiarTab(tab,btn){
   document.querySelectorAll('.tab').forEach(t=>t.classList.remove('active'));
   btn.classList.add('active');
   const btnNuevo=document.getElementById('btn-nuevo');
-  if(tab==='clientes') btnNuevo.textContent='+ Nuevo cliente';
-  else if(tab==='sueldos') btnNuevo.textContent='+ Registrar sueldo';
-  else if(tab==='documentos') btnNuevo.textContent='+ Subir documento';
+  const noDoc=['ausentismo','costos'];
+  if(tab==='sueldos') btnNuevo.textContent='+ Registrar sueldo';
+  else if(tab==='docs-empresa') btnNuevo.textContent='+ Subir documento';
+  else if(tab==='docs-vehiculos') btnNuevo.textContent='+ Subir documento';
+  else if(tab==='docs-personal') btnNuevo.textContent='+ Subir documento';
   else if(tab==='ausencias') btnNuevo.textContent='+ Registrar ausencia';
-  else if(tab==='costos') btnNuevo.textContent='';
+  else if(tab==='vehiculos') btnNuevo.textContent='+ Nuevo vehiculo/equipo';
+  else if(noDoc.includes(tab)) btnNuevo.textContent='';
   else btnNuevo.textContent='+ Nuevo empleado';
-  btnNuevo.style.display=tab==='costos'?'none':'';
-  document.getElementById('f-estado').style.display=(tab==='sueldos'||tab==='costos'||tab==='documentos'||tab==='ausencias')?'none':'';
+  btnNuevo.style.display=noDoc.includes(tab)?'none':'';
+  const hideFiltro=['sueldos','costos','docs-empresa','docs-vehiculos','docs-personal','ausencias','ausentismo'];
+  document.getElementById('f-estado').style.display=hideFiltro.includes(tab)?'none':'';
   recargar();
 }
 
@@ -480,15 +490,20 @@ function recargar(){
   if(tabActual==='empleados') cargarEmpleados();
   else if(tabActual==='sueldos') cargarSueldos();
   else if(tabActual==='costos') cargarCostos();
-  else if(tabActual==='documentos') cargarDocumentos();
+  else if(tabActual==='docs-empresa') cargarDocumentos('empresa');
+  else if(tabActual==='docs-vehiculos') cargarDocumentos('vehiculo');
+  else if(tabActual==='docs-personal') cargarDocumentos('personal');
   else if(tabActual==='ausencias') cargarAusencias();
-  else cargarClientes();
+  else if(tabActual==='ausentismo') cargarAnalisisAusentismo();
 }
 
 function abrirNuevo(){
-  if(tabActual==='clientes') abrirNuevoCliente();
-  else if(tabActual==='sueldos') abrirNuevoSueldo();
-  else if(tabActual==='documentos') document.getElementById('modal-documento').classList.add('show');
+  if(tabActual==='sueldos') abrirNuevoSueldo();
+  else if(tabActual==='docs-empresa'||tabActual==='docs-vehiculos'||tabActual==='docs-personal'){
+    docCategoria=tabActual==='docs-empresa'?'empresa':tabActual==='docs-vehiculos'?'vehiculo':'personal';
+    prepararModalDoc();
+    document.getElementById('modal-documento').classList.add('show');
+  }
   else if(tabActual==='ausencias') document.getElementById('modal-ausencia').classList.add('show');
   else abrirNuevoEmpleado();
 }
@@ -832,6 +847,54 @@ async function guardarCostoRol(id,empId,rol){
 
 
 // ═══════════════ DOCUMENTOS ═══════════════════════════════════
+let docCategoria='personal';
+
+const DOC_TIPOS={
+  empresa:[
+    {v:'f931',l:'F931 — Nomina AFIP'},
+    {v:'acuse_pago',l:'Acuse de pago haberes'},
+    {v:'vb_sindical',l:'VB sindical'},
+    {v:'art_empresa',l:'ART empresa — poliza'},
+    {v:'no_repeticion',l:'No repeticion de siniestros'},
+    {v:'habilitacion_municipal',l:'Habilitacion municipal'},
+    {v:'cert_empresa',l:'Certificado / habilitacion empresa'},
+    {v:'otro_empresa',l:'Otro'},
+  ],
+  vehiculo:[
+    {v:'cedula_verde',l:'Cedula verde'},
+    {v:'patente',l:'Patente / VTV'},
+    {v:'seguro',l:'Seguro vehicular'},
+    {v:'vtv',l:'VTV / RTO'},
+    {v:'rto',l:'RTO — revision tecnica'},
+    {v:'cert_habilitacion_equipo',l:'Certificacion equipo'},
+    {v:'revision_periodica',l:'Revision periodica'},
+    {v:'otro_vehiculo',l:'Otro'},
+  ],
+  personal:[
+    {v:'dni',l:'DNI'},
+    {v:'art',l:'ART — constancia cobertura'},
+    {v:'preocupacional',l:'Apto preocupacional'},
+    {v:'alta_afip',l:'Alta AFIP'},
+    {v:'cv',l:'CV'},
+    {v:'cert_altura',l:'Habilitacion trabajos en altura'},
+    {v:'cert_espacio',l:'Habilitacion espacio confinado'},
+    {v:'examen_periodico',l:'Examen medico periodico'},
+    {v:'carnet_manejo',l:'Carnet de conducir'},
+    {v:'otro_personal',l:'Otro'},
+  ],
+};
+
+async function prepararModalDoc(){
+  document.getElementById('nd-tipo').innerHTML=DOC_TIPOS[docCategoria].map(t=>`<option value="${t.v}">${t.l}</option>`).join('');
+  const showEmp=docCategoria==='empresa';
+  const showVeh=docCategoria==='vehiculo';
+  document.getElementById('nd-row-empleado').style.display=(showEmp||showVeh)?'none':'';
+  document.getElementById('nd-row-vehiculo').style.display=showVeh?'':'none';
+  if(showVeh) await cargarVehiculosDocModal();
+  if(!showEmp&&!showVeh) await cargarEmpleadosDocModal();
+  document.getElementById('doc-titulo').textContent=
+    showEmp?'Subir documento de empresa':showVeh?'Subir documento vehiculo/equipo':'Subir documento personal';
+}
 
 async function cargarEmpleadosDocModal(){
   const empId=document.getElementById('nd-empresa').value;
@@ -839,7 +902,14 @@ async function cargarEmpleadosDocModal(){
   document.getElementById('nd-empleado').innerHTML=(data||[]).map(e=>`<option value="${e.id}">${e.nombre}</option>`).join('');
 }
 
-async function cargarDocumentos(){
+async function cargarVehiculosDocModal(){
+  const empId=document.getElementById('nd-empresa').value;
+  const {data}=await db.from('vehiculos').select('id,descripcion,patente').eq('empresa_id',empId).eq('activo',true).order('descripcion');
+  const sel=document.getElementById('nd-vehiculo');
+  if(sel) sel.innerHTML=(data||[]).map(v=>`<option value="${v.id}">${v.descripcion}${v.patente?' — '+v.patente:''}</option>`).join('');
+}
+
+async function cargarDocumentos(categoria){
   document.getElementById('kpis').innerHTML='';
   document.getElementById('contenido').innerHTML='<div class="spinner-wrap"><div class="spinner"></div>Cargando...</div>';
   const emp=document.getElementById('f-empresa').value;
@@ -849,131 +919,217 @@ async function cargarDocumentos(){
   const en30Str=en30.toISOString().split('T')[0];
 
   let q=db.from('empleados_documentos')
-    .select('*,empleados(nombre),empresas(nombre)')
+    .select('*,empleados(nombre),vehiculos(descripcion,patente),empresas(nombre)')
+    .eq('categoria',categoria)
     .order('fecha_vencimiento',{ascending:true,nullsFirst:false});
   if(emp) q=q.eq('empresa_id',emp);
   const {data}=await q;
   let rows=data||[];
-  if(buscar) rows=rows.filter(r=>(r.empleados?.nombre||'').toLowerCase().includes(buscar)||(r.tipo||'').toLowerCase().includes(buscar));
+  if(buscar) rows=rows.filter(r=>
+    (r.empleados?.nombre||'').toLowerCase().includes(buscar)||
+    (r.vehiculos?.descripcion||'').toLowerCase().includes(buscar)||
+    (r.tipo||'').toLowerCase().includes(buscar)||
+    (r.descripcion||'').toLowerCase().includes(buscar)
+  );
 
   const vencidos=rows.filter(r=>r.fecha_vencimiento&&r.fecha_vencimiento<hoyStr);
   const proxVencer=rows.filter(r=>r.fecha_vencimiento&&r.fecha_vencimiento>=hoyStr&&r.fecha_vencimiento<=en30Str);
-  const vigentes=rows.filter(r=>!r.fecha_vencimiento||r.fecha_vencimiento>en30Str);
 
-  // Badge en tab
   const badge=document.getElementById('badge-docs-venc');
   const alertCount=vencidos.length+proxVencer.length;
-  if(badge){badge.textContent=alertCount;badge.style.display=alertCount>0?'inline':'none';}
+  if(badge&&categoria==='empresa'){badge.textContent=alertCount;badge.style.display=alertCount>0?'inline':'none';}
 
+  const CAT_LABEL={empresa:'Empresa',vehiculo:'Vehiculo/Equipo',personal:'Personal'};
   document.getElementById('kpis').innerHTML=`
     <div class="kpi-card red"><div class="kpi-label">Vencidos</div><div class="kpi-value">${vencidos.length}</div></div>
-    <div class="kpi-card orange"><div class="kpi-label">Vencen en 30 días</div><div class="kpi-value">${proxVencer.length}</div></div>
-    <div class="kpi-card green"><div class="kpi-label">Vigentes</div><div class="kpi-value">${vigentes.length}</div></div>
-    <div class="kpi-card blue"><div class="kpi-label">Total documentos</div><div class="kpi-value">${rows.length}</div></div>`;
+    <div class="kpi-card orange"><div class="kpi-label">Vencen en 30 dias</div><div class="kpi-value">${proxVencer.length}</div></div>
+    <div class="kpi-card green"><div class="kpi-label">Vigentes</div><div class="kpi-value">${rows.length-vencidos.length-proxVencer.length}</div></div>
+    <div class="kpi-card blue"><div class="kpi-label">Total docs ${CAT_LABEL[categoria]}</div><div class="kpi-value">${rows.length}</div></div>`;
 
-  const TIPO_LABELS={
-    dni:'DNI',art:'ART',preocupacional:'Preocupacional',alta_afip:'Alta AFIP',cv:'CV',
-    cert_capacitacion:'Cert. Capacitación',cert_altura:'Habilitación Altura',
-    cert_espacio:'Espacio Confinado',examen_periodico:'Examen Periódico',
-    carnet_manejo:'Carnet Conducir',otro:'Otro'
-  };
+  const allTipos=[...DOC_TIPOS.empresa,...DOC_TIPOS.vehiculo,...DOC_TIPOS.personal];
+  const TIPO_LABEL=Object.fromEntries(allTipos.map(t=>[t.v,t.l]));
+
+  const entidadCol=categoria==='personal'?'Empleado':categoria==='vehiculo'?'Vehiculo':'Empresa';
 
   document.getElementById('contenido').innerHTML=`
     <div style="overflow-x:auto"><table>
-      <thead><tr><th>Empleado</th><th>Empresa</th><th>Tipo</th><th>Descripción</th><th>Vencimiento</th><th>Estado</th><th>Acciones</th></tr></thead>
+      <thead><tr><th>${entidadCol}</th><th>Tipo</th><th>Descripcion</th><th>Vencimiento</th><th>Estado</th><th>Acciones</th></tr></thead>
       <tbody>${rows.length?rows.map(r=>{
+        const entidad=categoria==='personal'?(r.empleados?.nombre||'—'):
+                      categoria==='vehiculo'?(r.vehiculos?.descripcion||(r.vehiculos?.patente||'—')):
+                      (r.empresas?.nombre||'—');
         const venc=r.fecha_vencimiento;
-        const esVencido=venc&&venc<hoyStr;
-        const esProximo=venc&&venc>=hoyStr&&venc<=en30Str;
-        const diasRestantes=venc?Math.ceil((new Date(venc+'T12:00:00')-new Date())/(1000*60*60*24)):null;
+        const esV=venc&&venc<hoyStr;
+        const esP=venc&&venc>=hoyStr&&venc<=en30Str;
+        const dias=venc?Math.ceil((new Date(venc+'T12:00:00')-new Date())/(1000*60*60*24)):null;
         return`<tr>
-          <td style="font-weight:500">${r.empleados?.nombre||'—'}</td>
-          <td style="font-size:12px">${r.empresas?.nombre||'—'}</td>
-          <td><span style="font-size:11px;padding:2px 8px;border-radius:4px;background:var(--bg3);color:var(--muted)">${TIPO_LABELS[r.tipo]||r.tipo}</span></td>
+          <td style="font-weight:500">${entidad}</td>
+          <td><span style="font-size:11px;padding:2px 8px;border-radius:4px;background:var(--bg3);color:var(--muted)">${TIPO_LABEL[r.tipo]||r.tipo}</span></td>
           <td style="font-size:12px;color:var(--muted)">${r.descripcion||'—'}</td>
-          <td class="mono" style="color:${esVencido?'var(--red)':esProximo?'var(--orange)':'var(--text)'}">
+          <td class="mono" style="color:${esV?'var(--red)':esP?'var(--orange)':'var(--text)'}">
             ${venc?new Date(venc+'T12:00:00').toLocaleDateString('es-AR'):'Sin vencimiento'}
-            ${esVencido?'<div style="font-size:10px;color:var(--red)">VENCIDO</div>':''}
-            ${esProximo?`<div style="font-size:10px;color:var(--orange)">Vence en ${diasRestantes}d</div>`:''}
+            ${esV?'<div style="font-size:10px;color:var(--red)">VENCIDO</div>':''}
+            ${esP?`<div style="font-size:10px;color:var(--orange)">Vence en ${dias}d</div>`:''}
           </td>
-          <td>
-            ${esVencido?'<span style="font-size:11px;padding:3px 10px;border-radius:20px;background:rgba(239,68,68,0.15);color:var(--red)">Vencido</span>':
-              esProximo?'<span style="font-size:11px;padding:3px 10px;border-radius:20px;background:rgba(245,158,11,0.15);color:var(--orange)">Por vencer</span>':
-              '<span style="font-size:11px;padding:3px 10px;border-radius:20px;background:rgba(16,185,129,0.15);color:var(--green)">Vigente</span>'}
-          </td>
+          <td>${esV?'<span style="font-size:11px;padding:3px 10px;border-radius:20px;background:rgba(239,68,68,0.15);color:var(--red)">Vencido</span>':
+              esP?'<span style="font-size:11px;padding:3px 10px;border-radius:20px;background:rgba(245,158,11,0.15);color:var(--orange)">Por vencer</span>':
+              '<span style="font-size:11px;padding:3px 10px;border-radius:20px;background:rgba(16,185,129,0.15);color:var(--green)">Vigente</span>'}</td>
           <td><div style="display:flex;gap:6px">
             ${r.archivo_url?`<a href="${r.archivo_url}" target="_blank" class="btn btn-sm btn-ghost">Ver</a>`:''}
             <button class="btn btn-sm btn-danger" onclick="borrarDocumento('${r.id}','${r.archivo_path||''}')">Borrar</button>
           </div></td>
         </tr>`;
-      }).join(''):'<tr><td colspan="7" style="text-align:center;padding:40px;color:var(--muted)">Sin documentos cargados</td></tr>'}</tbody>
+      }).join(''):'<tr><td colspan="6" style="text-align:center;padding:40px;color:var(--muted)">Sin documentos cargados</td></tr>'}</tbody>
     </table></div>`;
 }
 
 async function guardarDocumento(){
-  const empId=document.getElementById('nd-empleado').value;
+  const empId=document.getElementById('nd-empresa').value;
   const tipo=document.getElementById('nd-tipo').value;
   const venc=document.getElementById('nd-vencimiento').value;
   const desc=document.getElementById('nd-descripcion').value;
   const fileInput=document.getElementById('nd-archivo');
   const file=fileInput.files[0];
 
-  if(!empId){alert('Seleccioná un empleado.');return;}
+  let empleadoId=null,vehiculoId=null;
+  if(docCategoria==='personal') empleadoId=document.getElementById('nd-empleado').value||null;
+  if(docCategoria==='vehiculo') vehiculoId=document.getElementById('nd-vehiculo')?.value||null;
 
-  let archivoUrl=null;
-  let archivoPatch=null;
-
+  let archivoUrl=null,archivoPatch=null;
   if(file){
-    // Upload to Supabase Storage
     const ext=file.name.split('.').pop();
-    const path=`documentos/${empId}/${tipo}_${Date.now()}.${ext}`;
+    const path=`documentos/${docCategoria}/${empId}_${Date.now()}.${ext}`;
     document.getElementById('nd-upload-progress').style.display='block';
     document.getElementById('nd-progress-bar').style.width='40%';
     document.getElementById('nd-progress-text').textContent='Subiendo archivo...';
-
-    const {data:uploadData,error:uploadError}=await db.storage
-      .from('empleados-docs')
-      .upload(path,file,{contentType:file.type,upsert:false});
-
-    if(uploadError){
-      document.getElementById('nd-upload-progress').style.display='none';
-      alert('Error al subir archivo: '+uploadError.message);
-      return;
-    }
-
-    document.getElementById('nd-progress-bar').style.width='80%';
+    const {error:uploadError}=await db.storage.from('empleados-docs').upload(path,file,{contentType:file.type,upsert:false});
+    if(uploadError){document.getElementById('nd-upload-progress').style.display='none';alert('Error al subir: '+uploadError.message);return;}
+    document.getElementById('nd-progress-bar').style.width='90%';
     const {data:urlData}=db.storage.from('empleados-docs').getPublicUrl(path);
     archivoUrl=urlData?.publicUrl||null;
     archivoPatch=path;
     document.getElementById('nd-progress-bar').style.width='100%';
-    document.getElementById('nd-progress-text').textContent='Archivo subido';
   }
 
-  const empresaId=document.getElementById('nd-empresa').value;
   const {error}=await db.from('empleados_documentos').insert({
-    empresa_id:empresaId,
-    empleado_id:empId,
-    tipo,
-    descripcion:desc||null,
+    empresa_id:empId,categoria:docCategoria,
+    empleado_id:empleadoId,vehiculo_id:vehiculoId,
+    tipo,descripcion:desc||null,
     fecha_vencimiento:venc||null,
-    archivo_url:archivoUrl,
-    archivo_path:archivoPatch,
+    archivo_url:archivoUrl,archivo_path:archivoPatch,
   });
-
   document.getElementById('nd-upload-progress').style.display='none';
   if(error){alert('Error: '+error.message);return;}
   cerrarModal('modal-documento');
   fileInput.value='';
-  cargarDocumentos();
+  recargar();
 }
 
 async function borrarDocumento(id,path){
-  if(!confirm('¿Borrar este documento?')) return;
-  if(path){
-    await db.storage.from('empleados-docs').remove([path]);
-  }
+  if(!confirm('Borrar este documento?')) return;
+  if(path) await db.storage.from('empleados-docs').remove([path]);
   await db.from('empleados_documentos').delete().eq('id',id);
-  cargarDocumentos();
+  recargar();
+}
+
+// ═══════════════ ANALISIS AUSENTISMO ═══════════════════════
+async function cargarAnalisisAusentismo(){
+  document.getElementById('kpis').innerHTML='';
+  document.getElementById('contenido').innerHTML='<div class="spinner-wrap"><div class="spinner"></div>Analizando...</div>';
+  const emp=document.getElementById('f-empresa').value;
+  const anio=new Date().getFullYear();
+
+  let q=db.from('empleados_ausencias')
+    .select('*,empleados(nombre)')
+    .eq('estado','aprobada')
+    .gte('fecha_inicio',`${anio}-01-01`);
+  if(emp) q=q.eq('empresa_id',emp);
+  const {data}=await q;
+  const rows=data||[];
+
+  // Calcular dias por tipo
+  const porTipo={};
+  const porEmpleado={};
+  const porMes={};
+  rows.forEach(r=>{
+    const dias=r.fecha_fin?Math.ceil((new Date(r.fecha_fin)-new Date(r.fecha_inicio))/(1000*60*60*24))+1:1;
+    porTipo[r.tipo]=(porTipo[r.tipo]||0)+dias;
+    const nom=r.empleados?.nombre||r.empleado_id;
+    porEmpleado[nom]=(porEmpleado[nom]||0)+dias;
+    const mes=r.fecha_inicio.substring(0,7);
+    porMes[mes]=(porMes[mes]||0)+dias;
+  });
+
+  const totalDias=Object.values(porTipo).reduce((s,v)=>s+v,0);
+  const empleadosAfectados=Object.keys(porEmpleado).length;
+
+  const TIPO_L={vacaciones:'Vacaciones',enfermedad:'Enfermedad',art:'ART',
+    licencia_sin_sueldo:'Lic. sin sueldo',maternidad:'Maternidad/Pat.',
+    duelo:'Duelo',estudio:'Estudio',injustificada:'Injustificada',otro:'Otro'};
+
+  document.getElementById('kpis').innerHTML=`
+    <div class="kpi-card red"><div class="kpi-label">Total dias ausentes ${anio}</div><div class="kpi-value">${totalDias}</div></div>
+    <div class="kpi-card orange"><div class="kpi-label">Empleados con ausencias</div><div class="kpi-value">${empleadosAfectados}</div></div>
+    <div class="kpi-card blue"><div class="kpi-label">Registros</div><div class="kpi-value">${rows.length}</div></div>`;
+
+  // Sort por tipo
+  const tipoSort=Object.entries(porTipo).sort((a,b)=>b[1]-a[1]);
+  const empSort=Object.entries(porEmpleado).sort((a,b)=>b[1]-a[1]).slice(0,10);
+  const maxDias=Math.max(...tipoSort.map(t=>t[1]),1);
+  const maxEmp=Math.max(...empSort.map(e=>e[1]),1);
+
+  document.getElementById('contenido').innerHTML=`
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px">
+      <div class="panel">
+        <div class="panel-header"><h3>Dias por tipo de ausencia</h3></div>
+        <div style="padding:16px">
+          ${tipoSort.map(([tipo,dias])=>`
+            <div style="margin-bottom:12px">
+              <div style="display:flex;justify-content:space-between;font-size:13px;margin-bottom:4px">
+                <span>${TIPO_L[tipo]||tipo}</span>
+                <strong>${dias}d (${Math.round(dias/totalDias*100)}%)</strong>
+              </div>
+              <div style="height:8px;background:var(--bg3);border-radius:4px;overflow:hidden">
+                <div style="height:100%;width:${Math.round(dias/maxDias*100)}%;background:var(--orange);border-radius:4px"></div>
+              </div>
+            </div>`).join('')}
+          ${!tipoSort.length?'<div style="color:var(--muted);font-size:13px;text-align:center;padding:20px">Sin ausencias registradas</div>':''}
+        </div>
+      </div>
+      <div class="panel">
+        <div class="panel-header"><h3>Top 10 empleados con mas ausencias</h3></div>
+        <div style="padding:16px">
+          ${empSort.map(([nom,dias])=>`
+            <div style="margin-bottom:10px">
+              <div style="display:flex;justify-content:space-between;font-size:13px;margin-bottom:4px">
+                <span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:180px">${nom}</span>
+                <strong>${dias}d</strong>
+              </div>
+              <div style="height:6px;background:var(--bg3);border-radius:3px;overflow:hidden">
+                <div style="height:100%;width:${Math.round(dias/maxEmp*100)}%;background:var(--red);border-radius:3px"></div>
+              </div>
+            </div>`).join('')}
+          ${!empSort.length?'<div style="color:var(--muted);font-size:13px;text-align:center;padding:20px">Sin ausencias registradas</div>':''}
+        </div>
+      </div>
+    </div>
+    <div class="panel" style="margin-top:16px">
+      <div class="panel-header"><h3>Dias por mes — ${anio}</h3></div>
+      <div style="padding:16px;display:flex;gap:8px;align-items:flex-end;height:120px">
+        ${['01','02','03','04','05','06','07','08','09','10','11','12'].map(m=>{
+          const key=`${anio}-${m}`;
+          const dias=porMes[key]||0;
+          const meses=['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'];
+          const maxM=Math.max(...Object.values(porMes),1);
+          const h=dias>0?Math.max(Math.round(dias/maxM*80),4):0;
+          return`<div style="flex:1;display:flex;flex-direction:column;align-items:center;gap:4px">
+            <span style="font-size:10px;color:var(--muted)">${dias||''}</span>
+            <div style="width:100%;height:${h}px;background:${dias>0?'var(--blue)':'var(--bg3)'};border-radius:3px 3px 0 0;transition:height 0.3s"></div>
+            <span style="font-size:10px;color:var(--muted)">${meses[parseInt(m)-1]}</span>
+          </div>`;
+        }).join('')}
+      </div>
+    </div>`;
 }
 
 // ═══════════════ AUSENCIAS ════════════════════════════════════
@@ -1042,7 +1198,8 @@ async function cargarAusencias(){
           <td class="mono">${r.fecha_fin?new Date(r.fecha_fin+'T12:00:00').toLocaleDateString('es-AR'):'—'}</td>
           <td class="mono" style="font-weight:500">${dias}d</td>
           <td><span style="font-size:11px;padding:3px 10px;border-radius:20px;${ESTADO_STYLE[r.estado]||''}">${r.estado}</span></td>
-          <td style="font-size:12px;color:var(--muted);max-width:150px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${r.observaciones||'—'}</td>
+          <td style="font-size:12px;color:var(--muted);max-width:130px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${r.observaciones||'—'}</td>
+          <td>${r.certificado_url?`<a href="${r.certificado_url}" target="_blank" class="btn btn-sm btn-ghost">Certificado</a>`:'<span style="font-size:11px;color:var(--muted)">Sin cert.</span>'}</td>
           <td><div style="display:flex;gap:4px">
             ${r.estado==='pendiente'?`
               <button class="btn btn-sm btn-success" onclick="cambiarEstadoAusencia('${r.id}','aprobada')">Aprobar</button>
@@ -1059,16 +1216,36 @@ async function guardarAusencia(){
   const empId=document.getElementById('na-empleado').value;
   const inicio=document.getElementById('na-inicio').value;
   if(!empId||!inicio){alert('Empleado y fecha de inicio son obligatorios.');return;}
+  const empId2=document.getElementById('na-empresa').value;
+
+  let certUrl=null,certPath=null;
+  const fileInput=document.getElementById('na-archivo');
+  const file=fileInput?.files[0];
+  if(file){
+    const ext=file.name.split('.').pop();
+    const path=`ausencias/${empId2}/${empId}_${Date.now()}.${ext}`;
+    document.getElementById('na-upload-progress').style.display='block';
+    document.getElementById('na-progress-bar').style.width='50%';
+    const {error:ue}=await db.storage.from('empleados-docs').upload(path,file,{contentType:file.type,upsert:false});
+    if(!ue){
+      const {data:ud}=db.storage.from('empleados-docs').getPublicUrl(path);
+      certUrl=ud?.publicUrl||null;certPath=path;
+    }
+    document.getElementById('na-progress-bar').style.width='100%';
+    document.getElementById('na-upload-progress').style.display='none';
+  }
+
   const {error}=await db.from('empleados_ausencias').insert({
-    empresa_id:document.getElementById('na-empresa').value,
-    empleado_id:empId,
+    empresa_id:empId2,empleado_id:empId,
     tipo:document.getElementById('na-tipo').value,
     estado:document.getElementById('na-estado').value,
     fecha_inicio:inicio,
     fecha_fin:document.getElementById('na-fin').value||null,
     observaciones:document.getElementById('na-obs').value||null,
+    certificado_url:certUrl,certificado_path:certPath,
   });
   if(error){alert('Error: '+error.message);return;}
+  if(fileInput) fileInput.value='';
   cerrarModal('modal-ausencia');
   cargarAusencias();
 }
