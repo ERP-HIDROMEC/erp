@@ -212,6 +212,86 @@
   </div>
 </div>
 
+
+<!-- MODAL AGREGAR DOCUMENTO CLIENTE -->
+<div class="modal-overlay" id="modal-doc-cliente">
+  <div class="modal" style="max-width:480px">
+    <h3 id="mdc-titulo">Agregar documento requerido</h3>
+    <div style="background:rgba(59,130,246,0.08);border:1px solid rgba(59,130,246,0.15);border-radius:8px;padding:10px 14px;font-size:12px;color:var(--muted);margin-bottom:16px">
+      Cargá el documento una vez y después solo renovás la fecha cuando venza.
+    </div>
+    <div class="form-row">
+      <div class="form-group full">
+        <label>Nombre del documento *</label>
+        <input type="text" id="mdc-nombre" placeholder="Ej: ART empresa, Programa de seguridad, VTV Camion ABC123...">
+      </div>
+    </div>
+    <div class="form-row">
+      <div class="form-group">
+        <label>Tipo</label>
+        <select id="mdc-tipo">
+          <optgroup label="Empresa">
+            <option value="art_empresa">ART empresa</option>
+            <option value="habilitacion">Habilitacion empresa</option>
+            <option value="programa_seguridad">Programa de seguridad</option>
+            <option value="no_repeticion">No repeticion siniestros</option>
+            <option value="seguro_rc">Seguro responsabilidad civil</option>
+            <option value="cert_fiscal">Certificado fiscal</option>
+          </optgroup>
+          <optgroup label="Personal">
+            <option value="preocupacional">Preocupacional</option>
+            <option value="art_empleado">ART empleado</option>
+            <option value="capacitacion">Capacitacion</option>
+            <option value="induccion">Induccion cliente</option>
+          </optgroup>
+          <optgroup label="Vehiculo/Equipo">
+            <option value="vtv">VTV / RTO</option>
+            <option value="seguro_vehiculo">Seguro vehiculo</option>
+            <option value="habilitacion_equipo">Habilitacion equipo</option>
+          </optgroup>
+          <optgroup label="Otro">
+            <option value="otro">Otro</option>
+          </optgroup>
+        </select>
+      </div>
+      <div class="form-group">
+        <label>Fecha de vencimiento *</label>
+        <input type="date" id="mdc-vencimiento">
+      </div>
+    </div>
+    <div class="form-row">
+      <div class="form-group full">
+        <label>Notas (opcional)</label>
+        <input type="text" id="mdc-notas" placeholder="Ej: Solo aplica a obra Planta 2, renovar cada 6 meses...">
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" onclick="cerrarModal('modal-doc-cliente')">Cancelar</button>
+      <button class="btn btn-primary" onclick="guardarDocCliente()">Guardar</button>
+    </div>
+  </div>
+</div>
+
+<!-- MODAL RENOVAR DOCUMENTO -->
+<div class="modal-overlay" id="modal-renovar-doc">
+  <div class="modal" style="max-width:380px">
+    <h3>Renovar documento</h3>
+    <div id="renovar-doc-nombre" style="font-size:15px;font-weight:500;color:var(--text);margin-bottom:16px;padding:12px;background:var(--bg3);border-radius:8px"></div>
+    <div class="form-group">
+      <label>Nueva fecha de vencimiento *</label>
+      <input type="date" id="renovar-fecha" style="width:100%">
+    </div>
+    <div class="form-group" style="margin-top:12px">
+      <label>Notas (opcional)</label>
+      <input type="text" id="renovar-notas" placeholder="Observaciones sobre esta renovacion...">
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" onclick="cerrarModal('modal-renovar-doc')">Cancelar</button>
+      <button class="btn btn-primary" onclick="confirmarRenovar()">Confirmar renovacion</button>
+    </div>
+  </div>
+</div>
+
 <script>
 let tabActual = 'lista';
 let clienteSelId = null;
@@ -365,7 +445,9 @@ async function cargarDetalle(id){
       ${tablaHistorial('Proyectos', proyectos||[], [
         {k:'nombre',l:'Proyecto'},{k:'estado',l:'Estado'},{k:'fecha_inicio',l:'Inicio',fmt:'fecha'}
       ], 'proyectos.html')}
-    </div>`;
+    </div>
+    <div style="margin-top:16px" id="seccion-docs-cliente"></div>`;
+  cargarDocsCliente(id);
 }
 
 function campo(label, value, full=false){
@@ -454,6 +536,148 @@ async function toggleActivo(id, estaActivo){
   if(!confirm(msg)) return;
   await db.from('clientes').update({activo: !estaActivo}).eq('id', id);
   cargarClientes();
+}
+
+
+// ══════════════════════════════════════════════════════════════
+// DOCUMENTACION REQUERIDA POR CLIENTE
+// ══════════════════════════════════════════════════════════════
+let docRenovarId = null;
+
+const TIPO_DOC_L = {
+  art_empresa:'ART empresa', habilitacion:'Habilitacion empresa',
+  programa_seguridad:'Programa seguridad', no_repeticion:'No repeticion',
+  seguro_rc:'Seguro RC', cert_fiscal:'Cert. fiscal',
+  preocupacional:'Preocupacional', art_empleado:'ART empleado',
+  capacitacion:'Capacitacion', induccion:'Induccion cliente',
+  vtv:'VTV / RTO', seguro_vehiculo:'Seguro vehiculo',
+  habilitacion_equipo:'Hab. equipo', otro:'Otro'
+};
+
+async function cargarDocsCliente(clienteId){
+  const wrap = document.getElementById('seccion-docs-cliente');
+  if(!wrap) return;
+  wrap.innerHTML = '<div class="spinner-wrap" style="padding:20px"><div class="spinner"></div></div>';
+
+  const hoyStr = new Date().toISOString().split('T')[0];
+  const en30 = new Date(); en30.setDate(en30.getDate()+30);
+  const en30Str = en30.toISOString().split('T')[0];
+
+  const {data} = await db.from('cliente_docs_config')
+    .select('*')
+    .eq('cliente_id', clienteId)
+    .order('fecha_vencimiento', {ascending:true, nullsFirst:false});
+  const docs = data || [];
+
+  const vencidos = docs.filter(d=>d.fecha_vencimiento&&d.fecha_vencimiento<hoyStr).length;
+  const porVencer = docs.filter(d=>d.fecha_vencimiento&&d.fecha_vencimiento>=hoyStr&&d.fecha_vencimiento<=en30Str).length;
+
+  const tarjetas = docs.map(d=>{
+    const v = d.fecha_vencimiento;
+    const esV = v && v < hoyStr;
+    const esP = v && v >= hoyStr && v <= en30Str;
+    const dias = v ? Math.ceil((new Date(v+'T12:00:00')-new Date())/(1000*60*60*24)) : null;
+
+    const color = esV?'var(--red)':esP?'var(--orange)':'var(--green)';
+    const bgColor = esV?'rgba(239,68,68,0.06)':esP?'rgba(245,158,11,0.06)':'rgba(16,185,129,0.06)';
+    const borderColor = esV?'rgba(239,68,68,0.25)':esP?'rgba(245,158,11,0.25)':'rgba(16,185,129,0.2)';
+
+    const estadoLabel = esV?'Vencido':esP?'Por vencer':'Vigente';
+    const fechaLabel = v ? new Date(v+'T12:00:00').toLocaleDateString('es-AR') : 'Sin fecha';
+    const diasLabel = esV?`Vencio hace ${Math.abs(dias)}d`:esP?`Vence en ${dias}d`:`Vence ${fechaLabel}`;
+
+    return `<div style="background:${bgColor};border:1px solid ${borderColor};border-radius:10px;padding:14px 16px;display:flex;align-items:center;gap:12px">
+      <div style="width:10px;height:10px;border-radius:50%;background:${color};flex-shrink:0"></div>
+      <div style="flex:1;min-width:0">
+        <div style="font-size:13px;font-weight:500;color:var(--text);margin-bottom:2px">${d.nombre}</div>
+        <div style="font-size:12px;color:var(--muted)">${diasLabel}${d.notas?` · ${d.notas}`:''}</div>
+      </div>
+      <span style="font-size:11px;padding:2px 10px;border-radius:20px;font-weight:500;white-space:nowrap;background:${esV?'rgba(239,68,68,0.12)':esP?'rgba(245,158,11,0.12)':'rgba(16,185,129,0.12)'};color:${color}">${estadoLabel}</span>
+      <button class="btn btn-sm btn-ghost" onclick="abrirRenovar('${d.id}','${d.nombre.replace(/'/g,"\\'")}','${v||''}')">Renovar</button>
+      <button onclick="borrarDocCliente('${d.id}')" style="padding:4px 8px;background:transparent;border:none;color:var(--muted);cursor:pointer;font-size:16px;line-height:1">×</button>
+    </div>`;
+  }).join('');
+
+  wrap.innerHTML = `
+    <div class="panel">
+      <div class="panel-header">
+        <div>
+          <h3>Documentacion requerida por el cliente</h3>
+          ${vencidos>0||porVencer>0?`<div style="font-size:12px;margin-top:3px;color:${vencidos>0?'var(--red)':'var(--orange)'}">
+            ${vencidos>0?`${vencidos} vencido${vencidos>1?'s':''}`:''} ${vencidos>0&&porVencer>0?'·':''} ${porVencer>0?`${porVencer} por vencer`:''}
+          </div>`:''}
+        </div>
+        <button class="btn btn-ghost btn-sm" onclick="abrirAgregarDoc('${clienteId}')">+ Agregar documento</button>
+      </div>
+      ${docs.length?`
+        <div style="padding:16px;display:grid;grid-template-columns:1fr 1fr;gap:8px">
+          ${tarjetas}
+        </div>`:`
+        <div style="padding:32px;text-align:center">
+          <div style="font-size:13px;color:var(--muted);margin-bottom:12px">Todavia no hay documentos configurados para este cliente.</div>
+          <button class="btn btn-ghost btn-sm" onclick="abrirAgregarDoc('${clienteId}')">+ Agregar primer documento</button>
+        </div>`}
+    </div>`;
+}
+
+let _docClienteId = null;
+
+function abrirAgregarDoc(clienteId){
+  _docClienteId = clienteId;
+  document.getElementById('mdc-titulo').textContent = 'Agregar documento requerido';
+  document.getElementById('mdc-nombre').value = '';
+  document.getElementById('mdc-tipo').value = 'art_empresa';
+  document.getElementById('mdc-vencimiento').value = '';
+  document.getElementById('mdc-notas').value = '';
+  document.getElementById('modal-doc-cliente').classList.add('show');
+}
+
+async function guardarDocCliente(){
+  const nombre = document.getElementById('mdc-nombre').value.trim();
+  const venc = document.getElementById('mdc-vencimiento').value;
+  if(!nombre){ alert('El nombre es obligatorio.'); return; }
+  if(!venc){ alert('La fecha de vencimiento es obligatoria.'); return; }
+  const {error} = await db.from('cliente_docs_config').insert({
+    cliente_id: _docClienteId,
+    nombre,
+    tipo: document.getElementById('mdc-tipo').value,
+    fecha_vencimiento: venc,
+    notas: document.getElementById('mdc-notas').value || null,
+  });
+  if(error){ alert('Error: '+error.message); return; }
+  cerrarModal('modal-doc-cliente');
+  cargarDocsCliente(_docClienteId);
+}
+
+function abrirRenovar(id, nombre, fechaActual){
+  docRenovarId = id;
+  document.getElementById('renovar-doc-nombre').textContent = nombre;
+  // Sugerir +1 año de la fecha actual
+  const base = fechaActual ? new Date(fechaActual+'T12:00:00') : new Date();
+  base.setFullYear(base.getFullYear()+1);
+  document.getElementById('renovar-fecha').value = base.toISOString().split('T')[0];
+  document.getElementById('renovar-notas').value = '';
+  document.getElementById('modal-renovar-doc').classList.add('show');
+}
+
+async function confirmarRenovar(){
+  const fecha = document.getElementById('renovar-fecha').value;
+  if(!fecha){ alert('Ingresa la nueva fecha.'); return; }
+  const notas = document.getElementById('renovar-notas').value || null;
+  const {error} = await db.from('cliente_docs_config').update({
+    fecha_vencimiento: fecha,
+    notas: notas,
+    updated_at: new Date().toISOString(),
+  }).eq('id', docRenovarId);
+  if(error){ alert('Error: '+error.message); return; }
+  cerrarModal('modal-renovar-doc');
+  cargarDocsCliente(clienteSelId);
+}
+
+async function borrarDocCliente(id){
+  if(!confirm('Borrar este documento de la lista?')) return;
+  await db.from('cliente_docs_config').delete().eq('id', id);
+  cargarDocsCliente(clienteSelId);
 }
 
 function cerrarModal(id){ document.getElementById(id).classList.remove('show'); }

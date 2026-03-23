@@ -111,7 +111,6 @@
   <a data-modulo="facturas" class="nav-item" href="facturas.html"><svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 9V7a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2m2 4h10a2 2 0 002-2v-6a2 2 0 00-2-2H9a2 2 0 00-2 2v6a2 2 0 002 2zm7-5a2 2 0 11-4 0 2 2 0 014 0z"/></svg>Facturación</a>
   <a data-modulo="compras" class="nav-item" href="compras.html"><svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 3h2l.4 2M7 13h10l4-8H5.4M7 13L5.4 5M7 13l-2.293 2.293c-.63.63-.184 1.707.707 1.707H17m0 0a2 2 0 100 4 2 2 0 000-4zm-8 2a2 2 0 11-4 0 2 2 0 014 0z"/></svg>Compras</a>
   <a data-modulo="impuestos" class="nav-item" href="impuestos.html"><svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 14l6-6m-5.5.5h.01m4.99 5h.01M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16l3.5-2 3.5 2 3.5-2 3.5 2z"/></svg>Impuestos</a>
-  <a data-modulo="clientes" class="nav-item" href="clientes.html"><svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 21V19a4 4 0 00-4-4H9a4 4 0 00-4 4v2M12 11a4 4 0 100-8 4 4 0 000 8z"/></svg>Clientes</a>
   <div data-seccion="caja" class="nav-section">Finanzas</div>
   <a data-modulo="caja" class="nav-item" href="caja.html"><svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>Caja y bancos</a>
   <div data-seccion="empleados,syh" class="nav-section">RRHH</div>
@@ -477,6 +476,43 @@ async function cargarAlertas() {
       titulo:`${egrVenc.length} egreso(s) sin pagar hace más de 60 días`,
       detalle:`Total: ${fmt(total)}`,
       link:'compras.html'
+    });
+  }
+
+  // 6. Documentacion requerida por clientes proxima a vencer
+  const hoyDocStr = new Date().toISOString().split('T')[0];
+  const en15 = new Date(); en15.setDate(en15.getDate()+15);
+  const en15Str = en15.toISOString().split('T')[0];
+  const en30Str2 = new Date(Date.now()+30*86400000).toISOString().split('T')[0];
+
+  const {data:docsVenc} = await db.from('cliente_docs_config')
+    .select('nombre,fecha_vencimiento,clientes(nombre)')
+    .lt('fecha_vencimiento', hoyDocStr);
+  if(docsVenc?.length){
+    alertas.push({
+      nivel:'rojo',
+      icono:'📋',
+      titulo:`${docsVenc.length} doc${docsVenc.length>1?'s':''} de clientes VENCIDO${docsVenc.length>1?'S':''}`,
+      detalle:docsVenc.slice(0,3).map(d=>`${d.clientes?.nombre||'—'}: ${d.nombre}`).join(' · ')+(docsVenc.length>3?` +${docsVenc.length-3} mas`:''),
+      link:'clientes.html'
+    });
+  }
+
+  const {data:docsProx} = await db.from('cliente_docs_config')
+    .select('nombre,fecha_vencimiento,clientes(nombre)')
+    .gte('fecha_vencimiento', hoyDocStr)
+    .lte('fecha_vencimiento', en30Str2)
+    .order('fecha_vencimiento');
+  if(docsProx?.length){
+    alertas.push({
+      nivel:'naranja',
+      icono:'📅',
+      titulo:`${docsProx.length} doc${docsProx.length>1?'s':''} de clientes vence${docsProx.length>1?'n':''} en 30 dias`,
+      detalle:docsProx.slice(0,3).map(d=>{
+        const dias=Math.ceil((new Date(d.fecha_vencimiento+'T12:00:00')-new Date())/(1000*60*60*24));
+        return `${d.clientes?.nombre||'—'}: ${d.nombre} (${dias}d)`;
+      }).join(' · ')+(docsProx.length>3?` +${docsProx.length-3} mas`:''),
+      link:'clientes.html'
     });
   }
 
