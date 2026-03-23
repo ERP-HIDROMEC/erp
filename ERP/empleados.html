@@ -98,9 +98,8 @@
   <a data-modulo="compras" class="nav-item" href="compras.html"><svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 3h2l.4 2M7 13h10l4-8H5.4M7 13L5.4 5M7 13l-2.293 2.293c-.63.63-.184 1.707.707 1.707H17m0 0a2 2 0 100 4 2 2 0 000-4zm-8 2a2 2 0 11-4 0 2 2 0 014 0z"/></svg>Compras</a>
   <a data-modulo="caja" class="nav-item" href="caja.html"><svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>Caja</a>
   <a data-modulo="impuestos" class="nav-item" href="impuestos.html"><svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 14l6-6m-5.5.5h.01m4.99 5h.01M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16l3.5-2 3.5 2 3.5-2 3.5 2z"/></svg>Impuestos</a>
-  <div data-seccion="empleados,syh" class="nav-section">RRHH</div>
+  <div data-seccion="empleados" class="nav-section">RRHH</div>
   <a data-modulo="empleados" class="nav-item active" href="empleados.html"><svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z"/></svg>Empleados</a>
-  <a data-modulo="syh" class="nav-item" href="syh.html"><svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"/></svg>Seg. e Higiene</a>
   <div class="nav-bottom"><button class="btn-logout" onclick="logout()">Cerrar sesión</button></div>
 </nav>
 
@@ -115,6 +114,7 @@
     <button class="tab" onclick="cambiarTab('sueldos',this)">Sueldos</button>
     <button class="tab" onclick="cambiarTab('costos',this)">Costos por categoría</button>
     <button class="tab" onclick="cambiarTab('docs-empresa',this)">Docs Empresa <span id="badge-docs-venc" style="display:none;background:var(--red);color:#fff;border-radius:20px;padding:1px 7px;font-size:11px;margin-left:4px"></span></button>
+    <button class="tab" onclick="cambiarTab('vehiculos',this)">Vehiculos y Equipos</button>
     <button class="tab" onclick="cambiarTab('docs-vehiculos',this)">Docs Vehiculos/Equipos</button>
     <button class="tab" onclick="cambiarTab('docs-personal',this)">Docs Personal</button>
     <button class="tab" onclick="cambiarTab('ausencias',this)">Licencias y ausencias</button>
@@ -395,6 +395,75 @@
   </div>
 </div>
 
+<!-- MODAL VEHICULO / EQUIPO -->
+<div class="modal-overlay" id="modal-vehiculo">
+  <div class="modal" style="max-width:560px">
+    <h3 id="veh-titulo">Nuevo vehiculo / equipo</h3>
+    <div class="form-row">
+      <div class="form-group">
+        <label>Empresa</label>
+        <select id="nv-empresa">
+          <option value="a1000000-0000-0000-0000-000000000001">Hidromec</option>
+          <option value="a2000000-0000-0000-0000-000000000002">Placemem</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label>Tipo</label>
+        <select id="nv-tipo">
+          <option value="camion">Camion</option>
+          <option value="camioneta">Camioneta / Pick-up</option>
+          <option value="auto">Auto</option>
+          <option value="trailer">Trailer / Semi</option>
+          <option value="grua">Grua / Hidrogrua</option>
+          <option value="autoelevador">Autoelevador</option>
+          <option value="compresor">Compresor</option>
+          <option value="generador">Generador</option>
+          <option value="soldadora">Soldadora</option>
+          <option value="herramienta_mayor">Herramienta mayor</option>
+          <option value="equipo_medicion">Equipo de medicion</option>
+          <option value="otro">Otro</option>
+        </select>
+      </div>
+    </div>
+    <div class="form-row full">
+      <div class="form-group">
+        <label>Descripcion <span style="color:var(--red)">*</span></label>
+        <input type="text" id="nv-descripcion" placeholder="Ej: Camion Iveco Daily, Hidrogrua Fassi 200, Soldadora Lincoln...">
+      </div>
+    </div>
+    <div class="form-row">
+      <div class="form-group">
+        <label>Patente / N° serie</label>
+        <input type="text" id="nv-patente" placeholder="Ej: AB123CD o N/S 12345">
+      </div>
+      <div class="form-group">
+        <label>Marca</label>
+        <input type="text" id="nv-marca" placeholder="Ej: Iveco, Toyota, Lincoln...">
+      </div>
+    </div>
+    <div class="form-row">
+      <div class="form-group">
+        <label>Modelo</label>
+        <input type="text" id="nv-modelo" placeholder="Ej: Daily 35S14, Hilux SRV...">
+      </div>
+      <div class="form-group">
+        <label>Año</label>
+        <input type="number" id="nv-anio" placeholder="2020" min="1990" max="2030">
+      </div>
+    </div>
+    <div class="form-row full">
+      <div class="form-group">
+        <label>Observaciones</label>
+        <textarea id="nv-obs" placeholder="Notas, estado, ubicacion habitual..."></textarea>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" onclick="cerrarModal('modal-vehiculo')">Cancelar</button>
+      <button class="btn btn-primary" onclick="guardarVehiculo()">Guardar</button>
+    </div>
+  </div>
+</div>
+
 <!-- MODAL CLIENTE -->
 <div class="modal-overlay" id="modal-cliente">
   <div class="modal">
@@ -473,6 +542,7 @@ function cambiarTab(tab,btn){
   const btnNuevo=document.getElementById('btn-nuevo');
   const noDoc=['ausentismo','costos'];
   if(tab==='sueldos') btnNuevo.textContent='+ Registrar sueldo';
+  else if(tab==='vehiculos') btnNuevo.textContent='+ Nuevo vehiculo/equipo';
   else if(tab==='docs-empresa') btnNuevo.textContent='+ Subir documento';
   else if(tab==='docs-vehiculos') btnNuevo.textContent='+ Subir documento';
   else if(tab==='docs-personal') btnNuevo.textContent='+ Subir documento';
@@ -481,7 +551,7 @@ function cambiarTab(tab,btn){
   else if(noDoc.includes(tab)) btnNuevo.textContent='';
   else btnNuevo.textContent='+ Nuevo empleado';
   btnNuevo.style.display=noDoc.includes(tab)?'none':'';
-  const hideFiltro=['sueldos','costos','docs-empresa','docs-vehiculos','docs-personal','ausencias','ausentismo'];
+  const hideFiltro=['sueldos','costos','vehiculos','docs-empresa','docs-vehiculos','docs-personal','ausencias','ausentismo'];
   document.getElementById('f-estado').style.display=hideFiltro.includes(tab)?'none':'';
   recargar();
 }
@@ -490,6 +560,7 @@ function recargar(){
   if(tabActual==='empleados') cargarEmpleados();
   else if(tabActual==='sueldos') cargarSueldos();
   else if(tabActual==='costos') cargarCostos();
+  else if(tabActual==='vehiculos') cargarVehiculos();
   else if(tabActual==='docs-empresa') cargarDocumentos('empresa');
   else if(tabActual==='docs-vehiculos') cargarDocumentos('vehiculo');
   else if(tabActual==='docs-personal') cargarDocumentos('personal');
@@ -499,6 +570,7 @@ function recargar(){
 
 function abrirNuevo(){
   if(tabActual==='sueldos') abrirNuevoSueldo();
+  else if(tabActual==='vehiculos'){vehEditId=null;document.getElementById('veh-titulo').textContent='Nuevo vehiculo/equipo';['nv-descripcion','nv-patente','nv-marca','nv-modelo','nv-anio','nv-obs'].forEach(id=>document.getElementById(id).value='');document.getElementById('nv-tipo').value='camion';document.getElementById('modal-vehiculo').classList.add('show');}
   else if(tabActual==='docs-empresa'||tabActual==='docs-vehiculos'||tabActual==='docs-personal'){
     docCategoria=tabActual==='docs-empresa'?'empresa':tabActual==='docs-vehiculos'?'vehiculo':'personal';
     prepararModalDoc();
@@ -1259,6 +1331,130 @@ async function borrarAusencia(id){
   if(!confirm('Borrar este registro?')) return;
   await db.from('empleados_ausencias').delete().eq('id',id);
   cargarAusencias();
+}
+
+
+// ═══════════════ VEHICULOS Y EQUIPOS ═══════════════════════
+let vehEditId=null;
+
+const VEH_TIPO_L={
+  camion:'Camion',camioneta:'Camioneta/Pick-up',auto:'Auto',trailer:'Trailer/Semi',
+  grua:'Grua/Hidrogrua',autoelevador:'Autoelevador',compresor:'Compresor',
+  generador:'Generador',soldadora:'Soldadora',herramienta_mayor:'Herramienta mayor',
+  equipo_medicion:'Equipo medicion',otro:'Otro'
+};
+
+async function cargarVehiculos(){
+  document.getElementById('kpis').innerHTML='';
+  document.getElementById('contenido').innerHTML='<div class="spinner-wrap"><div class="spinner"></div>Cargando...</div>';
+  const emp=document.getElementById('f-empresa').value;
+  const buscar=document.getElementById('f-buscar').value.toLowerCase();
+
+  let q=db.from('vehiculos').select('*,empresas(nombre)').order('descripcion');
+  if(emp) q=q.eq('empresa_id',emp);
+  const {data}=await q;
+  let rows=data||[];
+  if(buscar) rows=rows.filter(r=>
+    (r.descripcion||'').toLowerCase().includes(buscar)||
+    (r.patente||'').toLowerCase().includes(buscar)||
+    (r.marca||'').toLowerCase().includes(buscar)
+  );
+
+  const activos=rows.filter(r=>r.activo!==false);
+  const inactivos=rows.filter(r=>r.activo===false);
+
+  document.getElementById('kpis').innerHTML=`
+    <div class="kpi-card blue"><div class="kpi-label">Total</div><div class="kpi-value">${rows.length}</div></div>
+    <div class="kpi-card green"><div class="kpi-label">Activos</div><div class="kpi-value">${activos.length}</div></div>
+    <div class="kpi-card red"><div class="kpi-label">Inactivos</div><div class="kpi-value">${inactivos.length}</div></div>`;
+
+  document.getElementById('contenido').innerHTML=`
+    <div class="panel">
+      <div style="overflow-x:auto"><table>
+        <thead><tr><th>Empresa</th><th>Tipo</th><th>Descripcion</th><th>Patente/N°Serie</th><th>Marca</th><th>Modelo</th><th>Año</th><th>Estado</th><th>Documentos</th><th>Acciones</th></tr></thead>
+        <tbody>${rows.length?rows.map(r=>{
+          const activo=r.activo!==false;
+          return`<tr>
+            <td style="font-size:12px">${r.empresas?.nombre||'—'}</td>
+            <td><span style="font-size:11px;padding:2px 8px;border-radius:4px;background:var(--bg3);color:var(--muted)">${VEH_TIPO_L[r.tipo]||r.tipo}</span></td>
+            <td style="font-weight:500">${r.descripcion}</td>
+            <td class="mono" style="font-size:12px">${r.patente||'—'}</td>
+            <td style="font-size:12px">${r.marca||'—'}</td>
+            <td style="font-size:12px;color:var(--muted)">${r.modelo||'—'}</td>
+            <td class="mono" style="font-size:12px">${r.anio||'—'}</td>
+            <td>
+              <span style="font-size:11px;padding:2px 10px;border-radius:20px;background:${activo?'rgba(16,185,129,0.15)':'rgba(239,68,68,0.15)'};color:${activo?'var(--green)':'var(--red)'}">
+                ${activo?'Activo':'Inactivo'}
+              </span>
+            </td>
+            <td>
+              <button class="btn btn-sm btn-ghost" onclick="verDocsVehiculo('${r.id}','${r.descripcion.replace(/'/g,'')}')">Ver docs</button>
+            </td>
+            <td><div style="display:flex;gap:6px">
+              <button class="btn btn-sm btn-ghost" onclick="editarVehiculo('${r.id}')">Editar</button>
+              <button class="btn btn-sm btn-danger" onclick="toggleActivoVehiculo('${r.id}',${activo})">${activo?'Dar de baja':'Activar'}</button>
+            </div></td>
+          </tr>`;
+        }).join(''):'<tr><td colspan="10" style="text-align:center;padding:40px;color:var(--muted)">Sin vehiculos/equipos cargados</td></tr>'}</tbody>
+      </table></div>
+    </div>`;
+}
+
+function verDocsVehiculo(id, nombre){
+  // Switch to docs-vehiculos tab filtered by this vehicle
+  const tab=document.querySelector('.tab:nth-child(5)'); // docs-vehiculos tab
+  cambiarTab('docs-vehiculos', document.querySelectorAll('.tab')[4]);
+  document.querySelectorAll('.tab').forEach(t=>t.classList.remove('active'));
+  document.querySelectorAll('.tab')[4].classList.add('active');
+}
+
+async function guardarVehiculo(){
+  const desc=document.getElementById('nv-descripcion').value.trim();
+  if(!desc){alert('La descripcion es obligatoria.');return;}
+  const empId=document.getElementById('nv-empresa').value;
+  const payload={
+    empresa_id:empId,
+    tipo:document.getElementById('nv-tipo').value,
+    descripcion:desc,
+    patente:document.getElementById('nv-patente').value.trim()||null,
+    marca:document.getElementById('nv-marca').value.trim()||null,
+    modelo:document.getElementById('nv-modelo').value.trim()||null,
+    anio:parseInt(document.getElementById('nv-anio').value)||null,
+    observaciones:document.getElementById('nv-obs').value||null,
+    activo:true,
+  };
+  let error;
+  if(vehEditId){({error}=await db.from('vehiculos').update(payload).eq('id',vehEditId));}
+  else{({error}=await db.from('vehiculos').insert(payload));}
+  if(error){alert('Error: '+error.message);return;}
+  vehEditId=null;
+  cerrarModal('modal-vehiculo');
+  cargarVehiculos();
+  // Refresh vehiculos in doc modals
+  await cargarVehiculosDocModal();
+}
+
+async function editarVehiculo(id){
+  const {data:r}=await db.from('vehiculos').select('*').eq('id',id).single();
+  if(!r) return;
+  vehEditId=id;
+  document.getElementById('veh-titulo').textContent='Editar vehiculo/equipo';
+  document.getElementById('nv-empresa').value=r.empresa_id;
+  document.getElementById('nv-tipo').value=r.tipo||'otro';
+  document.getElementById('nv-descripcion').value=r.descripcion||'';
+  document.getElementById('nv-patente').value=r.patente||'';
+  document.getElementById('nv-marca').value=r.marca||'';
+  document.getElementById('nv-modelo').value=r.modelo||'';
+  document.getElementById('nv-anio').value=r.anio||'';
+  document.getElementById('nv-obs').value=r.observaciones||'';
+  document.getElementById('modal-vehiculo').classList.add('show');
+}
+
+async function toggleActivoVehiculo(id, estaActivo){
+  const msg=estaActivo?'Dar de baja este vehiculo/equipo?':'Activar este vehiculo/equipo?';
+  if(!confirm(msg)) return;
+  await db.from('vehiculos').update({activo:!estaActivo}).eq('id',id);
+  cargarVehiculos();
 }
 
 function cerrarModal(id){document.getElementById(id).classList.remove('show');}
