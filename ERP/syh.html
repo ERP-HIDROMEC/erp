@@ -10,6 +10,9 @@
 <script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js"></script>
 <script src="erp-utils.js"></script>
 <script src="erp-sidebar.js"></script>
+<script src="api/empresas.api.js"></script>
+<script src="api/empleados.api.js"></script>
+<script src="api/syh.api.js"></script>
 <style>
   .kpi-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:14px;margin-bottom:20px;}
   .kpi-card{background:var(--bg2);border:1px solid var(--border);border-radius:12px;padding:18px 20px;position:relative;overflow:hidden;}
@@ -34,7 +37,7 @@
 </style>
 </head>
 <body>
-<div id="overlay" class="overlay" onclick="ERP.ERP.closeSidebar()"></div>
+<div id="overlay" class="overlay" onclick="ERP.closeSidebar()"></div>
 <div id="sidebar-root"></div>
 
 <main class="main">
@@ -556,7 +559,7 @@ async function cargarDocEmpresa(){
   const en30=new Date();en30.setDate(en30.getDate()+30);
   const en30Str=en30.toISOString().split('T')[0];
 
-  let q=db.from('syh_documentos').select('*,empresas(nombre)').order('fecha_vencimiento',{ascending:true,nullsFirst:false});
+  const syhDocsData=await SyhAPI.getDocumentosEmpresa({}); let q={data:syhDocsData};
   if(emp) q=q.eq('empresa_id',emp);
   const {data}=await q;
   let rows=data||[];
@@ -620,7 +623,7 @@ async function guardarDocEmpresa(){
     document.getElementById('sde-bar').style.width='100%';
     document.getElementById('sde-progress').style.display='none';
   }
-  const {error}=await db.from('syh_documentos').insert({
+  try{ await SyhAPI.registrarDocumentoEmpresa({
     empresa_id:empId,tipo:document.getElementById('sde-tipo').value,
     descripcion:document.getElementById('sde-desc').value||null,
     cliente_obra:document.getElementById('sde-cliente').value||null,
@@ -637,14 +640,14 @@ async function guardarDocEmpresa(){
 async function borrarDocSYH(id,path){
   if(!(await confirmar('Borrar este documento?'))) return;
   if(path) await db.storage.from('syh-docs').remove([path]);
-  await db.from('syh_documentos').delete().eq('id',id);
+  await SyhAPI.eliminarDocumentoEmpresa(id,null);
   recargar();
 }
 
 // ── CAPACITACIONES ────────────────────────────────────────────
 async function cargarEmpleadosSYH(){
   const empId=document.getElementById('sc-empresa').value;
-  const {data}=await db.from('empleados').select('id,nombre').eq('empresa_id',empId).eq('activo',true).order('nombre');
+  const data=await EmpleadosAPI.getEmpleadosSelect(empId);
   const wrap=document.getElementById('sc-asistentes-wrap');
   if(!wrap) return;
   wrap.innerHTML=(data||[]).map(e=>`
@@ -659,7 +662,7 @@ async function cargarCapacitaciones(){
   const emp=document.getElementById('f-empresa').value;
   const buscar=document.getElementById('f-buscar').value.toLowerCase();
 
-  let q=db.from('syh_capacitaciones').select('*,empresas(nombre),syh_capacitacion_asistentes(empleados(nombre))').order('fecha',{ascending:false});
+  const capData=await SyhAPI.getCapacitaciones({}); let q={data:capData};
   if(emp) q=q.eq('empresa_id',emp);
   const {data}=await q;
   let rows=data||[];
@@ -726,7 +729,7 @@ async function guardarCapacitacion(){
     if(!ue){const {data:ud}=db.storage.from('syh-docs').getPublicUrl(path);archivoUrl=ud?.publicUrl||null;archivoPatch=path;}
   }
 
-  const {data:cap,error}=await db.from('syh_capacitaciones').insert({
+  let cap=null,error=null; try{ cap=await SyhAPI.registrarCapacitacion({
     empresa_id:empId,tipo,
     descripcion:document.getElementById('sc-desc').value||null,
     dictada_por:document.getElementById('sc-dictante').value||null,
@@ -740,7 +743,7 @@ async function guardarCapacitacion(){
 
   // Insert asistentes
   if(asistentes.length&&cap){
-    await db.from('syh_capacitacion_asistentes').insert(
+    // asistentes incluidos en registrarCapacitacion //
       asistentes.map(eid=>({capacitacion_id:cap.id,empleado_id:eid,empresa_id:empId}))
     );
   }
@@ -753,28 +756,27 @@ async function guardarCapacitacion(){
 async function borrarCapacitacion(id,path){
   if(!(await confirmar('Borrar esta capacitacion?'))) return;
   if(path) await db.storage.from('syh-docs').remove([path]);
-  await db.from('syh_capacitacion_asistentes').delete().eq('capacitacion_id',id);
-  await db.from('syh_capacitaciones').delete().eq('id',id);
+  await SyhAPI.eliminarCapacitacion(id,null);
   cargarCapacitaciones();
 }
 
 // ── EPP ───────────────────────────────────────────────────────
 async function cargarEmpleadosEPP(){
   const empId=document.getElementById('se-empresa').value;
-  const {data}=await db.from('empleados').select('id,nombre').eq('empresa_id',empId).eq('activo',true).order('nombre');
+  const data=await EmpleadosAPI.getEmpleadosSelect(empId);
   document.getElementById('se-empleado').innerHTML=(data||[]).map(e=>`<option value="${e.id}">${e.nombre}</option>`).join('');
 }
 
 async function cargarEmpleadosIncidente(){
   const empId=document.getElementById('si-empresa').value;
-  const {data}=await db.from('empleados').select('id,nombre').eq('empresa_id',empId).eq('activo',true).order('nombre');
+  const data=await EmpleadosAPI.getEmpleadosSelect(empId);
   document.getElementById('si-empleado').innerHTML=(data||[]).map(e=>`<option value="${e.id}">${e.nombre}</option>`).join('');
 }
 
 async function cargarHistorialEPP(){
   const empId=document.getElementById('se-empleado').value;
   if(!empId) return;
-  const {data}=await db.from('syh_epp_entregas').select('fecha_entrega,items').eq('empleado_id',empId).order('fecha_entrega',{ascending:false}).limit(3);
+  const data=await SyhAPI.getUltimasEntregasEmpleado(empId);
   const wrap=document.getElementById('se-historial-wrap');
   const hist=document.getElementById('se-historial');
   if(!data||!data.length){wrap.style.display='none';return;}
@@ -827,10 +829,10 @@ async function guardarEPP(){
   const empId=document.getElementById('se-empresa').value;
 
   // Get empleado data
-  const {data:emp}=await db.from('empleados').select('nombre,dni').eq('id',empleadoId).single();
+  const emp=await EmpleadosAPI.getEmpleadoById(empleadoId);
   const u=await getUsuario();
 
-  const {data:entrega,error}=await db.from('syh_epp_entregas').insert({
+  try{ const entrega=await SyhAPI.registrarEntregaEPP({
     empresa_id:empId,empleado_id:empleadoId,
     fecha_entrega:fecha,puesto:document.getElementById('se-puesto').value||null,
     elementos_necesarios:document.getElementById('se-necesarios').value||null,
@@ -851,7 +853,7 @@ async function cargarEPP(){
   const emp=document.getElementById('f-empresa').value;
   const buscar=document.getElementById('f-buscar').value.toLowerCase();
 
-  let q=db.from('syh_epp_entregas').select('*,empleados(nombre),empresas(nombre)').order('fecha_entrega',{ascending:false});
+  const eppData=await SyhAPI.getEntregasEPP({}); let q={data:eppData};
   if(emp) q=q.eq('empresa_id',emp);
   const {data}=await q;
   let rows=data||[];
@@ -886,14 +888,14 @@ async function cargarEPP(){
 }
 
 async function reimprimirEPP(id){
-  const {data:r}=await db.from('syh_epp_entregas').select('*,empleados(nombre,dni),empresas(nombre)').eq('id',id).single();
+  const r=await SyhAPI.getEntregaEPPById(id);
   if(!r) return;
   generarPDFEPP(r,r.empleados,r.items||[],r.empresa_id);
 }
 
 async function borrarEPP(id){
   if(!(await confirmar('Borrar esta entrega EPP?'))) return;
-  await db.from('syh_epp_entregas').delete().eq('id',id);
+  await SyhAPI.eliminarEntregaEPP(id);
   cargarEPP();
 }
 
@@ -1032,7 +1034,7 @@ async function cargarIncidentes(){
   const emp=document.getElementById('f-empresa').value;
   const buscar=document.getElementById('f-buscar').value.toLowerCase();
 
-  let q=db.from('syh_incidentes').select('*,empleados(nombre),empresas(nombre)').order('fecha',{ascending:false});
+  const incData=await SyhAPI.getIncidentes({}); let q={data:incData};
   if(emp) q=q.eq('empresa_id',emp);
   const {data}=await q;
   let rows=data||[];
@@ -1085,7 +1087,7 @@ async function guardarIncidente(){
     if(!ue){const {data:ud}=db.storage.from('syh-docs').getPublicUrl(path);archivoUrl=ud?.publicUrl||null;archivoPatch=path;}
   }
 
-  const {error}=await db.from('syh_incidentes').insert({
+  try{ await SyhAPI.registrarIncidente({
     empresa_id:empId,empleado_id:empleadoId||null,
     tipo:document.getElementById('si-tipo').value,
     fecha:fecha,lugar:document.getElementById('si-lugar').value||null,
@@ -1104,7 +1106,7 @@ async function guardarIncidente(){
 async function borrarIncidente(id,path){
   if(!(await confirmar('Borrar este incidente?'))) return;
   if(path) await db.storage.from('syh-docs').remove([path]);
-  await db.from('syh_incidentes').delete().eq('id',id);
+  await SyhAPI.eliminarIncidente(id,null);
   cargarIncidentes();
 }
 
@@ -1118,10 +1120,10 @@ async function cargarVencimientos(){
   const en60Str=en60.toISOString().split('T')[0];
 
   const queries=[
-    db.from('syh_documentos').select('tipo,descripcion,fecha_vencimiento,empresas(nombre)').lte('fecha_vencimiento',en60Str).neq('fecha_vencimiento',null),
-    db.from('empleados_documentos').select('tipo,descripcion,fecha_vencimiento,empleados(nombre),empresas(nombre)').lte('fecha_vencimiento',en60Str).neq('fecha_vencimiento',null),
-    db.from('syh_capacitaciones').select('tipo,descripcion,fecha_vencimiento,empresas(nombre)').lte('fecha_vencimiento',en60Str).neq('fecha_vencimiento',null),
-    db.from('empleados_documentos').select('tipo,descripcion,fecha_vencimiento,vehiculos(descripcion),empresas(nombre)').eq('categoria','vehiculo').lte('fecha_vencimiento',en60Str).neq('fecha_vencimiento',null),
+    SyhAPI.getDocsEmpresaProxVencer(60).then(d=>({data:d})),
+    EmpleadosAPI.getDocsProxVencer(60).then(d=>({data:d})),
+    SyhAPI.getCapacitacionesProxVencer(60).then(d=>({data:d})),
+    EmpleadosAPI.getDocumentosEmpleado({categoria:'vehiculo'}).then(d=>({data:d})),
   ];
   if(emp) queries.forEach(q=>q.eq('empresa_id',emp));
 
@@ -1202,7 +1204,7 @@ async function prepararModalPortal(){
 
 async function cargarSelectPortales(){
   const empId=document.getElementById('mp-empresa').value;
-  const {data}=await db.from('portales_clientes').select('id,nombre').eq('empresa_id',empId).eq('activo',true).order('nombre');
+  const data=await SyhAPI.getPortales(empId);
   _portalesCache=data||[];
   const sel=document.getElementById('mp-portal-sel');
   sel.innerHTML='<option value="">— Seleccionar portal —</option>'+
@@ -1223,13 +1225,13 @@ function onAplicaChange(){
 
 async function cargarEmpleadosPortal(){
   const empId=document.getElementById('mp-empresa').value;
-  const {data}=await db.from('empleados').select('id,nombre').eq('empresa_id',empId).eq('activo',true).order('nombre');
+  const data=await EmpleadosAPI.getEmpleadosSelect(empId);
   document.getElementById('mp-empleado').innerHTML=(data||[]).map(e=>`<option value="${e.id}">${e.nombre}</option>`).join('');
 }
 
 async function cargarVehiculosPortal(){
   const empId=document.getElementById('mp-empresa').value;
-  const {data}=await db.from('vehiculos').select('id,descripcion,patente').eq('empresa_id',empId).eq('activo',true).order('descripcion');
+  const data=await EmpleadosAPI.getVehiculosSelect(empId);
   document.getElementById('mp-vehiculo').innerHTML=(data||[]).map(v=>`<option value="${v.id}">${v.descripcion}${v.patente?' — '+v.patente:''}</option>`).join('');
 }
 
@@ -1246,7 +1248,7 @@ async function guardarPortalDoc(){
     const nombre=document.getElementById('mp-portal-nombre').value.trim();
     if(!nombre){toast('Ingresa el nombre del portal.', 'warn');return;}
     const url=document.getElementById('mp-portal-url').value.trim()||null;
-    const {data:np,error:pe}=await db.from('portales_clientes')
+    let np=null,pe=null; try{ np=await SyhAPI.crearPortal({
       .insert({empresa_id:empId,nombre,url_portal:url,activo:true})
       .select().single();
     if(pe){toast('Error al crear portal: ', 'error');return;}
@@ -1256,7 +1258,7 @@ async function guardarPortalDoc(){
   if(!portalId){toast('Selecciona un portal.', 'warn');return;}
 
   const aplica=document.getElementById('mp-aplica').value;
-  const {error}=await db.from('portal_documentos').insert({
+  try{ await SyhAPI.registrarDocumentoPortal({
     empresa_id:empId,
     portal_id:portalId,
     tipo:document.getElementById('mp-tipo').value,
@@ -1286,7 +1288,7 @@ async function cargarPortales(){
   const en60Str=en60.toISOString().split('T')[0];
 
   // Load all portal docs with joins
-  let q=db.from('portal_documentos')
+  const portalData=await SyhAPI.getDocumentosPortal({}); let q={data:portalData}; //
     .select('*,portales_clientes(nombre,url_portal),empleados(nombre),vehiculos(descripcion,patente),empresas(nombre)')
     .order('fecha_vencimiento',{ascending:true});
   if(emp) q=q.eq('empresa_id',emp);
@@ -1430,7 +1432,7 @@ async function editarVencimientoPortal(id){
   const nuevaFecha=prompt('Nueva fecha de vencimiento (YYYY-MM-DD):');
   if(!nuevaFecha) return;
   if(!/^\d{4}-\d{2}-\d{2}$/.test(nuevaFecha)){toast('Formato invalido. Usa YYYY-MM-DD', 'warn');return;}
-  const {error}=await db.from('portal_documentos').update({
+  try{ await SyhAPI.renovarDocumentoPortal(id,nuevaFecha); //
     fecha_vencimiento:nuevaFecha,
     estado_portal:'aprobado',
     fecha_carga_portal:hoy(),
@@ -1441,7 +1443,7 @@ async function editarVencimientoPortal(id){
 
 async function borrarPortalDoc(id){
   if(!(await confirmar('Borrar este documento del portal?'))) return;
-  await db.from('portal_documentos').delete().eq('id',id);
+  await SyhAPI.eliminarDocumentoPortal(id);
   cargarPortales();
 }
 

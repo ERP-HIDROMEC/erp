@@ -9,6 +9,10 @@
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="erp-utils.js"></script>
 <script src="erp-sidebar.js"></script>
+<script src="api/empresas.api.js"></script>
+<script src="api/clientes.api.js"></script>
+<script src="api/remitos.api.js"></script>
+<script src="api/contratos.api.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js"></script>
 <style>
   .kpi-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:14px;margin-bottom:20px;}
@@ -34,7 +38,7 @@
 </style>
 </head>
 <body>
-<div id="overlay" class="overlay" onclick="ERP.ERP.closeSidebar()"></div>
+<div id="overlay" class="overlay" onclick="ERP.closeSidebar()"></div>
 <div id="sidebar-root"></div>
 
 <main class="main">
@@ -232,8 +236,7 @@ async function init(){
 }
 
 async function verificarCAI(){
-  const {data}=await db.from('talonarios_cai').select('*')
-    .eq('empresa_id','a1000000-0000-0000-0000-000000000001')
+  caiActual=await RemitosAPI.getTalonarioActivo('a1000000-0000-0000-0000-000000000001'); //
     .eq('activo',true).order('created_at',{ascending:false}).limit(1);
   const alerta=document.getElementById('alerta-cai');
   if(!data||!data.length){
@@ -279,7 +282,7 @@ async function cargarRemitos(){
   const mes=document.getElementById('f-mes').value;
   const buscar=document.getElementById('f-buscar').value.toLowerCase();
 
-  let q=db.from('remitos_v2').select('*,clientes(nombre),empresas(nombre),factura_id')
+  const remData=await RemitosAPI.getRemitos({}); let q={data:remData}; //
     .order('numero',{ascending:false}).limit(500);
   if(emp) q=q.eq('empresa_id',emp);
   if(tipo) q=q.eq('tipo',tipo);
@@ -295,7 +298,7 @@ async function cargarRemitos(){
   const conFact=rows.filter(r=>r.factura_id);
   if(conFact.length){
     const facIds=[...new Set(conFact.map(r=>r.factura_id))];
-    const {data:facs}=await db.from('facturas_emitidas').select('id,numero_factura').in('id',facIds);
+    const facs=await RemitosAPI.getFacturasDeRemitos(facIds);
     const facMap={};(facs||[]).forEach(f=>facMap[f.id]=f.numero_factura);
     rows=rows.map(r=>({...r,_nroFactura:r.factura_id?facMap[r.factura_id]:null}));
   }
@@ -343,13 +346,13 @@ async function cargarPendientes(){
   const emp=document.getElementById('f-empresa').value;
 
   // Pendientes normales (no migrados)
-  let q1=db.from('remitos_v2').select('*,clientes(nombre),empresas(nombre)')
+  const remData1=await RemitosAPI.getRemitos({estados:['emitido','aceptado']}); let q1={data:remData1}; //
     .in('estado',['emitido','enviado','aceptado']).neq('tipo','interno').eq('migrado',false)
     .order('fecha',{ascending:true});
   if(emp) q1=q1.eq('empresa_id',emp);
 
   // Pendientes históricos (migrados, no facturados)
-  let q2=db.from('remitos_v2').select('*,clientes(nombre),empresas(nombre)')
+  const remData2=await RemitosAPI.getRemitos({estado:'facturado'}); let q2={data:remData2}; //
     .eq('migrado',true).neq('estado','facturado').neq('estado','anulado')
     .order('fecha',{ascending:true});
   if(emp) q2=q2.eq('empresa_id',emp);
@@ -414,7 +417,7 @@ async function cargarPendientes(){
 async function cargarTalonarios(){
   document.getElementById('kpis').innerHTML='';
   document.getElementById('contenido').innerHTML='<div class="spinner-wrap"><div class="spinner"></div>Cargando...</div>';
-  const {data}=await db.from('talonarios_cai').select('*,empresas(nombre)').order('created_at',{ascending:false});
+  const data=await RemitosAPI.getTalonarios();
   const rows=data||[];
   const hoyStr=hoy();
   document.getElementById('contenido').innerHTML=`
@@ -446,10 +449,10 @@ async function cargarTalonarios(){
 // ===== MODAL NUEVO REMITO =====
 async function cargarDatosModal(){
   const empId=document.getElementById('nr-empresa').value;
-  const {data:clientes}=await db.from('clientes').select('id,nombre').eq('empresa_id',empId).eq('activo',true).order('nombre');
+  const clientes=await ClientesAPI.getClientesSelect(empId);
   document.getElementById('nr-cliente').innerHTML='<option value="">Seleccioná cliente</option>'+(clientes||[]).map(c=>`<option value="${c.id}">${c.nombre}</option>`).join('');
   // Info CAI
-  const {data:tal}=await db.from('talonarios_cai').select('*').eq('empresa_id',empId).eq('activo',true).gte('fecha_vencimiento',hoy()).order('created_at',{ascending:false}).limit(1);
+  const tal=await RemitosAPI.getTalonarioActivo(empId);
   const infoEl=document.getElementById('cai-info');
   if(tal&&tal.length){
     const t=tal[0];
@@ -493,7 +496,7 @@ async function cargarContratos(){
   const empId=document.getElementById('nr-empresa').value;
   const clienteId=document.getElementById('nr-cliente').value;
   // Traer todos los contratos activos de la empresa, filtrar por cliente si hay uno seleccionado
-  let q=db.from('contratos').select('id,numero_contrato,descripcion,clientes(nombre)').eq('empresa_id',empId).eq('estado','activo').order('numero_contrato');
+  const contratosData=await ContratosAPI.getContratosSelect(empId); let q={data:contratosData,error:null};
   if(clienteId) q=q.eq('cliente_id',clienteId);
   const {data}=await q;
   document.getElementById('nr-contrato').innerHTML=(data||[]).length
@@ -504,7 +507,7 @@ async function cargarContratos(){
 async function cargarItemsContrato(){
   const contratoId=document.getElementById('nr-contrato').value;
   if(!contratoId) return;
-  const {data}=await db.from('contrato_items').select('*').eq('contrato_id',contratoId).eq('activo',true);
+  const data=await ContratosAPI.getItemsContrato(contratoId);
   const tbody=document.getElementById('items-body');
   tbody.innerHTML='';
   (data||[]).forEach(item=>{
@@ -524,7 +527,7 @@ function abrirNuevo(){
 }
 
 async function editarRemito(id){
-  const {data:r}=await db.from('remitos_v2').select('*').eq('id',id).single();
+  const r=await RemitosAPI.getRemitoSimple(id);
   if(!r) return;
   editId=id;
   document.getElementById('rem-titulo').textContent='Editar remito';
@@ -537,7 +540,7 @@ async function editarRemito(id){
   document.getElementById('nr-cliente').value=r.cliente_id||'';
   toggleContrato();
   // Cargar items
-  const {data:items}=await db.from('remito_items_v2').select('*').eq('remito_id',id).order('orden');
+  const items=await RemitosAPI.getItemsRemito(id);
   const tbody=document.getElementById('items-body');
   tbody.innerHTML='';
   (items||[]).forEach(it=>agregarItemRow(it.cantidad||'',it.descripcion));
@@ -583,7 +586,7 @@ async function guardarRemito(estado){
 
   let remitoId=editId;
   if(editId){
-    const {error}=await db.from('remitos_v2').update(payload).eq('id',editId);
+    try{ await RemitosAPI.actualizarRemito(editId,payload); }catch(e){error=e;}
     if(error){toast('Error: ', 'error');return;}
   } else {
     if(estado==='borrador'){
@@ -591,18 +594,18 @@ async function guardarRemito(estado){
       payload.numero=Date.now();
       payload.numero_formateado='BORRADOR';
     }
-    const {data,error}=await db.from('remitos_v2').insert(payload).select().single();
+    let data=null,error=null; try{ data=await RemitosAPI.crearRemito(payload); }catch(e){error=e;}
     if(error){toast('Error: ', 'error');return;}
     remitoId=data.id;
     // Avanzar número CAI
     if(estado==='emitido'&&talonarioId){
-      await db.from('talonarios_cai').update({nro_actual:numero+1}).eq('id',talonarioId);
+      await RemitosAPI.avanzarNroTalonario(talonarioId,numero+1);
       caiActual.nro_actual=numero+1;
     }
   }
 
   // Guardar items
-  await db.from('remito_items_v2').delete().eq('remito_id',remitoId);
+  // items se reemplazan via reemplazarItemsRemito
   const filas=document.getElementById('items-body').querySelectorAll('tr');
   const itemsData=[];
   filas.forEach((fila,i)=>{
@@ -611,7 +614,7 @@ async function guardarRemito(estado){
     const desc=inputs[1]?.value?.trim();
     if(desc) itemsData.push({remito_id:remitoId,orden:i+1,cantidad:cant||null,descripcion:desc});
   });
-  if(itemsData.length) await db.from('remito_items_v2').insert(itemsData);
+  await RemitosAPI.reemplazarItemsRemito(remitoId, itemsData);
 
   cerrarModal();
   await verificarCAI();
@@ -621,7 +624,7 @@ async function guardarRemito(estado){
 
 async function anularRemito(id){
   if(!(await confirmar('¿Anular este remito?'))) return;
-  await db.from('remitos_v2').update({estado:'anulado'}).eq('id',id);
+  await RemitosAPI.anularRemito(id);
   cargarRemitos();
 }
 
@@ -630,9 +633,9 @@ function irAFacturar(id){
 }
 
 async function generarPDF(id){
-  const {data:r}=await db.from('remitos_v2').select('*,clientes(*),empresas(*)').eq('id',id).single();
+  const r=await RemitosAPI.getRemitoById(id);
   if(!r){toast('No se encontró el remito.', 'warn');return;}
-  const {data:items}=await db.from('remito_items_v2').select('*').eq('remito_id',id).order('orden');
+  const items=await RemitosAPI.getItemsRemito(id);
 
   const {jsPDF}=window.jspdf;
   const doc=new jsPDF({format:'a4',unit:'mm'});
@@ -876,10 +879,9 @@ async function guardarTalonario(){
   const vto=document.getElementById('nt-vto').value;
   if(!cai||!vto||!desde||!hasta){toast('Completá todos los campos.', 'warn');return;}
   // Desactivar talonarios anteriores
-  await db.from('talonarios_cai').update({activo:false})
-    .eq('empresa_id',document.getElementById('nt-empresa').value);
-  const {error}=await db.from('talonarios_cai').insert({
-    empresa_id:document.getElementById('nt-empresa').value,
+  const ntEmpId=document.getElementById('nt-empresa').value;
+  try{ await RemitosAPI.crearTalonario({
+    empresa_id:ntEmpId,
     punto_venta:document.getElementById('nt-pv').value||'0001',
     cai,fecha_vencimiento:vto,
     nro_desde:desde,nro_hasta:hasta,nro_actual:actual,activo:true,
@@ -896,14 +898,14 @@ function cerrarModal2(){document.getElementById('modal-talonario').classList.rem
 
 async function marcarHistoricoFacturado(id){
   if(!(await confirmar('¿Marcar este remito histórico como facturado?'))) return;
-  const {error}=await db.from('remitos_v2').update({estado:'facturado'}).eq('id',id);
+  try{ await RemitosAPI.marcarRemitoFacturado(id); }catch(e){error=e;}
   if(error){toast('Error: ', 'error');return;}
   recargar();
 }
 
 async function marcarHistoricoPendiente(id){
   if(!(await confirmar('¿Volver este remito a pendiente de facturación?'))) return;
-  const {error}=await db.from('remitos_v2').update({estado:'emitido'}).eq('id',id);
+  try{ await RemitosAPI.marcarRemitoEmitido(id); }catch(e){error=e;}
   if(error){toast('Error: ', 'error');return;}
   recargar();
 }

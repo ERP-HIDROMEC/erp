@@ -9,6 +9,11 @@
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="erp-utils.js"></script>
 <script src="erp-sidebar.js"></script>
+<script src="api/empresas.api.js"></script>
+<script src="api/clientes.api.js"></script>
+<script src="api/proyectos.api.js"></script>
+<script src="api/empleados.api.js"></script>
+<script src="api/presupuestos.api.js"></script>
 <style>
   .btn-warning{background:rgba(245,158,11,0.15);color:var(--orange);border:1px solid rgba(245,158,11,0.2);}
   .kpi-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:14px;margin-bottom:20px;}
@@ -33,7 +38,7 @@
 </style>
 </head>
 <body>
-<div id="overlay" class="overlay" onclick="ERP.ERP.closeSidebar()"></div>
+<div id="overlay" class="overlay" onclick="ERP.closeSidebar()"></div>
 <div id="sidebar-root"></div>
 
 <main class="main">
@@ -206,14 +211,14 @@ async function init(){
 async function cargarDatosModal(){
   const empId=document.getElementById('np-empresa').value;
   const [{data:clientes},{data:proyectos}]=await Promise.all([
-    db.from('clientes').select('id,nombre').eq('empresa_id',empId).eq('activo',true).order('nombre'),
-    db.from('proyectos').select('id,nombre').eq('empresa_id',empId).in('estado',['activo','pausado']).order('nombre'),
+    ClientesAPI.getClientesSelect(empId).then(d=>({data:d})),
+    ProyectosAPI.getProyectosSelect(empId,['activo','pausado']).then(d=>({data:d})),
   ]);
   document.getElementById('np-cliente').innerHTML='<option value="">Sin cliente</option>'+(clientes||[]).map(c=>`<option value="${c.id}">${c.nombre}</option>`).join('');
   document.getElementById('np-proyecto').innerHTML='<option value="">Sin proyecto asociado</option>'+(proyectos||[]).map(p=>`<option value="${p.id}">${p.nombre}</option>`).join('');
 
   // Costo hora promedio de empleados activos de esa empresa
-  const {data:emps}=await db.from('empleados').select('costo_hora').eq('empresa_id',empId).eq('activo',true);
+  const emps=await EmpleadosAPI.getEmpleadosConCostoHora(empId);
   if(emps&&emps.length){
     const promedio=emps.reduce((s,e)=>s+Number(e.costo_hora||0),0)/emps.length;
     document.getElementById('np-costo-hora').value=Math.round(promedio);
@@ -271,7 +276,7 @@ async function cargarPresupuestos(){
   const estado=document.getElementById('f-estado').value;
   const buscar=document.getElementById('f-buscar').value.toLowerCase();
 
-  let q=db.from('presupuestos').select('*,clientes(nombre),empresas(nombre),proyectos(nombre)').order('created_at',{ascending:false});
+  const presData=await PresupuestosAPI.getPresupuestos({}); let q={data:presData};
   if(emp) q=q.eq('empresa_id',emp);
   if(estado) q=q.eq('estado',estado);
   const {data}=await q;
@@ -336,7 +341,7 @@ function abrirNuevo(){
 }
 
 async function editarPresupuesto(id){
-  const {data:r}=await db.from('presupuestos').select('*').eq('id',id).single();
+  const r=await PresupuestosAPI.getPresupuestoById(id);
   if(!r) return;
   editId=id;
   document.getElementById('pres-titulo').textContent='Editar presupuesto';
@@ -387,23 +392,22 @@ async function guardarPresupuesto(estadoOverride){
     observaciones:document.getElementById('np-obs').value||null,
   };
   let error;
-  if(editId){({error}=await db.from('presupuestos').update(payload).eq('id',editId));}
-  else{({error}=await db.from('presupuestos').insert(payload));}
+  try{ if(editId){ await PresupuestosAPI.actualizarPresupuesto(editId,payload); } else { await PresupuestosAPI.crearPresupuesto(payload); } }catch(e){error=e;}
   if(error){toast('Error: ', 'error');return;}
   cerrarModal();
   cargarPresupuestos();
 }
 
 async function cambiarEstado(id,estado){
-  await db.from('presupuestos').update({estado}).eq('id',id);
+  await PresupuestosAPI.cambiarEstado(id,estado);
   cargarPresupuestos();
 }
 
 async function convertirAProyecto(id){
-  const {data:p}=await db.from('presupuestos').select('*').eq('id',id).single();
+  const p=await PresupuestosAPI.getPresupuestoById(id);
   if(!p) return;
   if(!(await confirmar(`¿Crear proyecto desde el presupuesto "${p.descripcion.substring(0,50)}"?`))) return;
-  const {error}=await db.from('proyectos').insert({
+  try{ await ProyectosAPI.crearProyecto({
     empresa_id:p.empresa_id,
     cliente_id:p.cliente_id,
     nombre:p.descripcion.substring(0,100),
@@ -413,14 +417,14 @@ async function convertirAProyecto(id){
     fecha_inicio:hoy(),
   });
   if(error){toast('Error: ', 'error');return;}
-  await db.from('presupuestos').update({estado:'aprobado'}).eq('id',id);
+  await PresupuestosAPI.cambiarEstado(id,'aprobado');
   toast('Proyecto creado. Podés verlo en el módulo Operaciones → Proyectos.', 'success');
   cargarPresupuestos();
 }
 
 async function borrar(id){
   if(!(await confirmar('¿Borrar este presupuesto?'))) return;
-  await db.from('presupuestos').delete().eq('id',id);
+  await PresupuestosAPI.eliminarPresupuesto(id);
   cargarPresupuestos();
 }
 

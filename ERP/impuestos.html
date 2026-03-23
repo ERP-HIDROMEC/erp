@@ -9,6 +9,9 @@
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="erp-utils.js"></script>
 <script src="erp-sidebar.js"></script>
+<script src="api/empresas.api.js"></script>
+<script src="api/clientes.api.js"></script>
+<script src="api/impuestos.api.js"></script>
 <style>
   tr:last-child tr:hover .saldo-pos{color:var(--red);}
   .saldo-neg{color:var(--green);}
@@ -28,7 +31,7 @@
 </style>
 </head>
 <body>
-<div id="overlay" class="overlay" onclick="ERP.ERP.closeSidebar()"></div>
+<div id="overlay" class="overlay" onclick="ERP.closeSidebar()"></div>
 <div id="sidebar-root"></div>
 
 <main class="main">
@@ -349,28 +352,28 @@ async function cargarIVA(){
   const perIni=tipo==='mes'?periodo:`${anio}-01`;
   const perFin=tipo==='mes'?periodo:`${anio}-12`;
 
-  const {data:facturas}=await db.from('facturas_emitidas')
+  const facturas=await ImpuestosAPI.getDatosIVA(empId,periodoDesde,periodoHasta).then(d=>d.facturas); //
     .select('monto_neto,monto_iva,fecha_emision,tipo')
     .eq('empresa_id',empId)
     .gte('fecha_emision',fechaIni)
     .lte('fecha_emision',fechaFin)
     .neq('estado','anulada');
 
-  const {data:compras}=await db.from('egresos')
+  const compras=await EgresosAPI.getEgresosImpuestos(empId,periodoDesde,periodoHasta); //
     .select('monto,fecha_egreso')
     .eq('empresa_id',empId)
     .not('numero_factura','is',null)
     .gte('fecha_egreso',fechaIni)
     .lte('fecha_egreso',fechaFin);
 
-  const {data:retenciones}=await db.from('retenciones')
+  const retenciones=await ImpuestosAPI.getRetenciones({empresaId:empId,tipo:'iva'}); //
     .select('monto,periodo')
     .eq('empresa_id',empId)
     .eq('tipo','iva')
     .gte('periodo',perIni)
     .lte('periodo',perFin);
 
-  const {data:pagosIva}=await db.from('pagos_impuestos')
+  const pagosIva=await ImpuestosAPI.getPagosImpuestos({empresaId:empId,tipo:'iva'}); //
     .select('monto,periodo')
     .eq('empresa_id',empId)
     .eq('tipo','iva')
@@ -472,21 +475,21 @@ async function cargarIIBB(){
   const perIni=tipo==='mes'?periodoSel:`${anio}-01`;
   const perFin=tipo==='mes'?periodoSel:`${anio}-12`;
 
-  const {data:facturas}=await db.from('facturas_emitidas')
+  const facturas=await FacturasAPI.getFacturasImpuestos(empId,periodoDesde,periodoHasta); //
     .select('monto_neto,fecha_emision,tipo,cliente_id,clientes(nombre,alicuota_iibb)')
     .eq('empresa_id',empId)
     .gte('fecha_emision',fechaIni)
     .lte('fecha_emision',fechaFin)
     .neq('estado','anulada');
 
-  const {data:retIIBB}=await db.from('retenciones')
+  const retIIBB=await ImpuestosAPI.getRetenciones({empresaId:empId,tipo:'iibb'}); //
     .select('monto,periodo')
     .eq('empresa_id',empId)
     .eq('tipo','iibb')
     .gte('periodo',perIni)
     .lte('periodo',perFin);
 
-  const {data:pagosIIBB}=await db.from('pagos_impuestos')
+  const pagosIIBB=await ImpuestosAPI.getPagosImpuestos({empresaId:empId,tipo:'iibb'}); //
     .select('monto,periodo')
     .eq('empresa_id',empId)
     .eq('tipo','iibb')
@@ -583,7 +586,7 @@ async function cargarRetenciones(){
   const anio=document.getElementById('f-anio').value;
   const perIni=tipo==='mes'?perSel:`${anio}-01`;
   const perFin=tipo==='mes'?perSel:`${anio}-12`;
-  const {data}=await db.from('retenciones')
+  const data=await ImpuestosAPI.getRetenciones({empresaId:empId}); //
     .select('*,clientes(nombre),empresas(nombre)')
     .eq('empresa_id',empId)
     .gte('periodo',perIni)
@@ -626,7 +629,7 @@ async function cargarPagos(){
   const anio=document.getElementById('f-anio').value;
   const perIni=tipo==='mes'?perSel:`${anio}-01`;
   const perFin=tipo==='mes'?perSel:`${anio}-12`;
-  const {data}=await db.from('pagos_impuestos')
+  const data=await ImpuestosAPI.getPagosImpuestos({empresaId:empId}); //
     .select('*,empresas(nombre)')
     .eq('empresa_id',empId)
     .gte('periodo',perIni)
@@ -667,14 +670,14 @@ async function cargarPagos(){
 // ===== CARGAR DATOS =====
 async function cargarClientesRet(){
   const empId=document.getElementById('nr-empresa').value;
-  const {data}=await db.from('clientes').select('id,nombre').eq('empresa_id',empId).eq('activo',true).order('nombre');
+  const data=await ClientesAPI.getClientesSelect(empId);
   document.getElementById('nr-cliente').innerHTML='<option value="">Sin cliente específico</option>'+(data||[]).map(c=>`<option value="${c.id}">${c.nombre}</option>`).join('');
 }
 
 async function guardarRetencion(){
   const monto=parseFloat(document.getElementById('nr-monto').value)||0;
   if(!monto){toast('Ingresá el monto.', 'warn');return;}
-  const {error}=await db.from('retenciones').insert({
+  try{ await ImpuestosAPI.crearRetencion({
     empresa_id:document.getElementById('nr-empresa').value,
     cliente_id:document.getElementById('nr-cliente').value||null,
     tipo:document.getElementById('nr-tipo').value,
@@ -690,7 +693,7 @@ async function guardarRetencion(){
 
 async function borrarRetencion(id){
   if(!(await confirmar('¿Borrar esta retención?'))) return;
-  await db.from('retenciones').delete().eq('id',id);
+  await ImpuestosAPI.eliminarRetencion(id);
   cargarRetenciones();
 }
 
@@ -702,7 +705,7 @@ function toggleSocio(){
 async function guardarPago(){
   const monto=parseFloat(document.getElementById('np-monto').value)||0;
   if(!monto){toast('Ingresá el monto.', 'warn');return;}
-  const {error}=await db.from('pagos_impuestos').insert({
+  try{ await ImpuestosAPI.registrarPago({
     empresa_id:document.getElementById('np-empresa').value,
     tipo:document.getElementById('np-tipo').value,
     periodo:document.getElementById('np-periodo').value,
@@ -719,7 +722,7 @@ async function guardarPago(){
 
 async function borrarPago(id){
   if(!(await confirmar('¿Borrar este pago?'))) return;
-  await db.from('pagos_impuestos').delete().eq('id',id);
+  await ImpuestosAPI.eliminarPago(id);
   cargarPagos();
 }
 
@@ -746,7 +749,7 @@ async function cargarVarios(){
   const perIni=tipo==='mes'?perSel:`${anio}-01`;
   const perFin=tipo==='mes'?perSel:`${anio}-12`;
 
-  let q=db.from('impuestos_varios')
+  const variosData=await ImpuestosAPI.getImpuestosVarios({}); let q={data:variosData}; //
     .select('*,empresas(nombre)')
     .gte('periodo',perIni).lte('periodo',perFin)
     .order('fecha',{ascending:false});
@@ -806,7 +809,7 @@ async function guardarVarios(){
   const monto=parseFloat(document.getElementById('nv-monto').value)||0;
   const desc=document.getElementById('nv-descripcion').value.trim();
   if(!monto||!desc){toast('Completá descripción y monto.', 'warn');return;}
-  const {error}=await db.from('impuestos_varios').insert({
+  try{ await ImpuestosAPI.registrarImpuestoVario({
     empresa_id:document.getElementById('nv-empresa').value,
     tipo:document.getElementById('nv-tipo').value,
     descripcion:desc,
@@ -822,13 +825,13 @@ async function guardarVarios(){
 }
 
 async function pagarVarios(id){
-  await db.from('impuestos_varios').update({pagado:true}).eq('id',id);
+  await ImpuestosAPI.marcarPagadoVario(id);
   cargarVarios();
 }
 
 async function borrarVarios(id){
   if(!(await confirmar('¿Borrar este registro?'))) return;
-  await db.from('impuestos_varios').delete().eq('id',id);
+  await ImpuestosAPI.eliminarImpuestoVario(id);
   cargarVarios();
 }
 

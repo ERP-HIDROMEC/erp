@@ -9,6 +9,10 @@
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="erp-utils.js"></script>
 <script src="erp-sidebar.js"></script>
+<script src="api/empresas.api.js"></script>
+<script src="api/clientes.api.js"></script>
+<script src="api/contratos.api.js"></script>
+<script src="api/remitos.api.js"></script>
 <style>
   .layout{display:grid;grid-template-columns:1fr 1fr;gap:20px;}
   tr:last-child tr:hover tr.selected .estado.activo{background:rgba(16,185,129,0.15);color:var(--green);}
@@ -31,7 +35,7 @@
 </style>
 </head>
 <body>
-<div id="overlay" class="overlay" onclick="ERP.ERP.closeSidebar()"></div>
+<div id="overlay" class="overlay" onclick="ERP.closeSidebar()"></div>
 <div id="sidebar-root"></div>
 
 <main class="main">
@@ -212,7 +216,7 @@ async function cargarContratos(){
   const estado=document.getElementById('f-estado').value;
   const buscar=document.getElementById('f-buscar').value.toLowerCase();
 
-  let q=db.from('contratos').select('*,clientes(nombre),empresas(nombre)').order('created_at',{ascending:false});
+  const contratosData=await ContratosAPI.getContratos({}); let q={data:contratosData};
   if(emp) q=q.eq('empresa_id',emp);
   if(estado) q=q.eq('estado',estado);
   const {data}=await q;
@@ -229,7 +233,7 @@ async function cargarContratos(){
 
   if(todosIds.length){
     // Remitos vinculados directamente al contrato
-    const {data:rems}=await db.from('remitos_v2')
+    const rems=await ContratosAPI.getRemitosDeContrato(contratoSelId); //
       .select('contrato_id,total_valorizado')
       .in('contrato_id',todosIds)
       .neq('estado','anulado');
@@ -332,7 +336,7 @@ function deseleccionarContrato(){
 
 async function cargarClientesModal(){
   const empId=document.getElementById('nc-empresa').value;
-  const {data}=await db.from('clientes').select('id,nombre').eq('empresa_id',empId).eq('activo',true).order('nombre');
+  const data=await ClientesAPI.getClientesSelect(empId);
   document.getElementById('nc-cliente').innerHTML=(data||[]).map(c=>`<option value="${c.id}">${c.nombre}</option>`).join('');
 }
 
@@ -346,7 +350,7 @@ function abrirNuevoContrato(){
 }
 
 async function editarContrato(id){
-  const {data:r}=await db.from('contratos').select('*').eq('id',id).single();
+  const r=await ContratosAPI.getContratoById(id);
   if(!r) return;
   contratoEditId=id;
   document.getElementById('cont-titulo').textContent='Editar contrato';
@@ -379,8 +383,7 @@ async function guardarContrato(){
     monto_ampliacion:parseFloat(document.getElementById('nc-ampliacion').value)||null,
   };
   let error;
-  if(contratoEditId){({error}=await db.from('contratos').update(payload).eq('id',contratoEditId));}
-  else{({error}=await db.from('contratos').insert(payload));}
+  try{ if(contratoEditId){ await ContratosAPI.actualizarContrato(contratoEditId,payload); } else { await ContratosAPI.crearContrato(payload); } }catch(e){error=e;}
   if(error){toast('Error: ', 'error');return;}
   cerrarModal('modal-contrato');
   cargarContratos();
@@ -394,7 +397,7 @@ async function cargarPrecios(){
   if(!contratoSelId){
     // Mostrar todos los contratos para seleccionar
     const emp=document.getElementById('f-empresa').value;
-    let q=db.from('contratos').select('*,clientes(nombre)').eq('estado','activo').order('numero_contrato');
+    const ctActData=await ContratosAPI.getContratosSelect(empId||''); let q={data:ctActData};
     if(emp) q=q.eq('empresa_id',emp);
     const {data:contratos}=await q;
     document.getElementById('kpis').innerHTML='';
@@ -413,7 +416,7 @@ async function cargarPrecios(){
   }
 
   // Cargar items del contrato seleccionado
-  let q=db.from('contrato_items').select('*').eq('contrato_id',contratoSelId).eq('activo',true).order('descripcion');
+  const itemsData=await ContratosAPI.getItemsContrato(contratoSelId); let q={data:itemsData};
   const {data:items}=await q;
   let rows=items||[];
   if(buscar) rows=rows.filter(r=>(r.descripcion||'').toLowerCase().includes(buscar));
@@ -472,9 +475,9 @@ async function guardarItem(){
   
   if(itemEditId){
     // Guardar historial del precio anterior
-    const {data:actual}=await db.from('contrato_items').select('precio_unitario').eq('id',itemEditId).single();
+    const actual=await ContratosAPI.getItemContratoById(itemEditId);
     if(actual && actual.precio_unitario !== precio){
-      await db.from('contrato_precios_historial').insert({
+      await ContratosAPI.registrarCambioPrecio({
         contrato_item_id: itemEditId,
         precio_anterior: actual.precio_unitario,
         precio_nuevo: precio,
@@ -482,13 +485,13 @@ async function guardarItem(){
         motivo: document.getElementById('ni-motivo').value||null,
       });
     }
-    await db.from('contrato_items').update({
+    await ContratosAPI.actualizarItemContrato(itemEditId,{
       descripcion:desc,
       unidad:document.getElementById('ni-um').value,
       precio_unitario:precio,
     }).eq('id',itemEditId);
   } else {
-    await db.from('contrato_items').insert({
+    await ContratosAPI.crearItemContrato({
       contrato_id:contratoSelId,
       descripcion:desc,
       unidad:document.getElementById('ni-um').value,
@@ -502,7 +505,7 @@ async function guardarItem(){
 
 async function borrarItem(id){
   if(!(await confirmar('¿Borrar este ítem?'))) return;
-  await db.from('contrato_items').update({activo:false}).eq('id',id);
+  await ContratosAPI.darBajaItemContrato(id);
   cargarPrecios();
 }
 
@@ -511,7 +514,7 @@ async function cargarHistorial(){
   document.getElementById('kpis').innerHTML='';
   document.getElementById('contenido').innerHTML='<div class="spinner-wrap"><div class="spinner"></div>Cargando...</div>';
 
-  let q=db.from('contrato_precios_historial')
+  const histData=await ContratosAPI.getHistorialPrecios({itemId:contratoSelId}); let q={data:histData}; //
     .select('*,contrato_items(descripcion,contratos(numero_contrato))')
     .order('created_at',{ascending:false}).limit(200);
   const {data}=await q;

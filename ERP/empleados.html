@@ -9,6 +9,10 @@
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="erp-utils.js"></script>
 <script src="erp-sidebar.js"></script>
+<script src="api/empresas.api.js"></script>
+<script src="api/empleados.api.js"></script>
+<script src="api/clientes.api.js"></script>
+<script src="api/proyectos.api.js"></script>
 <style>
   tr:last-child tr:hover .tag{display:inline-block;padding:3px 10px;border-radius:20px;font-size:11px;font-weight:500;}
   .tag.activo{background:rgba(16,185,129,0.15);color:var(--green);}
@@ -31,7 +35,7 @@
 </style>
 </head>
 <body>
-<div id="overlay" class="overlay" onclick="ERP.ERP.closeSidebar()"></div>
+<div id="overlay" class="overlay" onclick="ERP.closeSidebar()"></div>
 <div id="sidebar-root"></div>
 
 <main class="main">
@@ -459,7 +463,7 @@ async function init(){
   // Badge documentos vencidos
   const hoyStr=new Date().toISOString().split('T')[0];
   const en30=new Date();en30.setDate(en30.getDate()+30);
-  const {data:docsAlert}=await db.from('empleados_documentos')
+  const docsAlert=await EmpleadosAPI.getDocsAlerta(empId,10); //
     .select('id',{count:'exact',head:true})
     .lte('fecha_vencimiento',en30.toISOString().split('T')[0]);
   const badge=document.getElementById('badge-docs-venc');
@@ -518,7 +522,7 @@ async function cargarEmpleados(){
   const activo=document.getElementById('f-estado').value;
   const buscar=document.getElementById('f-buscar').value.toLowerCase();
 
-  let q=db.from('empleados').select('*,empresas(nombre)').order('nombre');
+  const empData=await EmpleadosAPI.getEmpleados({}); let q={data:empData};
   if(emp) q=q.eq('empresa_id',emp);
   if(activo!=='') q=q.eq('activo',activo==='true');
   const {data}=await q;
@@ -563,7 +567,7 @@ function abrirNuevoEmpleado(){
 }
 
 async function editarEmpleado(id){
-  const {data:r}=await db.from('empleados').select('*').eq('id',id).single();
+  const r=await EmpleadosAPI.getEmpleadoById(id);
   if(!r) return;
   empEditId=id;
   document.getElementById('emp-titulo').textContent='Editar empleado';
@@ -590,8 +594,7 @@ async function guardarEmpleado(){
     activo:document.getElementById('ne-activo').value==='true',
   };
   let error;
-  if(empEditId){({error}=await db.from('empleados').update(payload).eq('id',empEditId));}
-  else{({error}=await db.from('empleados').insert(payload));}
+  try{ if(empEditId){ await EmpleadosAPI.actualizarEmpleado(empEditId,payload); } else { await EmpleadosAPI.crearEmpleado(payload); } }catch(e){error=e;}
   if(error){toast('Error: ', 'error');return;}
   cerrarModal('modal-empleado');
   cargarEmpleados();
@@ -599,14 +602,14 @@ async function guardarEmpleado(){
 
 async function toggleActivo(id,activo){
   if(!(await confirmar(activo?'¿Dar de baja este empleado?':'¿Reactivar este empleado?'))) return;
-  await db.from('empleados').update({activo:!activo}).eq('id',id);
+  await EmpleadosAPI.toggleActivoEmpleado(id,activo);
   cargarEmpleados();
 }
 
 // ===== SUELDOS =====
 async function cargarEmpleadosModal(){
   const empId=document.getElementById('ns-empresa').value;
-  const {data}=await db.from('empleados').select('id,nombre').eq('empresa_id',empId).eq('activo',true).order('nombre');
+  const data=await EmpleadosAPI.getEmpleadosSelect(empId);
   document.getElementById('ns-empleado').innerHTML=(data||[]).map(e=>`<option value="${e.id}">${e.nombre}</option>`).join('');
 }
 
@@ -621,7 +624,7 @@ async function cargarSueldos(){
   document.getElementById('contenido').innerHTML='<div class="spinner-wrap"><div class="spinner"></div>Cargando...</div>';
   const emp=document.getElementById('f-empresa').value;
   const buscar=document.getElementById('f-buscar').value.toLowerCase();
-  let q=db.from('sueldos').select('*,empleados(nombre),empresas(nombre)').order('periodo',{ascending:false});
+  const sueldosData=await EmpleadosAPI.getSueldos({}); let q={data:sueldosData};
   if(emp) q=q.eq('empresa_id',emp);
   const {data}=await q;
   let rows=data||[];
@@ -669,7 +672,7 @@ async function guardarSueldo(){
   const neto=parseFloat(document.getElementById('ns-neto').value)||0;
   if(!bruto){toast('Ingresá el monto bruto.', 'warn');return;}
   const pagado=document.getElementById('ns-pagado').value==='true';
-  const {error}=await db.from('sueldos').insert({
+  try{ await EmpleadosAPI.registrarSueldo({
     empresa_id:document.getElementById('ns-empresa').value,
     empleado_id:document.getElementById('ns-empleado').value,
     periodo:document.getElementById('ns-periodo').value,
@@ -686,13 +689,13 @@ async function guardarSueldo(){
 }
 
 async function pagarSueldo(id){
-  await db.from('sueldos').update({pagado:true,fecha_pago:hoy()}).eq('id',id);
+  await EmpleadosAPI.pagarSueldo(id);
   cargarSueldos();
 }
 
 async function borrarSueldo(id){
   if(!(await confirmar('¿Borrar este registro de sueldo?'))) return;
-  await db.from('sueldos').delete().eq('id',id);
+  await EmpleadosAPI.eliminarSueldo(id);
   cargarSueldos();
 }
 
@@ -702,7 +705,7 @@ async function cargarClientes(){
   document.getElementById('contenido').innerHTML='<div class="spinner-wrap"><div class="spinner"></div>Cargando...</div>';
   const emp=document.getElementById('f-empresa').value;
   const buscar=document.getElementById('f-buscar').value.toLowerCase();
-  let q=db.from('clientes').select('*,empresas(nombre)').order('nombre');
+  const cliData=await ClientesAPI.getClientes({}); let q={data:cliData};
   if(emp) q=q.eq('empresa_id',emp);
   const {data}=await q;
   let rows=data||[];
@@ -736,7 +739,7 @@ function abrirNuevoCliente(){
 }
 
 async function editarCliente(id){
-  const {data:r}=await db.from('clientes').select('*').eq('id',id).single();
+  const r=await ClientesAPI.getClienteById(id);
   if(!r) return;
   cliEditId=id;
   document.getElementById('cli-titulo').textContent='Editar cliente';
@@ -762,15 +765,14 @@ async function guardarCliente(){
     activo:true,
   };
   let error;
-  if(cliEditId){({error}=await db.from('clientes').update(payload).eq('id',cliEditId));}
-  else{({error}=await db.from('clientes').insert(payload));}
+  try{ if(cliEditId){ await ClientesAPI.actualizarCliente(cliEditId,payload); } else { await ClientesAPI.crearCliente(payload); } }catch(e){error=e;}
   if(error){toast('Error: ', 'error');return;}
   cerrarModal('modal-cliente');
   cargarClientes();
 }
 
 async function toggleCliente(id,activo){
-  await db.from('clientes').update({activo:!activo}).eq('id',id);
+  await ClientesAPI.toggleActivoCliente(id,activo);
   cargarClientes();
 }
 
@@ -779,7 +781,7 @@ async function cargarCostos(){
   document.getElementById('kpis').innerHTML='';
   document.getElementById('contenido').innerHTML='<div class="spinner-wrap"><div class="spinner"></div>Cargando...</div>';
   const emp=document.getElementById('f-empresa').value||'a1000000-0000-0000-0000-000000000001';
-  const {data}=await db.from('costos_roles').select('*,empresas(nombre)').eq('empresa_id',emp).order('rol');
+  const data=await ProyectosAPI.getCostosRolesCompleto(emp);
   const rows=data||[];
   const LABELS={ayudante:'Ayudante',oficial:'Oficial',oficial_esp:'Oficial Especializado',supervisor:'Supervisor',higiene:'Técnico S. e Higiene'};
 
@@ -840,7 +842,7 @@ function actualizarRecargos(id){
 
 async function guardarCostoRol(id,empId,rol){
   const monto=parseFloat(document.getElementById('costo-'+id).value)||0;
-  const {error}=await db.from('costos_roles').update({costo_hora:monto}).eq('id',id);
+  try{ await ProyectosAPI.actualizarCostoRol(id,monto); }catch(e){error=e;}
   if(error){toast('Error: ', 'error');return;}
   const btn=event.target;
   btn.textContent='✓ Guardado';
@@ -901,13 +903,13 @@ async function prepararModalDoc(){
 
 async function cargarEmpleadosDocModal(){
   const empId=document.getElementById('nd-empresa').value;
-  const {data}=await db.from('empleados').select('id,nombre').eq('empresa_id',empId).eq('activo',true).order('nombre');
+  const data=await EmpleadosAPI.getEmpleadosSelect(empId);
   document.getElementById('nd-empleado').innerHTML=(data||[]).map(e=>`<option value="${e.id}">${e.nombre}</option>`).join('');
 }
 
 async function cargarVehiculosDocModal(){
   const empId=document.getElementById('nd-empresa').value;
-  const {data}=await db.from('vehiculos').select('id,descripcion,patente').eq('empresa_id',empId).eq('activo',true).order('descripcion');
+  const data=await EmpleadosAPI.getVehiculosSelect(empId);
   const sel=document.getElementById('nd-vehiculo');
   if(sel) sel.innerHTML=(data||[]).map(v=>`<option value="${v.id}">${v.descripcion}${v.patente?' — '+v.patente:''}</option>`).join('');
 }
@@ -921,7 +923,7 @@ async function cargarDocumentos(categoria){
   const en30=new Date();en30.setDate(en30.getDate()+30);
   const en30Str=en30.toISOString().split('T')[0];
 
-  let q=db.from('empleados_documentos')
+  const docEmpData=await EmpleadosAPI.getDocumentosEmpleado({}); let q={data:docEmpData}; //
     .select('*,empleados(nombre),vehiculos(descripcion,patente),empresas(nombre)')
     .eq('categoria',categoria)
     .order('fecha_vencimiento',{ascending:true,nullsFirst:false});
@@ -1014,7 +1016,7 @@ async function guardarDocumento(){
     document.getElementById('nd-progress-bar').style.width='100%';
   }
 
-  const {error}=await db.from('empleados_documentos').insert({
+  try{ await EmpleadosAPI.registrarDocumentoEmpleado({
     empresa_id:empId,categoria:docCategoria,
     empleado_id:empleadoId,vehiculo_id:vehiculoId,
     tipo,descripcion:desc||null,
@@ -1031,7 +1033,7 @@ async function guardarDocumento(){
 async function borrarDocumento(id,path){
   if(!(await confirmar('Borrar este documento?'))) return;
   if(path) await db.storage.from('empleados-docs').remove([path]);
-  await db.from('empleados_documentos').delete().eq('id',id);
+  await EmpleadosAPI.eliminarDocumentoEmpleado(id,null);
   recargar();
 }
 
@@ -1042,7 +1044,7 @@ async function cargarAnalisisAusentismo(){
   const emp=document.getElementById('f-empresa').value;
   const anio=new Date().getFullYear();
 
-  let q=db.from('empleados_ausencias')
+  const ausData=await EmpleadosAPI.getAusencias({}); let q={data:ausData}; //
     .select('*,empleados(nombre)')
     .eq('estado','aprobada')
     .gte('fecha_inicio',`${anio}-01-01`);
@@ -1139,7 +1141,7 @@ async function cargarAnalisisAusentismo(){
 
 async function cargarEmpleadosAusModal(){
   const empId=document.getElementById('na-empresa').value;
-  const {data}=await db.from('empleados').select('id,nombre').eq('empresa_id',empId).eq('activo',true).order('nombre');
+  const data=await EmpleadosAPI.getEmpleadosSelect(empId);
   document.getElementById('na-empleado').innerHTML=(data||[]).map(e=>`<option value="${e.id}">${e.nombre}</option>`).join('');
 }
 
@@ -1150,7 +1152,7 @@ async function cargarAusencias(){
   const buscar=document.getElementById('f-buscar').value.toLowerCase();
   const hoyStr=new Date().toISOString().split('T')[0];
 
-  let q=db.from('empleados_ausencias')
+  const ausData2=await EmpleadosAPI.getAusencias({}); let q={data:ausData2}; //
     .select('*,empleados(nombre),empresas(nombre)')
     .order('fecha_inicio',{ascending:false});
   if(emp) q=q.eq('empresa_id',emp);
@@ -1238,7 +1240,7 @@ async function guardarAusencia(){
     document.getElementById('na-upload-progress').style.display='none';
   }
 
-  const {error}=await db.from('empleados_ausencias').insert({
+  try{ await EmpleadosAPI.registrarAusencia({
     empresa_id:empId2,empleado_id:empId,
     tipo:document.getElementById('na-tipo').value,
     estado:document.getElementById('na-estado').value,
@@ -1254,13 +1256,13 @@ async function guardarAusencia(){
 }
 
 async function cambiarEstadoAusencia(id,estado){
-  await db.from('empleados_ausencias').update({estado}).eq('id',id);
+  await EmpleadosAPI.cambiarEstadoAusencia(id,estado);
   cargarAusencias();
 }
 
 async function borrarAusencia(id){
   if(!(await confirmar('Borrar este registro?'))) return;
-  await db.from('empleados_ausencias').delete().eq('id',id);
+  await EmpleadosAPI.eliminarAusencia(id);
   cargarAusencias();
 }
 
@@ -1281,7 +1283,7 @@ async function cargarVehiculos(){
   const emp=document.getElementById('f-empresa').value;
   const buscar=document.getElementById('f-buscar').value.toLowerCase();
 
-  let q=db.from('vehiculos').select('*,empresas(nombre)').order('descripcion');
+  const vehData=await EmpleadosAPI.getVehiculos({}); let q={data:vehData};
   if(emp) q=q.eq('empresa_id',emp);
   const {data}=await q;
   let rows=data||[];
@@ -1355,8 +1357,7 @@ async function guardarVehiculo(){
     activo:true,
   };
   let error;
-  if(vehEditId){({error}=await db.from('vehiculos').update(payload).eq('id',vehEditId));}
-  else{({error}=await db.from('vehiculos').insert(payload));}
+  try{ if(vehEditId){ await EmpleadosAPI.actualizarVehiculo(vehEditId,payload); } else { await EmpleadosAPI.crearVehiculo(payload); } }catch(e){error=e;}
   if(error){toast('Error: ', 'error');return;}
   vehEditId=null;
   cerrarModal('modal-vehiculo');
@@ -1366,7 +1367,7 @@ async function guardarVehiculo(){
 }
 
 async function editarVehiculo(id){
-  const {data:r}=await db.from('vehiculos').select('*').eq('id',id).single();
+  const r=await EmpleadosAPI.getVehiculoById(id);
   if(!r) return;
   vehEditId=id;
   document.getElementById('veh-titulo').textContent='Editar vehiculo/equipo';
@@ -1384,7 +1385,7 @@ async function editarVehiculo(id){
 async function toggleActivoVehiculo(id, estaActivo){
   const msg=estaActivo?'Dar de baja este vehiculo/equipo?':'Activar este vehiculo/equipo?';
   if(!(await confirmar(msg))) return;
-  await db.from('vehiculos').update({activo:!estaActivo}).eq('id',id);
+  await EmpleadosAPI.toggleActivoVehiculo(id,estaActivo);
   cargarVehiculos();
 }
 

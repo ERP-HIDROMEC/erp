@@ -11,6 +11,9 @@
 <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 <script src="erp-utils.js"></script>
 <script src="erp-sidebar.js"></script>
+<script src="api/empresas.api.js"></script>
+<script src="api/egresos.api.js"></script>
+<script src="api/proyectos.api.js"></script>
 <style>
   tr:last-child tr:hover .tag{display:inline-block;padding:3px 10px;border-radius:20px;font-size:11px;font-weight:500;}
   .tag.pagado{background:rgba(16,185,129,0.15);color:var(--green);}
@@ -33,7 +36,7 @@
 </style>
 </head>
 <body>
-<div id="overlay" class="overlay" onclick="ERP.ERP.closeSidebar()"></div>
+<div id="overlay" class="overlay" onclick="ERP.closeSidebar()"></div>
 <div id="sidebar-root"></div>
 
 <main class="main">
@@ -382,7 +385,7 @@ function actualizarBotonOP(){
 async function abrirOPMultiple(){
   if(seleccionadosOP.size===0){toast('Seleccioná al menos un egreso.', 'warn');return;}
   const ids=[...seleccionadosOP];
-  const {data}=await db.from('egresos').select('*,proveedores(nombre),empresas(nombre)').in('id',ids);
+  const data=await EgresosAPI.getEgresos({ids});
   const rows=data||[];
   const total=rows.reduce((s,r)=>s+Number(r.monto||0),0);
 
@@ -442,11 +445,11 @@ async function confirmarOPMultiple(){
   if(!fecha){toast('Ingresá la fecha de pago.', 'warn');return;}
 
   const ids=[...seleccionadosOP];
-  const {data:egresos}=await db.from('egresos').select('*,proveedores(nombre,cuit),empresas(nombre)').in('id',ids);
+  const egresos=await EgresosAPI.getEgresos({ids});
   const rows=egresos||[];
   if(!rows.length){toast('Error al cargar los egresos.', 'error');return;}
 
-  const {count}=await db.from('egresos').select('*',{count:'exact',head:true}).not('orden_pago_nro','is',null);
+  const count=await EgresosAPI.contarEgresosConOP();
   const nroOrden='OP-'+String((count||0)+1).padStart(4,'0')+'-'+new Date().getFullYear();
   const total=rows.reduce((s,r)=>s+Number(r.monto||0),0);
 
@@ -469,7 +472,7 @@ async function confirmarOPMultiple(){
 
   // Actualizar todos los egresos
   for(const r of rows){
-    await db.from('egresos').update({
+    try{ await EgresosAPI.pagarEgreso(egresoId,{
       pagado:true,fecha_pago_real:fecha,
       metodo_pago:metodo==='cheques'?'cheque':metodo,
       orden_pago_nro:nroOrden,
@@ -482,7 +485,7 @@ async function confirmarOPMultiple(){
   if(chequesData.length){
     const empId=rows[0]?.empresas?.id||rows[0]?.empresa_id;
     for(const ch of chequesData){
-      await db.from('cheques').insert({
+      try{ await EgresosAPI.crearCheque({
         empresa_id:empId,tipo:'emitido',numero:ch.nro,
         banco:'',titular:rows[0]?.proveedores?.nombre||'',
         monto:ch.monto,estado:'pendiente',
@@ -737,7 +740,7 @@ async function cargarEgresos(){
   const mes=document.getElementById('f-mes').value;
   const buscar=document.getElementById('f-buscar').value.toLowerCase();
 
-  let q=db.from('egresos').select('*,proveedores(nombre),empresas(nombre),proyectos(nombre)').order('fecha_egreso',{ascending:false});
+  const egData=await EgresosAPI.getEgresos({}); let q={data:egData};
   if(emp) q=q.eq('empresa_id',emp);
   if(tipo) q=q.eq('tipo',tipo);
   if(pagado!=='') q=q.eq('pagado',pagado==='true');
@@ -798,7 +801,7 @@ async function cargarPendientes(){
   document.getElementById('kpis-compras').innerHTML='';
   document.getElementById('contenido').innerHTML='<div class="spinner-wrap"><div class="spinner"></div>Cargando...</div>';
   const emp=document.getElementById('f-empresa').value;
-  let q=db.from('egresos').select('*,proveedores(nombre),empresas(nombre)').eq('pagado',false).order('fecha_egreso');
+  const egPendData=await EgresosAPI.getEgresos({pagado:false}); let q={data:egPendData};
   if(emp) q=q.eq('empresa_id',emp);
   const {data}=await q;
   const rows=data||[];
@@ -830,7 +833,7 @@ async function cargarProveedores(){
   document.getElementById('contenido').innerHTML='<div class="spinner-wrap"><div class="spinner"></div>Cargando...</div>';
   const emp=document.getElementById('fp-empresa').value;
   const buscar=document.getElementById('fp-buscar').value.toLowerCase();
-  let q=db.from('proveedores').select('*,empresas(nombre)').eq('activo',true).order('nombre');
+  const provData=await EgresosAPI.getProveedores({}); let q={data:provData};
   if(emp) q=q.eq('empresa_id',emp);
   const {data}=await q;
   let rows=data||[];
@@ -853,14 +856,14 @@ async function cargarProveedores(){
 
 async function cargarProveedoresPorEmpresa(){
   const empId=document.getElementById('ne-empresa').value;
-  const {data}=await db.from('proveedores').select('id,nombre').eq('empresa_id',empId).eq('activo',true).order('nombre');
+  const data=await EgresosAPI.getProveedoresSelect(empId);
   const sel=document.getElementById('ne-proveedor');
   sel.innerHTML='<option value="">Sin proveedor / gasto directo</option>'+(data||[]).map(p=>`<option value="${p.id}">${p.nombre}</option>`).join('\n');
 }
 
 async function cargarProyectosPorEmpresa(){
   const empId=document.getElementById('ne-empresa').value;
-  const {data}=await db.from('proyectos').select('id,nombre').eq('empresa_id',empId).eq('estado','activo').order('nombre');
+  const data=await ProyectosAPI.getProyectosSelect(empId);
   const sel=document.getElementById('ne-proyecto');
   sel.innerHTML='<option value="">Gasto general</option>'+(data||[]).map(p=>`<option value="${p.id}">${p.nombre}</option>`).join('\n');
 }
@@ -884,7 +887,7 @@ function abrirNuevo(){
 }
 
 async function editarEgreso(id){
-  const {data:r}=await db.from('egresos').select('*').eq('id',id).single();
+  const r=await EgresosAPI.getEgresoById(id);
   if(!r) return;
   egresoEditId=id;
   document.getElementById('modal-titulo').textContent='Editar egreso';
@@ -924,8 +927,7 @@ async function guardarEgreso(){
     observaciones:document.getElementById('ne-obs').value||null,
   };
   let error;
-  if(egresoEditId){({error}=await db.from('egresos').update(payload).eq('id',egresoEditId));}
-  else{({error}=await db.from('egresos').insert(payload));}
+  try{ if(egresoEditId){ await EgresosAPI.actualizarEgreso(egresoEditId,payload); } else { await EgresosAPI.crearEgreso(payload); } }catch(e){error=e;}
   if(error){toast('Error: ', 'error');return;}
   cerrarModal('modal-egreso');
   cargarEgresos();
@@ -933,7 +935,7 @@ async function guardarEgreso(){
 
 async function borrarEgreso(id){
   if(!(await confirmar('¿Borrar este egreso?'))) return;
-  await db.from('egresos').delete().eq('id',id);
+  await EgresosAPI.eliminarEgreso(id);
   cargarEgresos();
 }
 
@@ -945,7 +947,7 @@ function abrirPago(id,desc,monto){
 }
 
 async function confirmarPago(){
-  const {error}=await db.from('egresos').update({
+  try{ await EgresosAPI.actualizarEgreso(egresoEditId,{
     pagado:true,
     fecha_pago_real:document.getElementById('mp-fecha').value,
     metodo_pago:document.getElementById('mp-metodo').value,
@@ -961,7 +963,7 @@ function abrirNuevoProveedor(){ document.getElementById('modal-proveedor').class
 async function guardarProveedor(){
   const nombre=document.getElementById('np-nombre').value.trim();
   if(!nombre){toast('Ingresá el nombre del proveedor.', 'warn');return;}
-  const {error}=await db.from('proveedores').insert({
+  try{ await EgresosAPI.crearProveedor({
     empresa_id:document.getElementById('np-empresa').value,
     nombre:nombre.toUpperCase(),
     cuit:document.getElementById('np-cuit').value||null,
@@ -977,7 +979,7 @@ async function guardarProveedor(){
 
 async function borrarProveedor(id){
   if(!(await confirmar('¿Borrar este proveedor?'))) return;
-  await db.from('proveedores').update({activo:false}).eq('id',id);
+  await EgresosAPI.darBajaProveedor(id);
   cargarProveedores();
 }
 
@@ -986,7 +988,7 @@ function cerrarModal(id){ document.getElementById(id).classList.remove('show'); 
 
 // ── BADGE contador ────────────────────────────────────────────
 async function actualizarBadgeLiberar(){
-  const {count}=await db.from('egresos')
+  const count=await EgresosAPI.contarEgresosConOP(empId); //
     .select('*',{count:'exact',head:true})
     .eq('pagado',false).eq('liberado_pago',false);
   const badge=document.getElementById('badge-liberar');
@@ -1008,7 +1010,7 @@ async function confirmarLiberar(){
   const fecha=document.getElementById('lib-fecha').value;
   if(!fecha){toast('Ingresá la fecha de vencimiento de pago.', 'warn');return;}
   const u=await getUsuario();
-  const {error}=await db.from('egresos').update({
+  try{ await EgresosAPI.actualizarEgreso(egresoId,{
     liberado_pago:true,
     fecha_vencimiento_pago:fecha,
     liberado_por:u?.email||'',
@@ -1024,7 +1026,7 @@ async function confirmarLiberar(){
 
 async function cancelarLiberar(id){
   if(!(await confirmar('¿Quitar la liberación de este egreso?'))) return;
-  await db.from('egresos').update({
+  await EgresosAPI.actualizarEgreso(egresoId,{
     liberado_pago:false,fecha_vencimiento_pago:null,liberado_por:null,liberado_at:null
   }).eq('id',id);
   actualizarBadgeLiberar();
@@ -1038,7 +1040,7 @@ async function cargarParaLiberar(){
   const prov=document.getElementById('fl-proveedor').value;
   const estado=document.getElementById('fl-estado').value;
 
-  let q=db.from('egresos').select('*,proveedores(nombre),empresas(nombre)')
+  const egOpData=await EgresosAPI.getEgresos({pagado:false}); let q={data:egOpData}; //
     .eq('pagado',false).order('fecha_vencimiento_pago',{ascending:true,nullsFirst:false});
   if(emp) q=q.eq('empresa_id',emp);
   if(prov) q=q.eq('proveedor_id',prov);
@@ -1115,7 +1117,7 @@ function abrirOPIndividual(id){
 
 
 async function cargarProveedoresLiberar(){
-  const {data}=await db.from('proveedores').select('id,nombre').eq('activo',true).order('nombre');
+  const data=await EgresosAPI.getProveedoresSelect(empId||'');
   const sel=document.getElementById('fl-proveedor');
   if(sel) sel.innerHTML='<option value="">Todos los proveedores</option>'+(data||[]).map(p=>`<option value="${p.id}">${p.nombre}</option>`).join('\n');
 }
@@ -1264,12 +1266,12 @@ async function confirmarImportAFIP(){
   if(btn){btn.disabled=true;btn.textContent='Importando...';}
 
   // Cargar proveedores existentes
-  const {data:provs}=await db.from('proveedores').select('id,nombre,cuit').eq('empresa_id',empId).eq('activo',true);
+  const provs=await EgresosAPI.getProveedoresConCuit(empId);
   const listaProvs=provs||[];
 
   // Deduplicar en bulk
   const numeros=importRowsCompras.map(r=>r.numero).filter(Boolean);
-  const {data:existentes}=await db.from('egresos').select('numero_factura').eq('empresa_id',empId).in('numero_factura',numeros);
+  const existentes=await EgresosAPI.getEgresosExistentes(empId,numeros);
   const numerosExistentes=new Set((existentes||[]).map(r=>r.numero_factura));
 
   let ok=0,skip=0;
@@ -1280,7 +1282,7 @@ async function confirmarImportAFIP(){
     let prov=listaProvs.find(p=>p.cuit&&p.cuit===r.cuit)
            ||listaProvs.find(p=>p.nombre&&(p.nombre.includes(r.proveedor)||r.proveedor.includes(p.nombre)));
     if(!prov&&r.proveedor){
-      const {data:np}=await db.from('proveedores')
+      const np=await EgresosAPI.buscarOCrearProveedor(empId,r.proveedor,r.cuit||null); //
         .insert({empresa_id:empId,nombre:r.proveedor,cuit:r.cuit||null,activo:true})
         .select().maybeSingle();
       if(np){prov=np;listaProvs.push(np);}
@@ -1290,7 +1292,7 @@ async function confirmarImportAFIP(){
     const esUSD=r.moneda==='USD';
     const descMoneda=esUSD?` [USD ${r.total.toFixed(2)} x TC ${r.tipoCambio}]`:'';
 
-    const {error}=await db.from('egresos').insert({
+    try{ await EgresosAPI.crearEgreso({
       empresa_id:empId,
       proveedor_id:prov?.id||null,
       tipo:'materiales',

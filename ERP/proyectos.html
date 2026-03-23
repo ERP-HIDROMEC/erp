@@ -10,6 +10,11 @@
 <script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js"></script>
 <script src="erp-utils.js"></script>
 <script src="erp-sidebar.js"></script>
+<script src="api/empresas.api.js"></script>
+<script src="api/clientes.api.js"></script>
+<script src="api/proyectos.api.js"></script>
+<script src="api/contratos.api.js"></script>
+<script src="api/empleados.api.js"></script>
 <style>
   tr:last-child tr:hover .estado-badge{display:inline-block;padding:3px 10px;border-radius:20px;font-size:11px;font-weight:500;}
   .estado-badge.activo{background:rgba(16,185,129,0.15);color:var(--green);}
@@ -35,7 +40,7 @@
 </style>
 </head>
 <body>
-<div id="overlay" class="overlay" onclick="ERP.ERP.closeSidebar()"></div>
+<div id="overlay" class="overlay" onclick="ERP.closeSidebar()"></div>
 <div id="sidebar-root"></div>
 
 <main class="main">
@@ -471,7 +476,7 @@ function recargar(){
 // ===== PROYECTOS =====
 async function cargarClientesProyecto(){
   const empId=document.getElementById('np-empresa').value;
-  const {data}=await db.from('clientes').select('id,nombre').eq('empresa_id',empId).eq('activo',true).order('nombre');
+  const data=await ClientesAPI.getClientesSelect(empId);
   document.getElementById('np-cliente').innerHTML='<option value="">Sin cliente asignado</option>'+(data||[]).map(c=>`<option value="${c.id}">${c.nombre}</option>`).join('');
 }
 
@@ -481,7 +486,7 @@ async function cargarProyectos(){
   const estado=document.getElementById('f-estado').value;
   const buscar=document.getElementById('f-buscar').value.toLowerCase();
 
-  let q=db.from('proyectos').select('*,clientes(nombre),empresas(nombre)').order('created_at',{ascending:false});
+  const proyData=await ProyectosAPI.getProyectos({}); let q={data:proyData};
   if(emp) q=q.eq('empresa_id',emp);
   if(estado) q=q.eq('estado',estado);
   const {data}=await q;
@@ -531,7 +536,7 @@ function abrirNuevoProyecto(){
 }
 
 async function editarProyecto(id){
-  const {data:r}=await db.from('proyectos').select('*').eq('id',id).single();
+  const r=await ProyectosAPI.getProyectoById(id);
   if(!r) return;
   proyEditId=id;
   document.getElementById('proy-titulo').textContent='Editar proyecto';
@@ -562,7 +567,7 @@ let _costosRoles={ayudante:0,oficial:0,oficial_esp:0,supervisor:0,higiene:0};
 
 async function cargarCostosRoles(){
   const empId=document.getElementById('np-empresa').value;
-  const {data}=await db.from('costos_roles').select('rol,costo_hora').eq('empresa_id',empId);
+  const data=await ProyectosAPI.getCostosRoles(empId);
   if(data) data.forEach(r=>{_costosRoles[r.rol]=Number(r.costo_hora||0);});
 }
 
@@ -618,8 +623,7 @@ async function guardarProyecto(){
     descripcion:document.getElementById('np-descripcion').value||null,
   };
   let error;
-  if(proyEditId){({error}=await db.from('proyectos').update(payload).eq('id',proyEditId));}
-  else{({error}=await db.from('proyectos').insert(payload));}
+  try{ if(proyEditId){ await ProyectosAPI.actualizarProyecto(proyEditId,payload); } else { await ProyectosAPI.crearProyecto(payload); } }catch(e){error=e;}
   if(error){toast('Error: ', 'error');return;}
   cerrarModal('modal-proyecto');
   cargarProyectos();
@@ -628,7 +632,7 @@ async function guardarProyecto(){
 async function cargarContratosProyecto(){
   const empId=document.getElementById('np-empresa').value;
   const clienteId=document.getElementById('np-cliente').value;
-  let q=db.from('contratos').select('id,numero_contrato,descripcion').eq('empresa_id',empId).eq('estado','activo').order('numero_contrato');
+  const contData=await ContratosAPI.getContratosSelect(empId); let q={data:contData};
   if(clienteId) q=q.eq('cliente_id',clienteId);
   const {data}=await q;
   const sel=document.getElementById('np-contrato');
@@ -637,9 +641,9 @@ async function cargarContratosProyecto(){
 
 async function verDetalle(id,nombre){
   const [{data:horas},{data:costos},{data:facturas}]=await Promise.all([
-    db.from('imputacion_horas').select('costo_calculado,horas,cantidad_personas').eq('proyecto_id',id),
-    db.from('costos_obra').select('monto,tipo').eq('proyecto_id',id),
-    db.from('facturas_emitidas').select('monto_total').eq('proyecto_id',id).neq('estado','anulada'),
+    ProyectosAPI.getImputacionHoras({proyectoId:id}).then(d=>({data:d})),
+    ProyectosAPI.getCostosObra({proyectoId:id}).then(d=>({data:d})),
+    FacturasAPI.getFacturas({proyectoId:id,excluirAnuladas:true}).then(d=>({data:d})),
   ]);
   const totalHoras=(horas||[]).reduce((s,r)=>s+Number(r.costo_calculado||0),0);
   const horasTrabajadas=(horas||[]).reduce((s,r)=>s+(Number(r.horas||0)*Number(r.cantidad_personas||1)),0);
@@ -656,8 +660,8 @@ async function verDetalle(id,nombre){
 async function cargarDatosHoras(){
   const empId=document.getElementById('nh-empresa').value;
   const [{data:proyectos},{data:empleados}]=await Promise.all([
-    db.from('proyectos').select('id,nombre').eq('empresa_id',empId).eq('estado','activo').order('nombre'),
-    db.from('empleados').select('id,nombre,costo_hora').eq('empresa_id',empId).eq('activo',true).order('nombre'),
+    ProyectosAPI.getProyectosSelect(empId).then(d=>({data:d})),
+    EmpleadosAPI.getEmpleados({empresaId:empId}).then(d=>({data:d})),
   ]);
   document.getElementById('nh-proyecto').innerHTML=(proyectos||[]).map(p=>`<option value="${p.id}">${p.nombre}</option>`).join('');
   document.getElementById('nh-empleado').innerHTML=(empleados||[]).map(e=>`<option value="${e.id}" data-costo="${e.costo_hora}">${e.nombre}</option>`).join('');
@@ -688,7 +692,7 @@ async function cargarHoras(){
   const emp=document.getElementById('f-empresa').value;
   const buscar=document.getElementById('f-buscar').value.toLowerCase();
 
-  let q=db.from('imputacion_horas').select('*,empleados(nombre),proyectos(nombre),empresas(nombre)').order('fecha',{ascending:false}).limit(200);
+  const hsData=await ProyectosAPI.getImputacionHoras({limit:200}); let q={data:hsData};
   if(emp) q=q.eq('empresa_id',emp);
   const {data}=await q;
   let rows=data||[];
@@ -734,7 +738,7 @@ async function guardarHoras(){
   const costoHora=parseFloat(document.getElementById('nh-costo-hora').value)||0;
   const tipoHora=document.getElementById('nh-tipo-hora').value;
   const mult=tipoHora==='h100'?2:tipoHora==='h50'?1.5:1;
-  const {error}=await db.from('imputacion_horas').insert({
+  try{ await ProyectosAPI.registrarHoras({
     empresa_id:document.getElementById('nh-empresa').value,
     proyecto_id:document.getElementById('nh-proyecto').value,
     empleado_id:document.getElementById('nh-empleado').value||null,
@@ -753,14 +757,14 @@ async function guardarHoras(){
 
 async function borrarHoras(id){
   if(!(await confirmar('¿Borrar este registro de horas?'))) return;
-  await db.from('imputacion_horas').delete().eq('id',id);
+  await ProyectosAPI.eliminarImputacion(id);
   cargarHoras();
 }
 
 // ===== COSTOS OBRA =====
 async function cargarProyectosCosto(){
   const empId=document.getElementById('nc-empresa').value;
-  const {data}=await db.from('proyectos').select('id,nombre').eq('empresa_id',empId).eq('estado','activo').order('nombre');
+  const data=await ProyectosAPI.getProyectosSelect(empId);
   document.getElementById('nc-proyecto').innerHTML=(data||[]).map(p=>`<option value="${p.id}">${p.nombre}</option>`).join('');
 }
 
@@ -770,7 +774,7 @@ async function cargarCostos(){
   const emp=document.getElementById('f-empresa').value;
   const buscar=document.getElementById('f-buscar').value.toLowerCase();
 
-  let q=db.from('costos_obra').select('*,proyectos(nombre),empresas(nombre)').order('fecha',{ascending:false});
+  const coData=await ProyectosAPI.getCostosObra({}); let q={data:coData};
   if(emp) q=q.eq('empresa_id',emp);
   const {data}=await q;
   let rows=data||[];
@@ -804,7 +808,7 @@ async function guardarCosto(){
   const desc=document.getElementById('nc-descripcion').value.trim();
   const monto=parseFloat(document.getElementById('nc-monto').value)||0;
   if(!desc||!monto){toast('Completá descripción y monto.', 'warn');return;}
-  const {error}=await db.from('costos_obra').insert({
+  try{ await ProyectosAPI.registrarCostoObra({
     empresa_id:document.getElementById('nc-empresa').value,
     proyecto_id:document.getElementById('nc-proyecto').value,
     tipo:document.getElementById('nc-tipo').value,
@@ -819,7 +823,7 @@ async function guardarCosto(){
 
 async function borrarCosto(id){
   if(!(await confirmar('¿Borrar este costo?'))) return;
-  await db.from('costos_obra').delete().eq('id',id);
+  await ProyectosAPI.eliminarCostoObra(id);
   cargarCostos();
 }
 
@@ -829,15 +833,15 @@ async function cargarRentabilidad(){
   document.getElementById('contenido').innerHTML='<div class="spinner-wrap"><div class="spinner"></div>Calculando rentabilidad...</div>';
   const emp=document.getElementById('f-empresa').value;
 
-  let q=db.from('proyectos').select('*,clientes(nombre),empresas(nombre)').order('created_at',{ascending:false});
+  const proyData=await ProyectosAPI.getProyectos({}); let q={data:proyData};
   if(emp) q=q.eq('empresa_id',emp);
   const {data:proyectos}=await q;
 
   const resultados=await Promise.all((proyectos||[]).map(async p=>{
     const [{data:horas},{data:costos},{data:facturas}]=await Promise.all([
-      db.from('imputacion_horas').select('costo_calculado').eq('proyecto_id',p.id),
-      db.from('costos_obra').select('monto').eq('proyecto_id',p.id),
-      db.from('facturas_emitidas').select('monto_total').eq('proyecto_id',p.id).neq('estado','anulada'),
+      ProyectosAPI.getImputacionHoras({proyectoId:p.id}).then(d=>({data:d})),
+      ProyectosAPI.getCostosObra({proyectoId:p.id}).then(d=>({data:d})),
+      FacturasAPI.getFacturas({proyectoId:p.id,excluirAnuladas:true}).then(d=>({data:d})),
     ]);
     const costoHoras=(horas||[]).reduce((s,r)=>s+Number(r.costo_calculado||0),0);
     const costoMat=(costos||[]).reduce((s,r)=>s+Number(r.monto||0),0);
@@ -896,7 +900,7 @@ async function abrirNuevaOT(){
 
 async function cargarProyectosOT(){
   const empId=document.getElementById('not-empresa').value;
-  const {data}=await db.from('proyectos').select('id,nombre,hs_ayudante,hs_oficial,hs_oficial_esp,hs_supervisor,hs_higiene,descripcion,clientes(nombre),contratos(numero_contrato),numero_oc').eq('empresa_id',empId).in('estado',['activo','pausado']).order('nombre');
+  const data=await ProyectosAPI.getProyectosParaOT(empId);
   const sel=document.getElementById('not-proyecto');
   sel.innerHTML='<option value="">— Seleccionar proyecto —</option>'+(data||[]).map(p=>`<option value="${p.id}" data-json='${JSON.stringify({hs_a:p.hs_ayudante,hs_o:p.hs_oficial,hs_e:p.hs_oficial_esp,hs_s:p.hs_supervisor,hs_h:p.hs_higiene,desc:p.descripcion,cliente:p.clientes?.nombre,contrato:p.contratos?.numero_contrato||p.numero_oc})}'>
     ${p.nombre}${p.clientes?.nombre?' — '+p.clientes.nombre:''}
@@ -936,8 +940,7 @@ async function guardarOT(){
     estado:'emitida',
   };
   let error;
-  if(otEditId){({error}=await db.from('ordenes_trabajo').update(payload).eq('id',otEditId));}
-  else{({error}=await db.from('ordenes_trabajo').insert(payload));}
+  try{ if(otEditId){ await ProyectosAPI.actualizarOrdenTrabajo(otEditId,payload); } else { await ProyectosAPI.crearOrdenTrabajo(payload); } }catch(e){error=e;}
   if(error){toast('Error: ', 'error');return;}
   cerrarModal('modal-ot');
   cargarOrdenesOT();
@@ -949,7 +952,7 @@ async function cargarOrdenesOT(){
   const emp=document.getElementById('f-empresa').value;
   const buscar=document.getElementById('f-buscar').value.toLowerCase();
 
-  let q=db.from('ordenes_trabajo').select('*,proyectos(nombre,numero_oc,contratos(numero_contrato)),empresas(nombre)').order('created_at',{ascending:false}).limit(200);
+  const otData=await ProyectosAPI.getOrdenesTrabajo({limit:200}); let q={data:otData};
   if(emp) q=q.eq('empresa_id',emp);
   const {data}=await q;
   let rows=data||[];
@@ -993,7 +996,7 @@ async function cargarOrdenesOT(){
 }
 
 async function editarOT(id){
-  const {data:r}=await db.from('ordenes_trabajo').select('*').eq('id',id).single();
+  const r=await ProyectosAPI.getOrdenTrabajoById(id);
   if(!r) return;
   otEditId=id;
   document.getElementById('ot-titulo').textContent='Editar Orden de Trabajo';
@@ -1013,12 +1016,12 @@ async function editarOT(id){
 }
 
 async function cambiarEstadoOT(id,estado){
-  await db.from('ordenes_trabajo').update({estado}).eq('id',id);
+  await ProyectosAPI.cambiarEstadoOT(id,estado);
   cargarOrdenesOT();
 }
 
 async function imprimirOTById(id){
-  const {data:r}=await db.from('ordenes_trabajo')
+  const r=await ProyectosAPI.getOrdenTrabajoById(otEditId); //
     .select('*,proyectos(nombre,numero_oc,descripcion,contratos(numero_contrato),clientes(nombre),empresas(nombre))')
     .eq('id',id).single();
   if(r) generarPDFOrdenTrabajo(r);

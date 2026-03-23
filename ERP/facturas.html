@@ -9,6 +9,10 @@
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="erp-utils.js"></script>
 <script src="erp-sidebar.js"></script>
+<script src="api/empresas.api.js"></script>
+<script src="api/clientes.api.js"></script>
+<script src="api/facturas.api.js"></script>
+<script src="api/remitos.api.js"></script>
 <style>
   /* TABS */
   /* FILTROS */
@@ -30,7 +34,7 @@
 </head>
 <body>
 
-<div id="overlay" class="overlay" onclick="ERP.ERP.closeSidebar()"></div>
+<div id="overlay" class="overlay" onclick="ERP.closeSidebar()"></div>
 <div id="sidebar-root"></div>
 
 <main class="main">
@@ -412,8 +416,7 @@ async function cargarFacturas(){
   const mes=document.getElementById('f-mes').value;
   const buscar=document.getElementById('f-buscar').value.toLowerCase();
 
-  let q=db.from('facturas_emitidas')
-    .select('*,clientes(nombre),empresas(nombre),remitos_ids')
+  const facData=await FacturasAPI.getFacturas({}); let q={data:facData}; //
     .order('fecha_emision',{ascending:false});
   if(emp) q=q.eq('empresa_id',emp);
   if(estado) q=q.eq('estado',estado);
@@ -477,7 +480,7 @@ async function cargarRemitos(){
   document.getElementById('contenido').innerHTML='<div class="spinner-wrap"><div class="spinner"></div>Cargando...</div>';
   const emp=document.getElementById('r-empresa').value;
   const estado=document.getElementById('r-estado').value;
-  let q=db.from('remitos').select('*,clientes(nombre),empresas(nombre),proyectos(nombre)').order('fecha',{ascending:false});
+  const remLegData=await RemitosAPI.getRemitosLegacy({}); let q={data:remLegData};
   if(emp) q=q.eq('empresa_id',emp);
   if(estado) q=q.eq('estado',estado);
   const {data}=await q;
@@ -506,7 +509,7 @@ async function cargarCobros(){
   document.getElementById('contenido').innerHTML='<div class="spinner-wrap"><div class="spinner"></div>Cargando...</div>';
   const emp=document.getElementById('c-empresa').value;
   const mes=document.getElementById('c-mes').value;
-  let q=db.from('cobros').select('*,facturas_emitidas(numero_factura,clientes(nombre)),empresas(nombre)').order('fecha',{ascending:false});
+  const cobData=await FacturasAPI.getCobros({}); let q={data:cobData};
   if(emp) q=q.eq('empresa_id',emp);
   if(mes){q=q.gte('fecha',mes+'-01');const fin=new Date(mes+'-01');fin.setMonth(fin.getMonth()+1);q=q.lt('fecha',fin.toISOString().split('T')[0]);}
   const {data}=await q;
@@ -533,14 +536,14 @@ async function cargarCobros(){
 // ============ NUEVA FACTURA ============
 async function cargarClientesPorEmpresa(){
   const empId=document.getElementById('nf-empresa').value;
-  const {data}=await db.from('clientes').select('id,nombre').eq('empresa_id',empId).eq('activo',true).order('nombre');
+  const data=await ClientesAPI.getClientesSelect(empId);
   const sel=document.getElementById('nf-cliente');
   sel.innerHTML=(data||[]).map(c=>`<option value="${c.id}">${c.nombre}</option>`).join('');
 }
 
 async function cargarClientesRemito(){
   const empId=document.getElementById('nr-empresa').value;
-  const {data}=await db.from('clientes').select('id,nombre').eq('empresa_id',empId).eq('activo',true).order('nombre');
+  const data=await ClientesAPI.getClientesSelect(empId);
   const sel=document.getElementById('nr-cliente');
   sel.innerHTML=(data||[]).map(c=>`<option value="${c.id}">${c.nombre}</option>`).join('');
 }
@@ -568,7 +571,7 @@ function abrirNuevaFactura(){
 }
 
 async function editarFactura(id){
-  const {data}=await db.from('facturas_emitidas').select('*').eq('id',id).single();
+  const data=await FacturasAPI.getFacturaById(id);
   if(!data) return;
   facturaEditId=id;
   document.getElementById('modal-titulo').textContent='Editar factura';
@@ -608,17 +611,16 @@ async function guardarFactura(){
   if(!payload.numero_factura||!payload.monto_total){toast('Completá número y monto.', 'warn');return;}
   let error,data;
   if(facturaEditId){
-    ({error}=await db.from('facturas_emitidas').update(payload).eq('id',facturaEditId));
+    try{ await FacturasAPI.actualizarFactura(facturaEditId,payload); }catch(e){error=e;}
     data={id:facturaEditId};
   } else {
-    ({data,error}=await db.from('facturas_emitidas').insert(payload).select().single());
+    try{ data=await FacturasAPI.crearFactura(payload); }catch(e){error=e;}
   }
   if(error){toast('Error: ', 'error');return;}
   // Marcar remitos como facturados
   const factId=data?.id||facturaEditId;
   if(_remitosSeleccionados.length&&factId){
-    await db.from('remitos_v2').update({
-      estado:'facturado',
+    await RemitosAPI.marcarRemitoFacturado(
       factura_id:factId
     }).in('id',_remitosSeleccionados);
   }
@@ -629,7 +631,7 @@ async function guardarFactura(){
 
 async function anularFactura(id,numero){
   if(!(await confirmar(`¿Anular la factura ${numero}? Esta acción no se puede deshacer.`))) return;
-  await db.from('facturas_emitidas').update({estado:'anulada'}).eq('id',id);
+  await FacturasAPI.anularFactura(id);
   cargarFacturas();
 }
 
@@ -674,7 +676,7 @@ async function guardarCobro(){
   if(!monto){toast('Ingresá un monto.', 'warn');return;}
 
   // Guardar cobro
-  const {error}=await db.from('cobros').insert({
+  try{ await FacturasAPI.registrarCobro({
     empresa_id:cobroEmpresaId,
     factura_id:cobroFacturaId,
     fecha:document.getElementById('nc-fecha').value,
@@ -686,7 +688,7 @@ async function guardarCobro(){
   if(error){toast('Error al guardar cobro: ', 'error');return;}
 
   // Marcar factura como cobrada
-  await db.from('facturas_emitidas').update({estado:'cobrada'}).eq('id',cobroFacturaId);
+  await FacturasAPI.marcarFacturaCobrada(cobroFacturaId);
 
   // Guardar retenciones si hay alguna
   const periodo=document.getElementById('nc-periodo-ret').value;
@@ -714,7 +716,7 @@ async function guardarCobro(){
     }));
 
   if(retsAGuardar.length>0){
-    const {error:errRet}=await db.from('retenciones').insert(retsAGuardar);
+    try{ await FacturasAPI.crearRetenciones(retsAGuardar); }catch(e){ console.warn('Retenciones:',e); }
     if(errRet) console.warn('Error al guardar retenciones:',errRet.message);
     else console.log(`${retsAGuardar.length} retenciones guardadas en módulo Impuestos`);
   }
@@ -742,7 +744,7 @@ async function guardarRemito(){
     estado:'pendiente',total:0,
   };
   if(!payload.numero_remito){toast('Ingresá número de remito.', 'warn');return;}
-  const {error}=await db.from('remitos').insert(payload);
+  try{ await RemitosAPI.crearRemitoLegacy(payload); }catch(e){error=e;}
   if(error){toast('Error: ', 'error');return;}
   cerrarModal('modal-remito');
   cargarRemitos();
@@ -750,7 +752,7 @@ async function guardarRemito(){
 
 async function borrarRemito(id){
   if(!(await confirmar('¿Borrar este remito?'))) return;
-  await db.from('remitos').delete().eq('id',id);
+  await RemitosAPI.eliminarRemitoLegacy(id);
   cargarRemitos();
 }
 
@@ -828,7 +830,7 @@ function getTipo(t){
 
 async function confirmarImport(){
   const empId=document.getElementById('imp-empresa').value;
-  const {data:clientes}=await db.from('clientes').select('id,nombre,cuit').eq('empresa_id',empId);
+  const clientes=await ClientesAPI.getClientes({empresaId:empId,soloActivos:false});
   let ok=0,skip=0;
   for(const r of importRows){
     // Buscar cliente por cuit o nombre
@@ -836,15 +838,15 @@ async function confirmarImport(){
     if(!cli) cli=clientes.find(c=>c.nombre.includes(r.cliente)||r.cliente.includes(c.nombre));
     if(!cli){
       // Crear cliente nuevo
-      const {data:newCli}=await db.from('clientes').insert({empresa_id:empId,nombre:r.cliente,cuit:r.cuit||null,activo:true}).select().single();
+      const newCli=await ClientesAPI.crearCliente({empresa_id:empId,nombre:r.cliente,cuit:r.cuit||null,activo:true});
       cli=newCli;
       if(newCli) clientes.push(newCli);
     }
     if(!cli){skip++;continue;}
     // Verificar si ya existe la factura
-    const {data:existe}=await db.from('facturas_emitidas').select('id').eq('numero_factura',r.numero).eq('empresa_id',empId).single();
+    const existeArr=await FacturasAPI.getFacturas({empresaId:empId}); const existe=existeArr.find(f=>f.numero_factura===r.numero)||null;
     if(existe){skip++;continue;}
-    const {error}=await db.from('facturas_emitidas').insert({
+    try{ await FacturasAPI.crearFactura({
       empresa_id:empId,cliente_id:cli.id,tipo:r.tipo,
       numero_factura:r.numero,fecha_emision:r.fecha,
       monto_neto:r.neto,monto_iva:r.iva,monto_total:r.total,
@@ -866,7 +868,7 @@ async function cargarRemitosParaFactura(){
   const empId=document.getElementById('nf-empresa').value;
   const cliId=document.getElementById('nf-cliente').value;
   // Buscar por empresa; si hay cliente también filtrar por cliente
-  let q=db.from('remitos_v2')
+  const remVincData=await RemitosAPI.getRemitosParaVincular(emp); let q={data:remVincData}; //
     .select('id,numero_formateado,fecha,estado,cliente_id')
     .eq('empresa_id',empId)
     .neq('estado','anulado')
@@ -930,7 +932,7 @@ document.addEventListener('DOMContentLoaded',()=>{
   const params=new URLSearchParams(window.location.search);
   const remitoId=params.get('remito');
   if(remitoId){
-    const {data:r}=await db.from('remitos_v2').select('*').eq('id',remitoId).single();
+    const r=await RemitosAPI.getRemitoSimple(remitoId);
     if(r){
       _remitosSeleccionados=[remitoId];
       document.getElementById('nf-empresa').value=r.empresa_id;

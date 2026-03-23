@@ -10,6 +10,9 @@
 <script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js"></script>
 <script src="erp-utils.js"></script>
 <script src="erp-sidebar.js"></script>
+<script src="api/empresas.api.js"></script>
+<script src="api/caja.api.js"></script>
+<script src="api/egresos.api.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 <style>
   .kpi-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:14px;margin-bottom:20px;}
@@ -46,7 +49,7 @@
 </style>
 </head>
 <body>
-<div id="overlay" class="overlay" onclick="ERP.ERP.closeSidebar()"></div>
+<div id="overlay" class="overlay" onclick="ERP.closeSidebar()"></div>
 <div id="sidebar-root"></div>
 
 <main class="main">
@@ -362,7 +365,7 @@ async function cargarKpis(){
   const fin=new Date(mes+'-01');fin.setMonth(fin.getMonth()+1);
   const finStr=fin.toISOString().split('T')[0];
 
-  let q=db.from('caja_movimientos').select('tipo,origen,monto');
+  const movResumen=await CajaAPI.getResumenCaja(document.getElementById('sel-empresa').value); let q={data:movResumen.movimientos};
   if(emp) q=q.eq('empresa_id',emp);
   if(cuenta) q=q.eq('origen',cuenta);
   q=q.gte('fecha',ini).lt('fecha',finStr);
@@ -374,7 +377,7 @@ async function cargarKpis(){
   const neto=ingresos-egresos;
 
   // FCI saldo total acumulado
-  let qFCI=db.from('caja_fci').select('tipo,monto');
+  let qFCI={data:movResumen.fci};
   if(emp) qFCI=qFCI.eq('empresa_id',emp);
   const {data:fciData}=await qFCI;
   const fciSaldo=(fciData||[]).reduce((s,r)=>s+(r.tipo==='deposito'?Number(r.monto||0):-Number(r.monto||0)),0);
@@ -397,7 +400,7 @@ async function cargarMovimientos(){
   const fin=new Date(mes+'-01');fin.setMonth(fin.getMonth()+1);
   const finStr=fin.toISOString().split('T')[0];
 
-  let q=db.from('caja_movimientos').select('*,empresas(nombre)').order('fecha',{ascending:false}).limit(500);
+  const movData=await CajaAPI.getMovimientos({}); let q={data:movData};
   if(emp) q=q.eq('empresa_id',emp);
   if(cuenta) q=q.eq('origen',cuenta);
   q=q.gte('fecha',ini).lt('fecha',finStr);
@@ -430,7 +433,7 @@ async function cargarCheques(){
   document.getElementById('contenido').innerHTML='<div class="spinner-wrap"><div class="spinner"></div>Cargando...</div>';
   const emp=document.getElementById('sel-empresa').value;
   const estadoCheque=document.getElementById('sel-estado-cheque')?.value||'';
-  let q=db.from('cheques').select('*,empresas(nombre)').order('fecha_vencimiento');
+  const chqData=await EgresosAPI.getCheques({}); let q={data:chqData};
   if(emp) q=q.eq('empresa_id',emp);
   if(estadoCheque) q=q.eq('estado',estadoCheque);
   const {data}=await q;
@@ -440,7 +443,7 @@ async function cargarCheques(){
   // Auto-vencer cheques pendientes con fecha de cobro vencida
   const aVencer=rows.filter(r=>r.estado==='pendiente'&&r.fecha_vencimiento&&r.fecha_vencimiento<hoyStr);
   if(aVencer.length){
-    await db.from('cheques').update({estado:'vencido'}).in('id',aVencer.map(r=>r.id));
+    await EgresosAPI.actualizarEstadoCheques(aVencer.map(r=>r.id),'vencido');
     aVencer.forEach(r=>r.estado='vencido');
   }
 
@@ -508,16 +511,16 @@ async function cargarFlujo(){
   const en90Str=en90.toISOString().split('T')[0];
 
   // Facturas por cobrar
-  let qF=db.from('facturas_emitidas').select('monto_total,fecha_cobro_estimada,clientes(nombre),empresas(nombre)')
+  const flujo=await CajaAPI.getFlujoCajaProyectado(empId,fechaDesde,fechaHasta); let qF={data:flujo.porCobrar}; //
     .not('estado','in','("cobrada","anulada")').gte('fecha_cobro_estimada',hoyStr).lte('fecha_cobro_estimada',en90Str).order('fecha_cobro_estimada');
   // Egresos pendientes
-  let qE=db.from('egresos').select('monto,fecha_egreso,descripcion,empresas(nombre)')
+  let qE={data:flujo.porPagar}; //
     .eq('pagado',false).gte('fecha_egreso',hoyStr).lte('fecha_egreso',en90Str).order('fecha_egreso');
   // Cheques recibidos pendientes (cobros)
-  let qCR=db.from('cheques').select('monto,fecha_vencimiento,titular,numero,empresas(nombre)')
+  let qCR={data:flujo.chqCartera}; //
     .eq('tipo','recibido').eq('estado','pendiente').gte('fecha_vencimiento',hoyStr).lte('fecha_vencimiento',en90Str).order('fecha_vencimiento');
   // Cheques emitidos pendientes (pagos)
-  let qCE=db.from('cheques').select('monto,fecha_vencimiento,titular,numero,empresas(nombre)')
+  let qCE={data:flujo.chqEmitidos}; //
     .eq('tipo','emitido').eq('estado','pendiente').gte('fecha_vencimiento',hoyStr).lte('fecha_vencimiento',en90Str).order('fecha_vencimiento');
 
   if(emp){qF=qF.eq('empresa_id',emp);qE=qE.eq('empresa_id',emp);qCR=qCR.eq('empresa_id',emp);qCE=qCE.eq('empresa_id',emp);}
@@ -711,7 +714,7 @@ async function procesarExtracto(json){
   const fechas=[...new Set(movimientos.map(m=>m.fecha))];
   let existentes=new Set();
   if(fechas.length){
-    const {data}=await db.from('caja_movimientos').select('fecha,descripcion,monto')
+    const data=await CajaAPI.getMovimientosParaExportar(empId,fechaDesde,fechaHasta); //
       .eq('empresa_id',empresaId).eq('origen',cuenta)
       .gte('fecha',fechas[0]).lte('fecha',fechas[fechas.length-1]);
     (data||[]).forEach(r=>existentes.add(`${r.fecha}|${r.monto}`));
@@ -769,7 +772,7 @@ async function procesarCheques(json){
 
   // Verificar duplicados
   const nums=cheques.map(c=>c.numero);
-  const {data:exist}=await db.from('cheques').select('numero').eq('empresa_id',empresaId).in('numero',nums);
+  const exist=await EgresosAPI.getChequesExistentes(empresaId,nums);
   const existSet=new Set((exist||[]).map(r=>r.numero));
 
   previewData=cheques.map(c=>({...c,_dup:existSet.has(c.numero)}));
@@ -827,9 +830,9 @@ async function confirmarImport(){
 
   let error;
   if(tipoImport==='extracto'){
-    ({error}=await db.from('caja_movimientos').insert(nuevos));
+    try{ await CajaAPI.registrarMovimientos(nuevos); }catch(e){error=e;}
   } else {
-    ({error}=await db.from('cheques').insert(nuevos));
+    try{ await EgresosAPI.crearCheques(nuevos); }catch(e){error=e;}
   }
 
   if(error){toast('Error al importar: ', 'error');if(btn){btn.disabled=false;btn.textContent='Reintentar';}return;}
@@ -853,7 +856,7 @@ async function guardarMovimiento(){
   if(!desc||!monto){toast('Completá descripción y monto.', 'warn');return;}
   const empId=document.getElementById('nm-empresa').value;
   const cuenta=document.getElementById('nm-cuenta').value;
-  const {error}=await db.from('caja_movimientos').insert({
+  try{ await CajaAPI.registrarMovimiento({
     empresa_id:empId,tipo:document.getElementById('nm-tipo').value,
     origen:cuenta,categoria:document.getElementById('nm-categoria').value,
     descripcion:desc,monto,fecha:document.getElementById('nm-fecha').value,
@@ -865,7 +868,7 @@ async function guardarMovimiento(){
 
 async function borrarMovimiento(id){
   if(!(await confirmar('¿Borrar este movimiento?'))) return;
-  await db.from('caja_movimientos').delete().eq('id',id);
+  await CajaAPI.eliminarMovimiento(id);
   cargarMovimientos();
 }
 
@@ -877,7 +880,7 @@ async function guardarCheque(){
   const numero=document.getElementById('nc-numero').value.trim();
   const monto=parseFloat(document.getElementById('nc-monto').value)||0;
   if(!numero||!monto){toast('Completá número y monto.', 'warn');return;}
-  const {error}=await db.from('cheques').insert({
+  try{ await EgresosAPI.crearCheque({
     empresa_id:document.getElementById('nc-empresa').value,
     tipo:document.getElementById('nc-tipo').value,
     numero,banco:document.getElementById('nc-banco').value||null,
@@ -892,20 +895,20 @@ async function guardarCheque(){
 }
 
 async function actualizarCheque(id,estado){
-  await db.from('cheques').update({estado}).eq('id',id);
+  await EgresosAPI.actualizarEstadoCheque(id,estado);
   cargarCheques();
 }
 
 async function borrarCheque(id){
   if(!(await confirmar('¿Borrar este cheque?'))) return;
-  await db.from('cheques').delete().eq('id',id);
+  await EgresosAPI.eliminarCheque(id);
   cargarCheques();
 }
 
 
 // ── BADGE órdenes ─────────────────────────────────────────────
 async function actualizarBadgeOrdenes(){
-  const {count}=await db.from('egresos')
+  const count=await EgresosAPI.contarEgresosConOP(empId); //
     .select('*',{count:'exact',head:true})
     .eq('pagado',false).eq('liberado_pago',true);
   const badge=document.getElementById('badge-ordenes');
@@ -921,7 +924,7 @@ async function cargarOrdenes(){
   container.innerHTML='<div style="display:flex;align-items:center;justify-content:center;padding:40px;color:var(--muted)"><div style="width:16px;height:16px;border:2px solid var(--border);border-top-color:var(--blue);border-radius:50%;animation:spin 0.8s linear infinite;margin-right:10px"></div>Cargando...</div>';
 
   const hoyStr=new Date().toISOString().split('T')[0];
-  const {data}=await db.from('egresos')
+  const data=await EgresosAPI.getEgresos({pagado:false}); //
     .select('*,proveedores(nombre,cuit,email),empresas(nombre)')
     .eq('pagado',false).eq('liberado_pago',true)
     .order('fecha_vencimiento_pago',{ascending:true});
@@ -972,11 +975,11 @@ async function confirmarOrdenPago(){
   const obs=document.getElementById('op-obs').value;
   if(!fecha){toast('Ingresá la fecha de pago.', 'warn');return;}
 
-  const {count}=await db.from('egresos').select('*',{count:'exact',head:true}).not('orden_pago_nro','is',null);
+  const count2=await EgresosAPI.contarEgresosConOP(empId);
   const nroOrden='OP-'+String((count||0)+1).padStart(4,'0')+'-'+new Date().getFullYear();
 
   const u=await getUsuario();
-  const {data:egreso,error}=await db.from('egresos').update({
+  let egreso=null,errOp=null; try{ await EgresosAPI.pagarEgreso(egresoId,{
     pagado:true,
     fecha_pago_real:fecha,
     metodo_pago:metodo,
@@ -1181,7 +1184,7 @@ async function cargarFCI(){
   document.getElementById('contenido').innerHTML='<div class="spinner-wrap"><div class="spinner"></div>Cargando...</div>';
   const emp=document.getElementById('sel-empresa').value;
 
-  let q=db.from('caja_fci').select('*,empresas(nombre)').order('fecha',{ascending:false});
+  const fciData=await CajaAPI.getFCI({}); let q={data:fciData};
   if(emp) q=q.eq('empresa_id',emp);
   const {data}=await q;
   const rows=data||[];
@@ -1246,7 +1249,7 @@ async function guardarFCI(){
   const monto=parseFloat(document.getElementById('nf-monto').value)||0;
   const fondo=document.getElementById('nf-fondo').value.trim();
   if(!monto||!fondo){toast('Completa fondo y monto.', 'warn');return;}
-  const {error}=await db.from('caja_fci').insert({
+  try{ await CajaAPI.registrarFCI({
     empresa_id:document.getElementById('nf-empresa').value,
     tipo:document.getElementById('nf-tipo').value,
     fondo,
@@ -1262,7 +1265,7 @@ async function guardarFCI(){
 
 async function borrarFCI(id){
   if(!(await confirmar('Borrar este movimiento FCI?'))) return;
-  await db.from('caja_fci').delete().eq('id',id);
+  await CajaAPI.eliminarFCI(id);
   cargarFCI();
   cargarKpis();
 }
