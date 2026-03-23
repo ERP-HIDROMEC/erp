@@ -286,10 +286,7 @@
   </div>
 </div>
 
-<script>
-const SUPA_URL='https://avgkhbqtanvfsqxncmzm.supabase.co';
-const SUPA_KEY='sb_publishable_Q5W5JwdhUOWnOZv_QaGWQg_xHVhSEls';
-const db=supabase.createClient(SUPA_URL,SUPA_KEY);
+<script>const db = window.db;
 const fmt=v=>new Intl.NumberFormat('es-AR',{style:'currency',currency:'ARS',maximumFractionDigits:0}).format(v||0);
 const fmtF=d=>d?new Date(d+'T12:00:00').toLocaleDateString('es-AR'):'—';
 const hoy=()=>new Date().toISOString().split('T')[0];
