@@ -1,9 +1,9 @@
 // ============================================================
-// ERP HIDROMEC — Módulo compartido de utilidades  v1.1
+// ERP HIDROMEC — Módulo compartido de utilidades  v1.2
 // Incluir en todos los HTML: <script src="erp-utils.js"></script>
 //
 // CAMBIOS v1.1 (Fase 1):
-//   - Guarda contra doble-carga (bfcache / back-button)
+//   - var en lugar de const para re-declaración segura en bfcache
 //   - const → var para globales que el browser puede re-evaluar
 //   - toast() reemplaza todos los alert()
 //   - confirmar() reemplaza todos los confirm() nativos
@@ -11,16 +11,11 @@
 //   - exportarExcel() usa toast en lugar de alert()
 // ============================================================
 
-// ── Guard de doble-carga ──────────────────────────────────────
-// Cuando el usuario pulsa "Atrás", algunos browsers re-ejecutan
-// los scripts desde bfcache. Con `const` eso lanza
-// "Identifier already declared". El guard evita re-inicializar.
-if (window.__erpUtilsLoaded) {
-  // Ya cargado — salir sin re-declarar nada
-} else {
-window.__erpUtilsLoaded = true;
-
 // ── Conexión Supabase ─────────────────────────────────────────
+// Nota: se usa `var` en lugar de `const` para que el browser
+// pueda re-evaluar el script desde bfcache sin lanzar
+// "Identifier already declared". Con `var` la re-declaración
+// es silenciosa y segura.
 var SUPA_URL = 'https://avgkhbqtanvfsqxncmzm.supabase.co';
 var SUPA_KEY = 'sb_publishable_Q5W5JwdhUOWnOZv_QaGWQg_xHVhSEls';
 var db = supabase.createClient(SUPA_URL, SUPA_KEY);
@@ -465,5 +460,3 @@ document.addEventListener('DOMContentLoaded', () => {
   initInactividad();
 });
 
-// Cierre del guard de doble-carga
-}
