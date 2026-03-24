@@ -122,7 +122,7 @@ const ClientesAPI = (() => {
     const { data, error } = await db.from('cliente_docs_config')
       .select('id,nombre,tipo,fecha_vencimiento,clientes(nombre)')
       .lte('fecha_vencimiento', limStr)
-      .neq('fecha_vencimiento', null)
+      .not('fecha_vencimiento', 'is', null)
       .order('fecha_vencimiento');
     if (error) { console.warn('getDocsClientesProxVencer:', error.message); return []; }
     return data || [];
