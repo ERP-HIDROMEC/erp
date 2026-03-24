@@ -921,8 +921,7 @@ function cargarDatosOT(){
     document.getElementById('not-hs-supervisor').value=d.hs_s||'';
     document.getElementById('not-hs-higiene').value=d.hs_h||'';
     if(d.desc) document.getElementById('not-descripcion').value=d.desc;
-  }catch(e){}
-  }catch(e){error=e;}
+  }catch(e){ /* preview */ }
 }
 
 async function guardarOT(){

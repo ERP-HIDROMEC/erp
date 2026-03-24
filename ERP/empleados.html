@@ -463,7 +463,8 @@ async function init(){
   // Badge documentos vencidos
   const hoyStr=new Date().toISOString().split('T')[0];
   const en30=new Date();en30.setDate(en30.getDate()+30);
-  const docsAlert=await EmpleadosAPI.getDocsAlerta(empId,10);
+  const empIdInit=document.getElementById('sel-empresa')?.value||'';
+  const docsAlert=await EmpleadosAPI.getDocsAlerta(empIdInit,10);
   const badge=document.getElementById('badge-docs-venc');
   if(badge&&docsAlert){badge.textContent=docsAlert.length||'';badge.style.display=docsAlert.length>0?'inline':'none';}
 }

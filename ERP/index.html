@@ -421,7 +421,7 @@ async function cargarAlertas() {
   const en15Str = en15.toISOString().split('T')[0];
   const en30Str2 = new Date(Date.now()+30*86400000).toISOString().split('T')[0];
 
-  const docsVenc = await ClientesAPI.getDocsClientesProxVencer(0);
+  let docsVenc=[]; try{ docsVenc=await ClientesAPI.getDocsClientesProxVencer(0); }catch(e){}
   if(docsVenc?.length){
     alertas.push({
       nivel:'rojo',
@@ -432,7 +432,7 @@ async function cargarAlertas() {
     });
   }
 
-  const docsProx = await ClientesAPI.getDocsClientesProxVencer(30);
+  let docsProx=[]; try{ docsProx=await ClientesAPI.getDocsClientesProxVencer(30); }catch(e){}
   if(docsProx?.length){
     alertas.push({
       nivel:'naranja',

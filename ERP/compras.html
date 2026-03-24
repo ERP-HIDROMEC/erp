@@ -585,7 +585,7 @@ async function enviarOPporMail(pdfBlob,nroOrden,total,mailDest,rows,empresa){
     } else {
       toast(`✓ PDF descargado.\nError al enviar email: ${err.text||err.message}\nDestino: ${mailDest}`, 'success');
     }
-  }catch(e){emailError=e;}
+  }
 }
 
 

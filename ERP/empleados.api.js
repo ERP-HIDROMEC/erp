@@ -132,6 +132,7 @@ const EmpleadosAPI = (() => {
   }
 
   async function getDocsAlerta(empresaId, limite) {
+    if (!empresaId) return [];
     const { data, error } = await db.from('empleados_documentos')
       .select('tipo,descripcion,fecha_vencimiento,empleados(nombre)')
       .eq('empresa_id', empresaId)

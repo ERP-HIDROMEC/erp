@@ -416,13 +416,13 @@ async function cargarFacturas(){
   const mes=document.getElementById('f-mes').value;
   const buscar=document.getElementById('f-buscar').value.toLowerCase();
 
-  const facData=await FacturasAPI.getFacturas({}); let q={data:facData};
-  if(emp) q=q.eq('empresa_id',emp);
-  if(estado) q=q.eq('estado',estado);
-  if(tipo) q=q.eq('tipo',tipo);
-  if(mes){q=q.gte('fecha_emision',mes+'-01');const fin=new Date(mes+'-01');fin.setMonth(fin.getMonth()+1);q=q.lt('fecha_emision',fin.toISOString().split('T')[0]);}
-
-  const {data,error}=await q;
+  const filtros={};
+  if(emp) filtros.empresaId=emp;
+  if(estado) filtros.estado=estado;
+  if(mes){ filtros.fechaDesde=mes+'-01'; const fin=new Date(mes+'-01');fin.setMonth(fin.getMonth()+1);filtros.fechaHasta=fin.toISOString().split('T')[0]; }
+  const facData=await FacturasAPI.getFacturas(filtros);
+  let data=facData, error=null;
+  if(tipo) data=data.filter(r=>r.tipo===tipo);
   let rows=(data||[]);
   if(buscar) rows=rows.filter(r=>(r.clientes?.nombre||'').toLowerCase().includes(buscar)||(r.numero_factura||'').toLowerCase().includes(buscar));
 

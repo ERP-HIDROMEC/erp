@@ -236,9 +236,10 @@ async function init(){
 }
 
 async function verificarCAI(){
-  caiActual=await RemitosAPI.getTalonarioActivo(empId||'a1000000-0000-0000-0000-000000000001');
+  const empIdCAI=document.getElementById('f-empresa')?.value||'a1000000-0000-0000-0000-000000000001';
+  caiActual=await RemitosAPI.getTalonarioActivo(empIdCAI);
   const alerta=document.getElementById('alerta-cai');
-  if(!data||!data.length){
+  if(!caiActual){
     alerta.style.display='block';
     alerta.textContent='⚠ No hay talonario CAI activo para Hidromec. Cargá uno antes de emitir remitos.';
     return;

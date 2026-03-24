@@ -120,7 +120,7 @@ const ClientesAPI = (() => {
     const limStr = limite.toISOString().split('T')[0];
 
     const { data, error } = await db.from('cliente_docs_config')
-      .select('tipo,descripcion,fecha_vencimiento,clientes(nombre),empresas(nombre)')
+      .select('tipo,descripcion,fecha_vencimiento,clientes(nombre)')
       .lte('fecha_vencimiento', limStr)
       .neq('fecha_vencimiento', null);
     if (error) throw error;

@@ -738,15 +738,8 @@ async function guardarCapacitacion(){
     duracion_horas:parseFloat(document.getElementById('sc-duracion').value)||null,
     fecha_vencimiento:document.getElementById('sc-vencimiento').value||null,
     archivo_url:archivoUrl,archivo_path:archivoPatch,
-
-  if(error){toast('Error: ', 'error');return;}
-
-  // Insert asistentes
-  if(asistentes.length&&cap){
-    // asistentes incluidos en registrarCapacitacion //
-      asistentes.map(eid=>({capacitacion_id:cap.id,empleado_id:eid,empresa_id:empId}))
-    );
-  }
+  },asistentes); }catch(e){error=e;}
+  if(error){toast('Error: '+error.message,'error');return;}
 
   cerrarModal('modal-capacitacion');
   document.getElementById('sc-archivo').value='';

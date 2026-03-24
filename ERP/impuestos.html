@@ -352,7 +352,7 @@ async function cargarIVA(){
   const perIni=tipo==='mes'?periodo:`${anio}-01`;
   const perFin=tipo==='mes'?periodo:`${anio}-12`;
 
-  const { facturas, compras: comprasIva, retenciones, pagos: pagosIva } = await ImpuestosAPI.getDatosIVA(empId,periodoDesde,periodoHasta);
+  const { facturas, compras: comprasIva, retenciones, pagos: pagosIva } = await ImpuestosAPI.getDatosIVA(empId,fechaIni,fechaFin);
 
   const compras = comprasIva;
 
@@ -455,7 +455,7 @@ async function cargarIIBB(){
   const perIni=tipo==='mes'?periodoSel:`${anio}-01`;
   const perFin=tipo==='mes'?periodoSel:`${anio}-12`;
 
-  const { facturas: facturasIIBB, retenciones: retIIBB2, pagos: pagosIIBB2 } = await ImpuestosAPI.getDatosIIBB(empId,periodoDesde,periodoHasta);
+  const { facturas: facturasIIBB, retenciones: retIIBB2, pagos: pagosIIBB2 } = await ImpuestosAPI.getDatosIIBB(empId,fechaIni,fechaFin);
 const facturas = facturasIIBB;
 
   const retIIBB = retIIBB2;

@@ -486,6 +486,7 @@ async function guardarItem(){
       descripcion:desc,
       unidad:document.getElementById('ni-um').value,
       precio_unitario:precio,
+    });
   } else {
     await ContratosAPI.crearItemContrato({
       contrato_id:contratoSelId,

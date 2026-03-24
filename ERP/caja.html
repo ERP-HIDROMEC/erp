@@ -977,8 +977,8 @@ async function confirmarOrdenPago(){
     orden_pago_nro:nroOrden,
     orden_pago_at:new Date().toISOString(),
     observaciones:obs||null,
-
-  if(error){toast('Error: ', 'error');return;}
+  }); }catch(e){error=e;}
+  if(error){toast('Error: '+error.message,'error');return;}
   cerrarModal('modal-orden');
   actualizarBadgeOrdenes();
   generarPDFOrden(egreso,nroOrden,fecha,metodo,u?.email||'');
