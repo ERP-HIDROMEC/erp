@@ -992,7 +992,8 @@ function cerrarModal(id){ document.getElementById(id).classList.remove('show'); 
 
 // ── BADGE contador ────────────────────────────────────────────
 async function actualizarBadgeLiberar(){
-  const empIdOp=document.getElementById('fl-empresa')?.value||'';
+  const empIdOp=document.getElementById('fl-empresa')?.value||document.getElementById('f-empresa')?.value||'';
+  if(!empIdOp){return;}
   const count=await EgresosAPI.contarEgresosConOP(empIdOp);
   const badge=document.getElementById('badge-liberar');
   if(count>0){badge.textContent=count;badge.style.display='inline';}

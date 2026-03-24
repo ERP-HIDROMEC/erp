@@ -39,8 +39,8 @@ const ImpuestosAPI = (() => {
         .select('*')
         .eq('empresa_id', empresaId)
         .eq('tipo', 'iva')
-        .gte('fecha', periodoDesde)
-        .lte('fecha', periodoHasta),
+        .gte('periodo', periodoDesde.substring(0,7))
+        .lte('periodo', periodoHasta.substring(0,7)),
     ]);
     if (e1) throw e1;
     if (e2) throw e2;
@@ -79,8 +79,8 @@ const ImpuestosAPI = (() => {
         .select('*')
         .eq('empresa_id', empresaId)
         .eq('tipo', 'iibb')
-        .gte('fecha', periodoDesde)
-        .lte('fecha', periodoHasta),
+        .gte('periodo', periodoDesde.substring(0,7))
+        .lte('periodo', periodoHasta.substring(0,7)),
     ]);
     if (e1) throw e1;
     if (e2) throw e2;

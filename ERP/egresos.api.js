@@ -83,6 +83,7 @@ const EgresosAPI = (() => {
 
   // Cuenta egresos con orden de pago asignado (para numeración)
   async function contarEgresosConOP(empresaId) {
+    if (!empresaId) return 0;
     const { count, error } = await db.from('egresos')
       .select('*', { count: 'exact', head: true })
       .eq('empresa_id', empresaId)
