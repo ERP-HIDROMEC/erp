@@ -1263,8 +1263,7 @@ async function guardarPortalDoc(){
     estado_portal:document.getElementById('mp-estado-portal').value,
     observaciones:document.getElementById('mp-obs').value||null,
   }); }catch(e){error=e;}
-  }catch(e){error=e;}
-  if(error){toast('Error: ', 'error');return;}
+  if(error){toast('Error: '+(error.message||error),'error');return;}
   cerrarModal('modal-portal-doc');
   cargarPortales();
 }

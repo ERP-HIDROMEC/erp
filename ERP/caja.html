@@ -365,11 +365,13 @@ async function cargarKpis(){
   const fin=new Date(mes+'-01');fin.setMonth(fin.getMonth()+1);
   const finStr=fin.toISOString().split('T')[0];
 
-  const movResumen=await CajaAPI.getResumenCaja(document.getElementById('sel-empresa').value); let q={data:movResumen.movimientos};
-  if(emp) q=q.eq('empresa_id',emp);
-  if(cuenta) q=q.eq('origen',cuenta);
-  q=q.gte('fecha',ini).lt('fecha',finStr);
-  const {data}=await q;
+  const empIdKpi=document.getElementById('sel-empresa').value;
+  if(!empIdKpi){return;}
+  const movResumen=await CajaAPI.getResumenCaja(empIdKpi);
+  let data=(movResumen.movimientos||[]);
+  if(emp) data=data.filter(r=>r.empresa_id===emp);
+  if(cuenta) data=data.filter(r=>r.origen===cuenta);
+  data=data.filter(r=>r.fecha>=ini&&r.fecha<finStr);
   const rows=data||[];
 
   const ingresos=rows.filter(r=>r.tipo==='ingreso').reduce((s,r)=>s+Number(r.monto||0),0);
@@ -400,11 +402,11 @@ async function cargarMovimientos(){
   const fin=new Date(mes+'-01');fin.setMonth(fin.getMonth()+1);
   const finStr=fin.toISOString().split('T')[0];
 
-  const movData=await CajaAPI.getMovimientos({}); let q={data:movData};
-  if(emp) q=q.eq('empresa_id',emp);
-  if(cuenta) q=q.eq('origen',cuenta);
-  q=q.gte('fecha',ini).lt('fecha',finStr);
-  const {data}=await q;
+  const filtros={fechaDesde:ini,fechaHasta:finStr};
+  if(emp) filtros.empresaId=emp;
+  if(cuenta) filtros.tipo=cuenta;
+  const movData=await CajaAPI.getMovimientos(filtros);
+  let data=movData;
   const rows=data||[];
 
   document.getElementById('contenido').innerHTML=`
@@ -904,6 +906,7 @@ async function borrarCheque(id){
 
 // ── BADGE órdenes ─────────────────────────────────────────────
 async function actualizarBadgeOrdenes(){
+  const empId=document.getElementById('sel-empresa')?.value||'';
   const count=await EgresosAPI.contarEgresosConOP(empId);
   const badge=document.getElementById('badge-ordenes');
   if(badge){ if(count>0){badge.textContent=count;badge.style.display='inline';} else{badge.style.display='none';} }

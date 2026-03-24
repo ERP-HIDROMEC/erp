@@ -244,7 +244,7 @@ async function verificarCAI(){
     alerta.textContent='⚠ No hay talonario CAI activo para Hidromec. Cargá uno antes de emitir remitos.';
     return;
   }
-  const tal=data[0];
+  const tal=caiActual;
   const hoyStr=hoy();
   const restantes=tal.nro_hasta-tal.nro_actual+1;
   if(tal.fecha_vencimiento<hoyStr){

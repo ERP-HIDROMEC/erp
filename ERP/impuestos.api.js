@@ -93,7 +93,7 @@ const ImpuestosAPI = (() => {
   async function getRetenciones(filtros = {}) {
     let q = db.from('retenciones')
       .select('*,clientes(nombre),empresas(nombre)')
-      .order('fecha', { ascending: false });
+      .order('fecha_pago', { ascending: false, nullsFirst: false });
 
     if (filtros.empresaId) q = q.eq('empresa_id', filtros.empresaId);
     if (filtros.tipo)      q = q.eq('tipo', filtros.tipo);
@@ -119,7 +119,7 @@ const ImpuestosAPI = (() => {
   async function getPagosImpuestos(filtros = {}) {
     let q = db.from('pagos_impuestos')
       .select('*,empresas(nombre)')
-      .order('fecha', { ascending: false });
+      .order('fecha_pago', { ascending: false, nullsFirst: false });
 
     if (filtros.empresaId) q = q.eq('empresa_id', filtros.empresaId);
     if (filtros.tipo)      q = q.eq('tipo', filtros.tipo);
