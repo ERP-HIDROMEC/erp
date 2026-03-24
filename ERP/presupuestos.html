@@ -276,10 +276,10 @@ async function cargarPresupuestos(){
   const estado=document.getElementById('f-estado').value;
   const buscar=document.getElementById('f-buscar').value.toLowerCase();
 
-  const presData=await PresupuestosAPI.getPresupuestos({}); let q={data:presData};
-  if(emp) q=q.eq('empresa_id',emp);
-  if(estado) q=q.eq('estado',estado);
-  const {data}=await q;
+  let presData=await PresupuestosAPI.getPresupuestos({});
+  if(emp) presData=presData.filter(r=>r.empresa_id===emp);
+  if(estado) presData=presData.filter(r=>r.estado===estado);
+  const data=presData;
   let rows=data||[];
   if(buscar) rows=rows.filter(r=>(r.descripcion||'').toLowerCase().includes(buscar)||(r.clientes?.nombre||'').toLowerCase().includes(buscar));
 

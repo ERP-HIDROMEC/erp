@@ -486,10 +486,10 @@ async function cargarProyectos(){
   const estado=document.getElementById('f-estado').value;
   const buscar=document.getElementById('f-buscar').value.toLowerCase();
 
-  const proyData=await ProyectosAPI.getProyectos({}); let q={data:proyData};
-  if(emp) q=q.eq('empresa_id',emp);
-  if(estado) q=q.eq('estado',estado);
-  const {data}=await q;
+  let proyData=await ProyectosAPI.getProyectos({});
+  if(emp) proyData=proyData.filter(r=>r.empresa_id===emp);
+  if(estado) proyData=proyData.filter(r=>r.estado===estado);
+  const data=proyData;
   let rows=data||[];
   if(buscar) rows=rows.filter(r=>(r.nombre||'').toLowerCase().includes(buscar)||(r.clientes?.nombre||'').toLowerCase().includes(buscar));
 
@@ -632,9 +632,9 @@ async function guardarProyecto(){
 async function cargarContratosProyecto(){
   const empId=document.getElementById('np-empresa').value;
   const clienteId=document.getElementById('np-cliente').value;
-  const contData=await ContratosAPI.getContratosSelect(empId); let q={data:contData};
-  if(clienteId) q=q.eq('cliente_id',clienteId);
-  const {data}=await q;
+  let contData=await ContratosAPI.getContratosSelect(empId);
+  if(clienteId) contData=contData.filter(r=>r.cliente_id===clienteId);
+  const data=contData;
   const sel=document.getElementById('np-contrato');
   sel.innerHTML='<option value="">— Sin contrato (ingresar N° OC manualmente) —</option>'+(data||[]).map(c=>`<option value="${c.id}">${c.numero_contrato}${c.descripcion?' — '+c.descripcion:''}</option>`).join('');
 }
@@ -692,9 +692,9 @@ async function cargarHoras(){
   const emp=document.getElementById('f-empresa').value;
   const buscar=document.getElementById('f-buscar').value.toLowerCase();
 
-  const hsData=await ProyectosAPI.getImputacionHoras({limit:200}); let q={data:hsData};
-  if(emp) q=q.eq('empresa_id',emp);
-  const {data}=await q;
+  let hsData=await ProyectosAPI.getImputacionHoras({limit:200});
+  if(emp) hsData=hsData.filter(r=>r.empresa_id===emp);
+  const data=hsData;
   let rows=data||[];
   if(buscar) rows=rows.filter(r=>(r.proyectos?.nombre||'').toLowerCase().includes(buscar)||(r.empleados?.nombre||'').toLowerCase().includes(buscar));
 
@@ -775,9 +775,9 @@ async function cargarCostos(){
   const emp=document.getElementById('f-empresa').value;
   const buscar=document.getElementById('f-buscar').value.toLowerCase();
 
-  const coData=await ProyectosAPI.getCostosObra({}); let q={data:coData};
-  if(emp) q=q.eq('empresa_id',emp);
-  const {data}=await q;
+  let coData=await ProyectosAPI.getCostosObra({});
+  if(emp) coData=coData.filter(r=>r.empresa_id===emp);
+  const data=coData;
   let rows=data||[];
   if(buscar) rows=rows.filter(r=>(r.proyectos?.nombre||'').toLowerCase().includes(buscar)||(r.descripcion||'').toLowerCase().includes(buscar));
 
@@ -835,9 +835,9 @@ async function cargarRentabilidad(){
   document.getElementById('contenido').innerHTML='<div class="spinner-wrap"><div class="spinner"></div>Calculando rentabilidad...</div>';
   const emp=document.getElementById('f-empresa').value;
 
-  const proyData=await ProyectosAPI.getProyectos({}); let q={data:proyData};
-  if(emp) q=q.eq('empresa_id',emp);
-  const {data:proyectos}=await q;
+  let proyData=await ProyectosAPI.getProyectos({});
+  if(emp) proyData=proyData.filter(r=>r.empresa_id===emp);
+  const proyectos=proyData;
 
   const resultados=await Promise.all((proyectos||[]).map(async p=>{
     const [{data:horas},{data:costos},{data:facturas}]=await Promise.all([
@@ -954,9 +954,9 @@ async function cargarOrdenesOT(){
   const emp=document.getElementById('f-empresa').value;
   const buscar=document.getElementById('f-buscar').value.toLowerCase();
 
-  const otData=await ProyectosAPI.getOrdenesTrabajo({limit:200}); let q={data:otData};
-  if(emp) q=q.eq('empresa_id',emp);
-  const {data}=await q;
+  let otData=await ProyectosAPI.getOrdenesTrabajo({limit:200});
+  if(emp) otData=otData.filter(r=>r.empresa_id===emp);
+  const data=otData;
   let rows=data||[];
   if(buscar) rows=rows.filter(r=>(r.proyectos?.nombre||'').toLowerCase().includes(buscar));
 

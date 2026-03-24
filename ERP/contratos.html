@@ -216,10 +216,10 @@ async function cargarContratos(){
   const estado=document.getElementById('f-estado').value;
   const buscar=document.getElementById('f-buscar').value.toLowerCase();
 
-  const contratosData=await ContratosAPI.getContratos({}); let q={data:contratosData};
-  if(emp) q=q.eq('empresa_id',emp);
-  if(estado) q=q.eq('estado',estado);
-  const {data}=await q;
+  let contratosData=await ContratosAPI.getContratos({});
+  if(emp) contratosData=contratosData.filter(r=>r.empresa_id===emp);
+  if(estado) contratosData=contratosData.filter(r=>r.estado===estado);
+  const data=contratosData;
   let rows=data||[];
   if(buscar) rows=rows.filter(r=>(r.numero_contrato||'').toLowerCase().includes(buscar)||(r.clientes?.nombre||'').toLowerCase().includes(buscar));
 
@@ -394,9 +394,9 @@ async function cargarPrecios(){
   if(!contratoSelId){
     // Mostrar todos los contratos para seleccionar
     const emp=document.getElementById('f-empresa').value;
-    const ctActData=await ContratosAPI.getContratosSelect(empId||''); let q={data:ctActData};
-    if(emp) q=q.eq('empresa_id',emp);
-    const {data:contratos}=await q;
+    let ctActData=await ContratosAPI.getContratosSelect(empId||'');
+    if(emp) ctActData=ctActData.filter(r=>r.empresa_id===emp);
+    const contratos=ctActData;
     document.getElementById('kpis').innerHTML='';
     document.getElementById('contenido').innerHTML=`
       <div style="padding:20px;color:var(--muted);font-size:13px;margin-bottom:16px">Seleccioná un contrato para ver su lista de precios:</div>
@@ -511,8 +511,7 @@ async function cargarHistorial(){
   document.getElementById('kpis').innerHTML='';
   document.getElementById('contenido').innerHTML='<div class="spinner-wrap"><div class="spinner"></div>Cargando...</div>';
 
-  const histData=await ContratosAPI.getHistorialPrecios({itemId:contratoSelId}); let q={data:histData};
-  const {data}=await q;
+  const data=await ContratosAPI.getHistorialPrecios({itemId:contratoSelId});
   const rows=data||[];
 
   document.getElementById('contenido').innerHTML=`

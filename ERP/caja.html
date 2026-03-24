@@ -435,10 +435,10 @@ async function cargarCheques(){
   document.getElementById('contenido').innerHTML='<div class="spinner-wrap"><div class="spinner"></div>Cargando...</div>';
   const emp=document.getElementById('sel-empresa').value;
   const estadoCheque=document.getElementById('sel-estado-cheque')?.value||'';
-  const chqData=await EgresosAPI.getCheques({}); let q={data:chqData};
-  if(emp) q=q.eq('empresa_id',emp);
-  if(estadoCheque) q=q.eq('estado',estadoCheque);
-  const {data}=await q;
+  let chqData=await EgresosAPI.getCheques({});
+  if(emp) chqData=chqData.filter(r=>r.empresa_id===emp);
+  if(estadoCheque) chqData=chqData.filter(r=>r.estado===estadoCheque);
+  const data=chqData;
   const rows=data||[];
   const hoyStr=hoy();
 
@@ -969,7 +969,8 @@ async function confirmarOrdenPago(){
   const obs=document.getElementById('op-obs').value;
   if(!fecha){toast('Ingresá la fecha de pago.', 'warn');return;}
 
-  const count2=await EgresosAPI.contarEgresosConOP(empId);
+  const empId2=document.getElementById('sel-empresa')?.value||'';
+  const count2=await EgresosAPI.contarEgresosConOP(empId2);
   const nroOrden='OP-'+String((count||0)+1).padStart(4,'0')+'-'+new Date().getFullYear();
 
   const u=await getUsuario();
@@ -1177,9 +1178,9 @@ async function cargarFCI(){
   document.getElementById('contenido').innerHTML='<div class="spinner-wrap"><div class="spinner"></div>Cargando...</div>';
   const emp=document.getElementById('sel-empresa').value;
 
-  const fciData=await CajaAPI.getFCI({}); let q={data:fciData};
-  if(emp) q=q.eq('empresa_id',emp);
-  const {data}=await q;
+  let fciData=await CajaAPI.getFCI({});
+  if(emp) fciData=fciData.filter(r=>r.empresa_id===emp);
+  const data=fciData;
   const rows=data||[];
 
   const depositos=rows.filter(r=>r.tipo==='deposito').reduce((s,r)=>s+Number(r.monto||0),0);

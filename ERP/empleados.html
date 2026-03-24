@@ -521,10 +521,10 @@ async function cargarEmpleados(){
   const activo=document.getElementById('f-estado').value;
   const buscar=document.getElementById('f-buscar').value.toLowerCase();
 
-  const empData=await EmpleadosAPI.getEmpleados({}); let q={data:empData};
-  if(emp) q=q.eq('empresa_id',emp);
-  if(activo!=='') q=q.eq('activo',activo==='true');
-  const {data}=await q;
+  let empData=await EmpleadosAPI.getEmpleados({});
+  if(emp) empData=empData.filter(r=>r.empresa_id===emp);
+  if(activo!=='') empData=empData.filter(r=>String(r.activo)===(activo==='true'?'true':'false'));
+  const data=empData;
   let rows=data||[];
   if(buscar) rows=rows.filter(r=>(r.nombre||'').toLowerCase().includes(buscar));
 
@@ -623,9 +623,9 @@ async function cargarSueldos(){
   document.getElementById('contenido').innerHTML='<div class="spinner-wrap"><div class="spinner"></div>Cargando...</div>';
   const emp=document.getElementById('f-empresa').value;
   const buscar=document.getElementById('f-buscar').value.toLowerCase();
-  const sueldosData=await EmpleadosAPI.getSueldos({}); let q={data:sueldosData};
-  if(emp) q=q.eq('empresa_id',emp);
-  const {data}=await q;
+  let sueldosData=await EmpleadosAPI.getSueldos({});
+  if(emp) sueldosData=sueldosData.filter(r=>r.empresa_id===emp);
+  const data=sueldosData;
   let rows=data||[];
   if(buscar) rows=rows.filter(r=>(r.empleados?.nombre||'').toLowerCase().includes(buscar));
 
@@ -705,9 +705,9 @@ async function cargarClientes(){
   document.getElementById('contenido').innerHTML='<div class="spinner-wrap"><div class="spinner"></div>Cargando...</div>';
   const emp=document.getElementById('f-empresa').value;
   const buscar=document.getElementById('f-buscar').value.toLowerCase();
-  const cliData=await ClientesAPI.getClientes({}); let q={data:cliData};
-  if(emp) q=q.eq('empresa_id',emp);
-  const {data}=await q;
+  let cliData=await ClientesAPI.getClientes({});
+  if(emp) cliData=cliData.filter(r=>r.empresa_id===emp);
+  const data=cliData;
   let rows=data||[];
   if(buscar) rows=rows.filter(r=>(r.nombre||'').toLowerCase().includes(buscar));
 
@@ -923,9 +923,9 @@ async function cargarDocumentos(categoria){
   const en30=new Date();en30.setDate(en30.getDate()+30);
   const en30Str=en30.toISOString().split('T')[0];
 
-  const docEmpData=await EmpleadosAPI.getDocumentosEmpleado({categoria}); let q={data:docEmpData};
-  if(emp) q=q.eq('empresa_id',emp);
-  const {data}=await q;
+  let docEmpData=await EmpleadosAPI.getDocumentosEmpleado({categoria});
+  if(emp) docEmpData=docEmpData.filter(r=>r.empresa_id===emp);
+  const data=docEmpData;
   let rows=data||[];
   if(buscar) rows=rows.filter(r=>
     (r.empleados?.nombre||'').toLowerCase().includes(buscar)||
@@ -1042,9 +1042,9 @@ async function cargarAnalisisAusentismo(){
   const emp=document.getElementById('f-empresa').value;
   const anio=new Date().getFullYear();
 
-  const ausData=await EmpleadosAPI.getAusencias({estado:'aprobada'}); let q={data:ausData};
-  if(emp) q=q.eq('empresa_id',emp);
-  const {data}=await q;
+  let ausData=await EmpleadosAPI.getAusencias({estado:'aprobada'});
+  if(emp) ausData=ausData.filter(r=>r.empresa_id===emp);
+  const data=ausData;
   const rows=data||[];
 
   // Calcular dias por tipo
@@ -1147,9 +1147,9 @@ async function cargarAusencias(){
   const buscar=document.getElementById('f-buscar').value.toLowerCase();
   const hoyStr=new Date().toISOString().split('T')[0];
 
-  const ausData2=await EmpleadosAPI.getAusencias({}); let q={data:ausData2};
-  if(emp) q=q.eq('empresa_id',emp);
-  const {data}=await q;
+  let ausData2=await EmpleadosAPI.getAusencias({});
+  if(emp) ausData2=ausData2.filter(r=>r.empresa_id===emp);
+  const data=ausData2;
   let rows=data||[];
   if(buscar) rows=rows.filter(r=>(r.empleados?.nombre||'').toLowerCase().includes(buscar));
 
@@ -1277,9 +1277,9 @@ async function cargarVehiculos(){
   const emp=document.getElementById('f-empresa').value;
   const buscar=document.getElementById('f-buscar').value.toLowerCase();
 
-  const vehData=await EmpleadosAPI.getVehiculos({}); let q={data:vehData};
-  if(emp) q=q.eq('empresa_id',emp);
-  const {data}=await q;
+  let vehData=await EmpleadosAPI.getVehiculos({});
+  if(emp) vehData=vehData.filter(r=>r.empresa_id===emp);
+  const data=vehData;
   let rows=data||[];
   if(buscar) rows=rows.filter(r=>
     (r.descripcion||'').toLowerCase().includes(buscar)||

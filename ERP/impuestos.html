@@ -709,10 +709,7 @@ async function cargarVarios(){
   const perIni=tipo==='mes'?perSel:`${anio}-01`;
   const perFin=tipo==='mes'?perSel:`${anio}-12`;
 
-  const variosData=await ImpuestosAPI.getImpuestosVarios({empresaId:empId}); let q={data:variosData};
-    // filters applied above
-  if(empId) q=q.eq('empresa_id',empId);
-  const {data}=await q;
+  const data=await ImpuestosAPI.getImpuestosVarios({empresaId:empId});
   const rows=data||[];
 
   const total=rows.reduce((s,r)=>s+Number(r.monto||0),0);

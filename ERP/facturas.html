@@ -479,10 +479,10 @@ async function cargarRemitos(){
   document.getElementById('contenido').innerHTML='<div class="spinner-wrap"><div class="spinner"></div>Cargando...</div>';
   const emp=document.getElementById('r-empresa').value;
   const estado=document.getElementById('r-estado').value;
-  const remLegData=await RemitosAPI.getRemitosLegacy({}); let q={data:remLegData};
-  if(emp) q=q.eq('empresa_id',emp);
-  if(estado) q=q.eq('estado',estado);
-  const {data}=await q;
+  let remLegData=await RemitosAPI.getRemitosLegacy({});
+  if(emp) remLegData=remLegData.filter(r=>r.empresa_id===emp);
+  if(estado) remLegData=remLegData.filter(r=>r.estado===estado);
+  const data=remLegData;
   const rows=data||[];
   document.getElementById('contenido').innerHTML=`
     <div style="overflow-x:auto"><table>
@@ -508,10 +508,10 @@ async function cargarCobros(){
   document.getElementById('contenido').innerHTML='<div class="spinner-wrap"><div class="spinner"></div>Cargando...</div>';
   const emp=document.getElementById('c-empresa').value;
   const mes=document.getElementById('c-mes').value;
-  const cobData=await FacturasAPI.getCobros({}); let q={data:cobData};
-  if(emp) q=q.eq('empresa_id',emp);
-  if(mes){q=q.gte('fecha',mes+'-01');const fin=new Date(mes+'-01');fin.setMonth(fin.getMonth()+1);q=q.lt('fecha',fin.toISOString().split('T')[0]);}
-  const {data}=await q;
+  let cobData=await FacturasAPI.getCobros({});
+  if(emp) cobData=cobData.filter(r=>r.empresa_id===emp);
+  if(mes){const mI=mes+'-01';const mF=new Date(mes+'-01');mF.setMonth(mF.getMonth()+1);const mFin=mF.toISOString().split('T')[0];cobData=cobData.filter(r=>r.fecha>=mI&&r.fecha<mFin);}
+  const data=cobData;
   const rows=data||[];
   const total=rows.reduce((s,r)=>s+Number(r.monto||0),0);
   document.getElementById('contenido').innerHTML=`

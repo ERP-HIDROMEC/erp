@@ -559,9 +559,9 @@ async function cargarDocEmpresa(){
   const en30=new Date();en30.setDate(en30.getDate()+30);
   const en30Str=en30.toISOString().split('T')[0];
 
-  const syhDocsData=await SyhAPI.getDocumentosEmpresa({}); let q={data:syhDocsData};
-  if(emp) q=q.eq('empresa_id',emp);
-  const {data}=await q;
+  let syhDocsData=await SyhAPI.getDocumentosEmpresa({});
+  if(emp) syhDocsData=syhDocsData.filter(r=>r.empresa_id===emp);
+  const data=syhDocsData;
   let rows=data||[];
   if(buscar) rows=rows.filter(r=>(r.tipo||'').toLowerCase().includes(buscar)||(r.descripcion||'').toLowerCase().includes(buscar)||(r.cliente_obra||'').toLowerCase().includes(buscar));
 
@@ -663,9 +663,9 @@ async function cargarCapacitaciones(){
   const emp=document.getElementById('f-empresa').value;
   const buscar=document.getElementById('f-buscar').value.toLowerCase();
 
-  const capData=await SyhAPI.getCapacitaciones({}); let q={data:capData};
-  if(emp) q=q.eq('empresa_id',emp);
-  const {data}=await q;
+  let capData=await SyhAPI.getCapacitaciones({});
+  if(emp) capData=capData.filter(r=>r.empresa_id===emp);
+  const data=capData;
   let rows=data||[];
   if(buscar) rows=rows.filter(r=>(r.tipo||'').toLowerCase().includes(buscar)||(r.descripcion||'').toLowerCase().includes(buscar));
 
@@ -845,9 +845,9 @@ async function cargarEPP(){
   const emp=document.getElementById('f-empresa').value;
   const buscar=document.getElementById('f-buscar').value.toLowerCase();
 
-  const eppData=await SyhAPI.getEntregasEPP({}); let q={data:eppData};
-  if(emp) q=q.eq('empresa_id',emp);
-  const {data}=await q;
+  let eppData=await SyhAPI.getEntregasEPP({});
+  if(emp) eppData=eppData.filter(r=>r.empresa_id===emp);
+  const data=eppData;
   let rows=data||[];
   if(buscar) rows=rows.filter(r=>(r.empleados?.nombre||'').toLowerCase().includes(buscar));
 
@@ -1026,9 +1026,9 @@ async function cargarIncidentes(){
   const emp=document.getElementById('f-empresa').value;
   const buscar=document.getElementById('f-buscar').value.toLowerCase();
 
-  const incData=await SyhAPI.getIncidentes({}); let q={data:incData};
-  if(emp) q=q.eq('empresa_id',emp);
-  const {data}=await q;
+  let incData=await SyhAPI.getIncidentes({});
+  if(emp) incData=incData.filter(r=>r.empresa_id===emp);
+  const data=incData;
   let rows=data||[];
   if(buscar) rows=rows.filter(r=>(r.empleados?.nombre||'').toLowerCase().includes(buscar)||(r.descripcion||'').toLowerCase().includes(buscar));
 
@@ -1280,9 +1280,9 @@ async function cargarPortales(){
   const en60Str=en60.toISOString().split('T')[0];
 
   // Load all portal docs with joins
-  const portalData=await SyhAPI.getDocumentosPortal({}); let q={data:portalData};
-  if(emp) q=q.eq('empresa_id',emp);
-  const {data}=await q;
+  let portalData=await SyhAPI.getDocumentosPortal({});
+  if(emp) portalData=portalData.filter(r=>r.empresa_id===emp);
+  const data=portalData;
   let rows=data||[];
   if(buscar) rows=rows.filter(r=>
     (r.portales_clientes?.nombre||'').toLowerCase().includes(buscar)||
@@ -1422,11 +1422,7 @@ async function editarVencimientoPortal(id){
   const nuevaFecha=prompt('Nueva fecha de vencimiento (YYYY-MM-DD):');
   if(!nuevaFecha) return;
   if(!/^\d{4}-\d{2}-\d{2}$/.test(nuevaFecha)){toast('Formato invalido. Usa YYYY-MM-DD', 'warn');return;}
-  try{ await SyhAPI.renovarDocumentoPortal(id,nuevaFecha); //
-    fecha_vencimiento:nuevaFecha,
-    estado_portal:'aprobado',
-    fecha_carga_portal:hoy(),
-  }catch(e){error=e;}
+  try{ await SyhAPI.renovarDocumentoPortal(id,nuevaFecha); }catch(e){error=e;}
   if(error){toast('Error: ', 'error');return;}
   cargarPortales();
 }

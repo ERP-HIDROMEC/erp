@@ -288,11 +288,9 @@ async function cargarRemitos(){
   if(estado) filtros.estado=estado;
   if(tabActual==='historico') filtros.migrado=true;
   if(tabActual==='todos') filtros.migrado=false;
-  const remData=await RemitosAPI.getRemitos(filtros); let q={data:remData};
-  if(mes){q=q.gte('fecha',mes+'-01');const f=new Date(mes+'-01');f.setMonth(f.getMonth()+1);q=q.lt('fecha',f.toISOString().split('T')[0]);}
-
-  const {data}=await q;
-  let rows=data||[];
+  const remData=await RemitosAPI.getRemitos(filtros);
+  let rows=remData||[];
+  if(mes){const mI=mes+'-01';const mF=new Date(mes+'-01');mF.setMonth(mF.getMonth()+1);const mFin=mF.toISOString().split('T')[0];rows=rows.filter(r=>r.fecha>=mI&&r.fecha<mFin);}
   // Enriquecer con número de factura
   const conFact=rows.filter(r=>r.factura_id);
   if(conFact.length){
@@ -493,9 +491,9 @@ async function cargarContratos(){
   const empId=document.getElementById('nr-empresa').value;
   const clienteId=document.getElementById('nr-cliente').value;
   // Traer todos los contratos activos de la empresa, filtrar por cliente si hay uno seleccionado
-  const contratosData=await ContratosAPI.getContratosSelect(empId); let q={data:contratosData,error:null};
-  if(clienteId) q=q.eq('cliente_id',clienteId);
-  const {data}=await q;
+  let contratosData=await ContratosAPI.getContratosSelect(empId);
+  if(clienteId) contratosData=contratosData.filter(r=>r.cliente_id===clienteId);
+  const data=contratosData;
   document.getElementById('nr-contrato').innerHTML=(data||[]).length
     ? (data||[]).map(c=>`<option value="${c.id}">${c.numero_contrato}${c.clientes?.nombre?' — '+c.clientes.nombre:''}</option>`).join('')
     : '<option value="">Sin contratos activos</option>';
