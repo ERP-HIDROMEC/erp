@@ -907,6 +907,7 @@ async function borrarCheque(id){
 // ── BADGE órdenes ─────────────────────────────────────────────
 async function actualizarBadgeOrdenes(){
   const empId=document.getElementById('sel-empresa')?.value||'';
+  if(!empId){return;}
   const count=await EgresosAPI.contarEgresosConOP(empId);
   const badge=document.getElementById('badge-ordenes');
   if(badge){ if(count>0){badge.textContent=count;badge.style.display='inline';} else{badge.style.display='none';} }

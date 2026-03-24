@@ -1119,7 +1119,8 @@ function abrirOPIndividual(id){
 
 
 async function cargarProveedoresLiberar(){
-  const empId=document.getElementById('f-empresa')?.value||'';
+  const empId=document.getElementById('fl-empresa')?.value||'';
+  if(!empId){return;}
   const data=await EgresosAPI.getProveedoresSelect(empId);
   const sel=document.getElementById('fl-proveedor');
   if(sel) sel.innerHTML='<option value="">Todos los proveedores</option>'+(data||[]).map(p=>`<option value="${p.id}">${p.nombre}</option>`).join('\n');
