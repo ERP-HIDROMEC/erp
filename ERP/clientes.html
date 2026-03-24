@@ -9,8 +9,8 @@
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="erp-utils.js"></script>
 <script src="erp-sidebar.js"></script>
-<script src="lib/empresas.api.js"></script>
-<script src="lib/clientes.api.js"></script>
+<script src="js/empresas.api.js"></script>
+<script src="js/clientes.api.js"></script>
 <style>
   .tab:hover{color:var(--text);}
   .kpis{display:flex;gap:12px;margin-bottom:20px;flex-wrap:wrap;}
@@ -572,6 +572,7 @@ async function guardarDocCliente(){
     fecha_vencimiento: venc,
     notas: document.getElementById('mdc-notas').value || null,
   });
+  }catch(e){error=e;}
   if(error){ toast('Error: ', 'error'); return; }
   cerrarModal('modal-doc-cliente');
   cargarDocsCliente(_docClienteId);
@@ -596,7 +597,7 @@ async function confirmarRenovar(){
     fecha_vencimiento: fecha,
     notas: notas,
     updated_at: new Date().toISOString(),
-  }).eq('id', docRenovarId);
+  }); }catch(e){error=e;}
   if(error){ toast('Error: ', 'error'); return; }
   cerrarModal('modal-renovar-doc');
   cargarDocsCliente(clienteSelId);

@@ -9,13 +9,13 @@
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="erp-utils.js"></script>
 <script src="erp-sidebar.js"></script>
-<script src="lib/empresas.api.js"></script>
-<script src="lib/facturas.api.js"></script>
-<script src="lib/egresos.api.js"></script>
-<script src="lib/remitos.api.js"></script>
-<script src="lib/proyectos.api.js"></script>
-<script src="lib/empleados.api.js"></script>
-<script src="lib/clientes.api.js"></script>
+<script src="js/empresas.api.js"></script>
+<script src="js/facturas.api.js"></script>
+<script src="js/egresos.api.js"></script>
+<script src="js/remitos.api.js"></script>
+<script src="js/proyectos.api.js"></script>
+<script src="js/empleados.api.js"></script>
+<script src="js/clientes.api.js"></script>
 <style>
   :root {
     --bg:#0f1117;--bg2:#181c27;--bg3:#1e2436;
@@ -251,9 +251,8 @@ async function cargarMensual() {
   const desdeStr = desde.toISOString().split('T')[0];
   const filtros = { excluirAnuladas:true, fechaDesde:desdeStr };
   if(empresaActiva !== 'todas') filtros.empresaId = empresaActiva;
-  const data = await FacturasAPI.getFacturaMensual(
-    empresaActiva === 'todas' ? null : empresaActiva, desdeStr, new Date().toISOString().split('T')[0]
-  );
+  const filtroEmp = empresaActiva === 'todas' ? null : empresaActiva;
+  const data = await FacturasAPI.getFacturaMensual(filtroEmp, desdeStr, new Date().toISOString().split('T')[0]);
   const agg = {};
   (data||[]).forEach(r=>{
     const mes = r.fecha_emision.substring(0,7);
@@ -289,9 +288,8 @@ async function cargarClientes() {
   const anioIni = new Date().getFullYear() + '-01-01';
   const filtros = { excluirAnuladas:true, fechaDesde:anioIni };
   if(empresaActiva !== 'todas') filtros.empresaId = empresaActiva;
-  const data = await FacturasAPI.getFacturasPorCliente(
-    empresaActiva === 'todas' ? null : empresaActiva, anioIni, new Date().toISOString().split('T')[0]
-  );
+  const filtroEmpCli = empresaActiva === 'todas' ? null : empresaActiva;
+  const data = await FacturasAPI.getFacturasPorCliente(filtroEmpCli, anioIni, new Date().toISOString().split('T')[0]);
   const agg = {};
   (data||[]).forEach(r=>{
     const k = (r.clientes?.nombre||'—')+'|'+(r.empresas?.nombre||'—');

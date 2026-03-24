@@ -10,11 +10,11 @@
 <script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js"></script>
 <script src="erp-utils.js"></script>
 <script src="erp-sidebar.js"></script>
-<script src="lib/empresas.api.js"></script>
-<script src="lib/clientes.api.js"></script>
-<script src="lib/proyectos.api.js"></script>
-<script src="lib/contratos.api.js"></script>
-<script src="lib/empleados.api.js"></script>
+<script src="js/empresas.api.js"></script>
+<script src="js/clientes.api.js"></script>
+<script src="js/proyectos.api.js"></script>
+<script src="js/contratos.api.js"></script>
+<script src="js/empleados.api.js"></script>
 <style>
   tr:last-child tr:hover .estado-badge{display:inline-block;padding:3px 10px;border-radius:20px;font-size:11px;font-weight:500;}
   .estado-badge.activo{background:rgba(16,185,129,0.15);color:var(--green);}
@@ -750,6 +750,7 @@ async function guardarHoras(){
     costo_calculado:horas*personas*costoHora*mult,
     observaciones:document.getElementById('nh-obs').value||null,
   });
+  }catch(e){error=e;}
   if(error){toast('Error: ', 'error');return;}
   cerrarModal('modal-horas');
   cargarHoras();
@@ -816,6 +817,7 @@ async function guardarCosto(){
     fecha:document.getElementById('nc-fecha').value,
     comprobante:document.getElementById('nc-comprobante').value||null,
   });
+  }catch(e){error=e;}
   if(error){toast('Error: ', 'error');return;}
   cerrarModal('modal-costo');
   cargarCostos();
@@ -920,6 +922,7 @@ function cargarDatosOT(){
     document.getElementById('not-hs-higiene').value=d.hs_h||'';
     if(d.desc) document.getElementById('not-descripcion').value=d.desc;
   }catch(e){}
+  }catch(e){error=e;}
 }
 
 async function guardarOT(){

@@ -9,10 +9,10 @@
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="erp-utils.js"></script>
 <script src="erp-sidebar.js"></script>
-<script src="lib/empresas.api.js"></script>
-<script src="lib/clientes.api.js"></script>
-<script src="lib/facturas.api.js"></script>
-<script src="lib/remitos.api.js"></script>
+<script src="js/empresas.api.js"></script>
+<script src="js/clientes.api.js"></script>
+<script src="js/facturas.api.js"></script>
+<script src="js/remitos.api.js"></script>
 <style>
   /* TABS */
   /* FILTROS */
@@ -619,9 +619,9 @@ async function guardarFactura(){
   // Marcar remitos como facturados
   const factId=data?.id||facturaEditId;
   if(_remitosSeleccionados.length&&factId){
-    await RemitosAPI.marcarRemitoFacturado(
-      factura_id:factId
-    }).in('id',_remitosSeleccionados);
+    for(const rid of _remitosSeleccionados){
+      await RemitosAPI.vincularRemitoFactura(rid, factId);
+    }
   }
   cerrarModal('modal-factura');
   _remitosSeleccionados=[];
@@ -684,6 +684,7 @@ async function guardarCobro(){
     numero_cheque:document.getElementById('nc-cheque').value||null,
     observaciones:document.getElementById('nc-obs').value||null,
   });
+  }catch(e){error=e;}
   if(error){toast('Error al guardar cobro: ', 'error');return;}
 
   // Marcar factura como cobrada
@@ -845,13 +846,13 @@ async function confirmarImport(){
     // Verificar si ya existe la factura
     const existeArr=await FacturasAPI.getFacturas({empresaId:empId}); const existe=existeArr.find(f=>f.numero_factura===r.numero)||null;
     if(existe){skip++;continue;}
-    try{ await FacturasAPI.crearFactura({
+    let errFac=null; try{ await FacturasAPI.crearFactura({
       empresa_id:empId,cliente_id:cli.id,tipo:r.tipo,
       numero_factura:r.numero,fecha_emision:r.fecha,
       monto_neto:r.neto,monto_iva:r.iva,monto_total:r.total,
       estado:'pendiente',
-    });
-    if(!error) ok++; else skip++;
+    }); }catch(e){errFac=e;}
+    if(!errFac) ok++; else skip++;
   }
   cerrarModal('modal-import');
   toast(`Importación completada:\n✓ ${ok} facturas importadas\n⊘ ${skip} omitidas (duplicadas o sin cliente)`, 'success');

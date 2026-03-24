@@ -10,9 +10,9 @@
 <script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js"></script>
 <script src="erp-utils.js"></script>
 <script src="erp-sidebar.js"></script>
-<script src="lib/empresas.api.js"></script>
-<script src="lib/caja.api.js"></script>
-<script src="lib/egresos.api.js"></script>
+<script src="js/empresas.api.js"></script>
+<script src="js/caja.api.js"></script>
+<script src="js/egresos.api.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 <style>
   .kpi-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:14px;margin-bottom:20px;}
@@ -855,6 +855,7 @@ async function guardarMovimiento(){
     origen:cuenta,categoria:document.getElementById('nm-categoria').value,
     descripcion:desc,monto,fecha:document.getElementById('nm-fecha').value,
   });
+  }catch(e){error=e;}
   if(error){toast('Error: ', 'error');return;}
   cerrarModal('modal-mov');
   cargarTodo();
@@ -883,6 +884,7 @@ async function guardarCheque(){
     fecha_emision:document.getElementById('nc-emision').value||null,
     fecha_vencimiento:document.getElementById('nc-vencimiento').value||null,
   });
+  }catch(e){error=e;}
   if(error){toast('Error: ', 'error');return;}
   cerrarModal('modal-cheque');
   cargarCheques();
@@ -975,7 +977,6 @@ async function confirmarOrdenPago(){
     orden_pago_nro:nroOrden,
     orden_pago_at:new Date().toISOString(),
     observaciones:obs||null,
-  }).eq('id',ordenId).select('*,proveedores(nombre,cuit),empresas(nombre)').single();
 
   if(error){toast('Error: ', 'error');return;}
   cerrarModal('modal-orden');
@@ -1246,6 +1247,7 @@ async function guardarFCI(){
     monto,
     observaciones:document.getElementById('nf-obs').value||null,
   });
+  }catch(e){error=e;}
   if(error){toast('Error: ', 'error');return;}
   cerrarModal('modal-fci');
   cargarFCI();

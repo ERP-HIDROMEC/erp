@@ -9,10 +9,10 @@
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="erp-utils.js"></script>
 <script src="erp-sidebar.js"></script>
-<script src="lib/empresas.api.js"></script>
-<script src="lib/clientes.api.js"></script>
-<script src="lib/contratos.api.js"></script>
-<script src="lib/remitos.api.js"></script>
+<script src="js/empresas.api.js"></script>
+<script src="js/clientes.api.js"></script>
+<script src="js/contratos.api.js"></script>
+<script src="js/remitos.api.js"></script>
 <style>
   .layout{display:grid;grid-template-columns:1fr 1fr;gap:20px;}
   tr:last-child tr:hover tr.selected .estado.activo{background:rgba(16,185,129,0.15);color:var(--green);}
@@ -233,7 +233,7 @@ async function cargarContratos(){
 
   if(todosIds.length){
     // Remitos vinculados directamente al contrato
-    const rems=await ContratosAPI.getRemitosDeContrato(contratoSelId);
+    const rems=contratoSelId ? await ContratosAPI.getRemitosDeContrato(contratoSelId) : [];
     (rems||[]).forEach(r=>{
       if(r.contrato_id)
         certificadoMap[r.contrato_id]=(certificadoMap[r.contrato_id]||0)+Number(r.total_valorizado||0);
@@ -486,7 +486,6 @@ async function guardarItem(){
       descripcion:desc,
       unidad:document.getElementById('ni-um').value,
       precio_unitario:precio,
-    }).eq('id',itemEditId);
   } else {
     await ContratosAPI.crearItemContrato({
       contrato_id:contratoSelId,

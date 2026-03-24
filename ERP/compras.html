@@ -11,9 +11,9 @@
 <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 <script src="erp-utils.js"></script>
 <script src="erp-sidebar.js"></script>
-<script src="lib/empresas.api.js"></script>
-<script src="lib/egresos.api.js"></script>
-<script src="lib/proyectos.api.js"></script>
+<script src="js/empresas.api.js"></script>
+<script src="js/egresos.api.js"></script>
+<script src="js/proyectos.api.js"></script>
 <style>
   tr:last-child tr:hover .tag{display:inline-block;padding:3px 10px;border-radius:20px;font-size:11px;font-weight:500;}
   .tag.pagado{background:rgba(16,185,129,0.15);color:var(--green);}
@@ -472,14 +472,17 @@ async function confirmarOPMultiple(){
 
   // Actualizar todos los egresos
   for(const r of rows){
-    try{ await EgresosAPI.pagarEgreso(egresoId,{
-      pagado:true,fecha_pago_real:fecha,
-      metodo_pago:metodo==='cheques'?'cheque':metodo,
-      orden_pago_nro:nroOrden,
-      orden_pago_at:new Date().toISOString(),
-      observaciones:obsFinal||null,
-    }).eq('id',r.id);
+    try{
+      await EgresosAPI.pagarEgreso(r.id,{
+        pagado:true,fecha_pago_real:fecha,
+        metodo_pago:metodo==='cheques'?'cheque':metodo,
+        orden_pago_nro:nroOrden,
+        orden_pago_at:new Date().toISOString(),
+        observaciones:obsFinal||null,
+      });
+    }catch(e){ console.warn('Error pagando egreso:',e); }
   }
+
 
   // Registrar cheques en tabla cheques si aplica
   if(chequesData.length){
@@ -490,8 +493,9 @@ async function confirmarOPMultiple(){
         banco:'',titular:rows[0]?.proveedores?.nombre||'',
         monto:ch.monto,estado:'pendiente',
         fecha_emision:fecha,fecha_vencimiento:ch.fvenc||null,
-      });
+      }); }catch(e){ console.warn('Error creando cheque:',e); }
     }
+
   }
 
   cerrarModal('modal-op-multiple');
@@ -529,7 +533,7 @@ async function enviarOPporMail(pdfBlob,nroOrden,total,mailDest,rows,empresa){
   //   {{detalle}}     → detalle de facturas
   //   {{operador}}    → quien generó la OP
 
-  try{
+  let emailError=null; try{
     // Convertir PDF blob a base64
     const reader=new FileReader();
     reader.readAsDataURL(pdfBlob);
@@ -581,7 +585,7 @@ async function enviarOPporMail(pdfBlob,nroOrden,total,mailDest,rows,empresa){
     } else {
       toast(`✓ PDF descargado.\nError al enviar email: ${err.text||err.message}\nDestino: ${mailDest}`, 'success');
     }
-  }
+  }catch(e){emailError=e;}
 }
 
 
@@ -947,11 +951,11 @@ function abrirPago(id,desc,monto){
 }
 
 async function confirmarPago(){
-  try{ await EgresosAPI.actualizarEgreso(egresoEditId,{
+  try{ await EgresosAPI.pagarEgreso(pagoEgresoId,{
     pagado:true,
     fecha_pago_real:document.getElementById('mp-fecha').value,
     metodo_pago:document.getElementById('mp-metodo').value,
-  }).eq('id',pagoEgresoId);
+  }); }catch(e){error=e;}
   if(error){toast('Error: ', 'error');return;}
   cerrarModal('modal-pago');
   if(tabActual==='pendientes') cargarPendientes();
@@ -972,6 +976,7 @@ async function guardarProveedor(){
     email:document.getElementById('np-email').value||null,
     activo:true,
   });
+  }catch(e){error=e;}
   if(error){toast('Error: ', 'error');return;}
   cerrarModal('modal-proveedor');
   cargarProveedores();
@@ -1014,7 +1019,7 @@ async function confirmarLiberar(){
     liberado_por:u?.email||'',
     liberado_at:new Date().toISOString(),
     observaciones:document.getElementById('lib-obs').value||null,
-  }).eq('id',liberarId);
+  }); }catch(e){error=e;}
   if(error){toast('Error: ', 'error');return;}
   cerrarModal('modal-liberar');
   actualizarBadgeLiberar();
@@ -1297,8 +1302,8 @@ async function confirmarImportAFIP(){
       numero_factura:r.numero,
       pagado:false,
       observaciones:esUSD?`Factura en USD. Monto: U$S ${r.total.toFixed(2)} | TC: ${r.tipoCambio}`:null,
-    });
-    if(!error){ok++;numerosExistentes.add(r.numero);}else skip++;
+    }); }catch(e){skip++;} 
+    if(!error){ok++;numerosExistentes.add(r.numero);}
   }
 
   const txtUSD=importRowsCompras.filter(r=>r.moneda==='USD').length;

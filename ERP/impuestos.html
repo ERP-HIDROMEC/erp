@@ -9,9 +9,9 @@
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="erp-utils.js"></script>
 <script src="erp-sidebar.js"></script>
-<script src="lib/empresas.api.js"></script>
-<script src="lib/clientes.api.js"></script>
-<script src="lib/impuestos.api.js"></script>
+<script src="js/empresas.api.js"></script>
+<script src="js/clientes.api.js"></script>
+<script src="js/impuestos.api.js"></script>
 <style>
   tr:last-child tr:hover .saldo-pos{color:var(--red);}
   .saldo-neg{color:var(--green);}
@@ -644,6 +644,7 @@ async function guardarRetencion(){
     monto,
     nro_certificado:document.getElementById('nr-cert').value||null,
   });
+  }catch(e){error=e;}
   if(error){toast('Error: ', 'error');return;}
   cerrarModal('modal-ret');
   recargar();
@@ -673,6 +674,7 @@ async function guardarPago(){
     socio:document.getElementById('np-socio').value||null,
     observaciones:document.getElementById('np-obs').value||null,
   });
+  }catch(e){error=e;}
   if(error){toast('Error: ', 'error');return;}
   cerrarModal('modal-pago');
   recargar();
@@ -775,6 +777,7 @@ async function guardarVarios(){
     pagado:document.getElementById('nv-pagado').value==='true',
     comprobante:document.getElementById('nv-comprobante').value||null,
   });
+  }catch(e){error=e;}
   if(error){toast('Error: ', 'error');return;}
   cerrarModal('modal-varios');
   cargarVarios();

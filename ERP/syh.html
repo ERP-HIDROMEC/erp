@@ -10,9 +10,9 @@
 <script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js"></script>
 <script src="erp-utils.js"></script>
 <script src="erp-sidebar.js"></script>
-<script src="lib/empresas.api.js"></script>
-<script src="lib/empleados.api.js"></script>
-<script src="lib/syh.api.js"></script>
+<script src="js/empresas.api.js"></script>
+<script src="js/empleados.api.js"></script>
+<script src="js/syh.api.js"></script>
 <style>
   .kpi-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:14px;margin-bottom:20px;}
   .kpi-card{background:var(--bg2);border:1px solid var(--border);border-radius:12px;padding:18px 20px;position:relative;overflow:hidden;}
@@ -631,6 +631,7 @@ async function guardarDocEmpresa(){
     fecha_vencimiento:document.getElementById('sde-vencimiento').value||null,
     archivo_url:archivoUrl,archivo_path:archivoPatch,
   });
+  }catch(e){error=e;}
   if(error){toast('Error: ', 'error');return;}
   cerrarModal('modal-doc-empresa');
   document.getElementById('sde-archivo').value='';
@@ -737,7 +738,6 @@ async function guardarCapacitacion(){
     duracion_horas:parseFloat(document.getElementById('sc-duracion').value)||null,
     fecha_vencimiento:document.getElementById('sc-vencimiento').value||null,
     archivo_url:archivoUrl,archivo_path:archivoPatch,
-  }).select().single();
 
   if(error){toast('Error: ', 'error');return;}
 
@@ -832,14 +832,13 @@ async function guardarEPP(){
   const emp=await EmpleadosAPI.getEmpleadoById(empleadoId);
   const u=await getUsuario();
 
-  try{ const entrega=await SyhAPI.registrarEntregaEPP({
+  let entrega=null; try{ entrega=await SyhAPI.registrarEntregaEPP({
     empresa_id:empId,empleado_id:empleadoId,
     fecha_entrega:fecha,puesto:document.getElementById('se-puesto').value||null,
     elementos_necesarios:document.getElementById('se-necesarios').value||null,
     items:items,
-  }).select().single();
-
-  if(error){toast('Error: ', 'error');return;}
+  }); }catch(e){error=e;}
+  if(error){toast('Error: '+error.message, 'error');return;}
 
   // Generate PDF
   generarPDFEPP(entrega,emp,items,empId);
@@ -1097,6 +1096,7 @@ async function guardarIncidente(){
     medidas_correctivas:document.getElementById('si-correctivas').value||null,
     archivo_url:archivoUrl,archivo_path:archivoPatch,
   });
+  }catch(e){error=e;}
   if(error){toast('Error: ', 'error');return;}
   cerrarModal('modal-incidente');
   document.getElementById('si-archivo').value='';
@@ -1269,7 +1269,8 @@ async function guardarPortalDoc(){
     fecha_carga_portal:document.getElementById('mp-fecha-carga').value||null,
     estado_portal:document.getElementById('mp-estado-portal').value,
     observaciones:document.getElementById('mp-obs').value||null,
-  });
+  }); }catch(e){error=e;}
+  }catch(e){error=e;}
   if(error){toast('Error: ', 'error');return;}
   cerrarModal('modal-portal-doc');
   cargarPortales();
@@ -1433,7 +1434,7 @@ async function editarVencimientoPortal(id){
     fecha_vencimiento:nuevaFecha,
     estado_portal:'aprobado',
     fecha_carga_portal:hoy(),
-  }).eq('id',id);
+  }catch(e){error=e;}
   if(error){toast('Error: ', 'error');return;}
   cargarPortales();
 }

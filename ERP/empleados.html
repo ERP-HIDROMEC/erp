@@ -9,10 +9,10 @@
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="erp-utils.js"></script>
 <script src="erp-sidebar.js"></script>
-<script src="lib/empresas.api.js"></script>
-<script src="lib/empleados.api.js"></script>
-<script src="lib/clientes.api.js"></script>
-<script src="lib/proyectos.api.js"></script>
+<script src="js/empresas.api.js"></script>
+<script src="js/empleados.api.js"></script>
+<script src="js/clientes.api.js"></script>
+<script src="js/proyectos.api.js"></script>
 <style>
   tr:last-child tr:hover .tag{display:inline-block;padding:3px 10px;border-radius:20px;font-size:11px;font-weight:500;}
   .tag.activo{background:rgba(16,185,129,0.15);color:var(--green);}
@@ -681,6 +681,7 @@ async function guardarSueldo(){
     pagado,
     fecha_pago:pagado?document.getElementById('ns-fecha-pago').value:null,
   });
+  }catch(e){error=e;}
   if(error){toast('Error: ', 'error');return;}
   cerrarModal('modal-sueldo');
   cargarSueldos();
@@ -1018,6 +1019,7 @@ async function guardarDocumento(){
     fecha_vencimiento:venc||null,
     archivo_url:archivoUrl,archivo_path:archivoPatch,
   });
+  }catch(e){error=e;}
   document.getElementById('nd-upload-progress').style.display='none';
   if(error){toast('Error: ', 'error');return;}
   cerrarModal('modal-documento');
@@ -1239,6 +1241,7 @@ async function guardarAusencia(){
     observaciones:document.getElementById('na-obs').value||null,
     certificado_url:certUrl,certificado_path:certPath,
   });
+  }catch(e){error=e;}
   if(error){toast('Error: ', 'error');return;}
   if(fileInput) fileInput.value='';
   cerrarModal('modal-ausencia');

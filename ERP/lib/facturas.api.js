@@ -63,24 +63,26 @@ const FacturasAPI = (() => {
   }
 
   async function getFacturaMensual(empresaId, fechaIni, fechaFin) {
-    const { data, error } = await db.from('facturas_emitidas')
-      .select('monto_total,fecha_emision,clientes(nombre)')
-      .eq('empresa_id', empresaId)
+    let q = db.from('facturas_emitidas')
+      .select('monto_total,fecha_emision,empresas(nombre)')
       .neq('estado', 'anulada')
       .gte('fecha_emision', fechaIni)
       .lt('fecha_emision', fechaFin)
       .order('fecha_emision');
+    if (empresaId) q = q.eq('empresa_id', empresaId);
+    const { data, error } = await q;
     if (error) throw error;
     return data || [];
   }
 
   async function getFacturasPorCliente(empresaId, fechaIni, fechaFin) {
-    const { data, error } = await db.from('facturas_emitidas')
-      .select('monto_total,clientes(nombre)')
-      .eq('empresa_id', empresaId)
+    let q = db.from('facturas_emitidas')
+      .select('monto_total,clientes(nombre),empresas(nombre),empresa_id')
       .neq('estado', 'anulada')
       .gte('fecha_emision', fechaIni)
       .lt('fecha_emision', fechaFin);
+    if (empresaId) q = q.eq('empresa_id', empresaId);
+    const { data, error } = await q;
     if (error) throw error;
     return data || [];
   }
