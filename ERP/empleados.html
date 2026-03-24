@@ -594,7 +594,7 @@ async function guardarEmpleado(){
   };
   let error;
   try{ if(empEditId){ await EmpleadosAPI.actualizarEmpleado(empEditId,payload); } else { await EmpleadosAPI.crearEmpleado(payload); } }catch(e){error=e;}
-  if(error){toast('Error: ', 'error');return;}
+  if(error){toast('Error: '+(error?.message||String(error)), 'error');return;}
   cerrarModal('modal-empleado');
   cargarEmpleados();
 }
@@ -684,7 +684,7 @@ async function guardarSueldo(){
     fecha_pago:pagado?document.getElementById('ns-fecha-pago').value:null,
   });
   }catch(e){error=e;}
-  if(error){toast('Error: ', 'error');return;}
+  if(error){toast('Error: '+(error?.message||String(error)), 'error');return;}
   cerrarModal('modal-sueldo');
   cargarSueldos();
 }
@@ -767,7 +767,7 @@ async function guardarCliente(){
   };
   let error;
   try{ if(cliEditId){ await ClientesAPI.actualizarCliente(cliEditId,payload); } else { await ClientesAPI.crearCliente(payload); } }catch(e){error=e;}
-  if(error){toast('Error: ', 'error');return;}
+  if(error){toast('Error: '+(error?.message||String(error)), 'error');return;}
   cerrarModal('modal-cliente');
   cargarClientes();
 }
@@ -844,7 +844,7 @@ function actualizarRecargos(id){
 async function guardarCostoRol(id,empId,rol){
   const monto=parseFloat(document.getElementById('costo-'+id).value)||0;
   try{ await ProyectosAPI.actualizarCostoRol(id,monto); }catch(e){error=e;}
-  if(error){toast('Error: ', 'error');return;}
+  if(error){toast('Error: '+(error?.message||String(error)), 'error');return;}
   const btn=event.target;
   btn.textContent='✓ Guardado';
   btn.style.background='var(--green)';
@@ -1024,7 +1024,7 @@ async function guardarDocumento(){
   });
   }catch(e){error=e;}
   document.getElementById('nd-upload-progress').style.display='none';
-  if(error){toast('Error: ', 'error');return;}
+  if(error){toast('Error: '+(error?.message||String(error)), 'error');return;}
   cerrarModal('modal-documento');
   fileInput.value='';
   recargar();
@@ -1246,7 +1246,7 @@ async function guardarAusencia(){
     certificado_url:certUrl,certificado_path:certPath,
   });
   }catch(e){error=e;}
-  if(error){toast('Error: ', 'error');return;}
+  if(error){toast('Error: '+(error?.message||String(error)), 'error');return;}
   if(fileInput) fileInput.value='';
   cerrarModal('modal-ausencia');
   cargarAusencias();
@@ -1355,7 +1355,7 @@ async function guardarVehiculo(){
   };
   let error;
   try{ if(vehEditId){ await EmpleadosAPI.actualizarVehiculo(vehEditId,payload); } else { await EmpleadosAPI.crearVehiculo(payload); } }catch(e){error=e;}
-  if(error){toast('Error: ', 'error');return;}
+  if(error){toast('Error: '+(error?.message||String(error)), 'error');return;}
   vehEditId=null;
   cerrarModal('modal-vehiculo');
   cargarVehiculos();

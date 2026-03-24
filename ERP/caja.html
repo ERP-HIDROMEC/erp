@@ -858,7 +858,7 @@ async function guardarMovimiento(){
     descripcion:desc,monto,fecha:document.getElementById('nm-fecha').value,
   });
   }catch(e){error=e;}
-  if(error){toast('Error: ', 'error');return;}
+  if(error){toast('Error: '+(error?.message||String(error)), 'error');return;}
   cerrarModal('modal-mov');
   cargarTodo();
 }
@@ -888,7 +888,7 @@ async function guardarCheque(){
     fecha_vencimiento:document.getElementById('nc-vencimiento').value||null,
   });
   }catch(e){error=e;}
-  if(error){toast('Error: ', 'error');return;}
+  if(error){toast('Error: '+(error?.message||String(error)), 'error');return;}
   cerrarModal('modal-cheque');
   cargarCheques();
 }
@@ -1255,7 +1255,7 @@ async function guardarFCI(){
     observaciones:document.getElementById('nf-obs').value||null,
   });
   }catch(e){error=e;}
-  if(error){toast('Error: ', 'error');return;}
+  if(error){toast('Error: '+(error?.message||String(error)), 'error');return;}
   cerrarModal('modal-fci');
   cargarFCI();
   cargarKpis();

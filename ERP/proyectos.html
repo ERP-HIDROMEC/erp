@@ -624,7 +624,7 @@ async function guardarProyecto(){
   };
   let error;
   try{ if(proyEditId){ await ProyectosAPI.actualizarProyecto(proyEditId,payload); } else { await ProyectosAPI.crearProyecto(payload); } }catch(e){error=e;}
-  if(error){toast('Error: ', 'error');return;}
+  if(error){toast('Error: '+(error?.message||String(error)), 'error');return;}
   cerrarModal('modal-proyecto');
   cargarProyectos();
 }
@@ -732,6 +732,8 @@ async function cargarHoras(){
 }
 
 async function guardarHoras(){
+  if(window._saving_guardarHoras) return;
+  window._saving_guardarHoras=true;
   const horas=parseFloat(document.getElementById('nh-horas').value)||0;
   if(!horas){toast('Ingresá las horas.', 'warn');return;}
   const personas=parseFloat(document.getElementById('nh-personas').value)||1;
@@ -751,8 +753,9 @@ async function guardarHoras(){
     costo_calculado:horas*personas*costoHora*mult,
     observaciones:document.getElementById('nh-obs').value||null,
   });
-  }catch(e){error=e;}
-  if(error){toast('Error: ', 'error');return;}
+  }catch(e){error=e; window._saving_guardarHoras=false;}
+  if(error){window._saving_guardarHoras=false; toast('Error: '+(error.message||error), 'error');return;}
+  window._saving_guardarHoras=false;
   cerrarModal('modal-horas');
   cargarHoras();
 }
@@ -819,8 +822,9 @@ async function guardarCosto(){
     fecha:document.getElementById('nc-fecha').value,
     comprobante:document.getElementById('nc-comprobante').value||null,
   });
-  }catch(e){error=e;}
-  if(error){toast('Error: ', 'error');return;}
+  }catch(e){error=e; window._saving_guardarOT=false;}
+  if(error){window._saving_guardarOT=false; toast('Error: '+(error.message||error), 'error');return;}
+  window._saving_guardarOT=false;
   cerrarModal('modal-costo');
   cargarCostos();
 }
@@ -927,6 +931,8 @@ function cargarDatosOT(){
 }
 
 async function guardarOT(){
+  if(window._saving_guardarOT) return;
+  window._saving_guardarOT=true;
   const proyId=document.getElementById('not-proyecto').value;
   if(!proyId){toast('Seleccioná un proyecto.', 'warn');return;}
   const payload={
@@ -945,7 +951,7 @@ async function guardarOT(){
   };
   let error;
   try{ if(otEditId){ await ProyectosAPI.actualizarOrdenTrabajo(otEditId,payload); } else { await ProyectosAPI.crearOrdenTrabajo(payload); } }catch(e){error=e;}
-  if(error){toast('Error: ', 'error');return;}
+  if(error){toast('Error: '+(error?.message||String(error)), 'error');return;}
   cerrarModal('modal-ot');
   cargarOrdenesOT();
 }

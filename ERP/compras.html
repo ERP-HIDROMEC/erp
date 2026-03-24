@@ -931,7 +931,7 @@ async function guardarEgreso(){
   };
   let error;
   try{ if(egresoEditId){ await EgresosAPI.actualizarEgreso(egresoEditId,payload); } else { await EgresosAPI.crearEgreso(payload); } }catch(e){error=e;}
-  if(error){toast('Error: ', 'error');return;}
+  if(error){toast('Error: '+(error?.message||String(error)), 'error');return;}
   cerrarModal('modal-egreso');
   cargarEgresos();
 }
@@ -955,7 +955,7 @@ async function confirmarPago(){
     fecha_pago_real:document.getElementById('mp-fecha').value,
     metodo_pago:document.getElementById('mp-metodo').value,
   }); }catch(e){error=e;}
-  if(error){toast('Error: ', 'error');return;}
+  if(error){toast('Error: '+(error?.message||String(error)), 'error');return;}
   cerrarModal('modal-pago');
   if(tabActual==='pendientes') cargarPendientes();
   else cargarEgresos();
@@ -977,7 +977,7 @@ async function guardarProveedor(){
     activo:true,
   });
   }catch(e){error=e;}
-  if(error){toast('Error: ', 'error');return;}
+  if(error){toast('Error: '+(error?.message||String(error)), 'error');return;}
   cerrarModal('modal-proveedor');
   cargarProveedores();
 }
@@ -1023,7 +1023,7 @@ async function confirmarLiberar(){
     liberado_at:new Date().toISOString(),
     observaciones:document.getElementById('lib-obs').value||null,
   }); }catch(e){error=e;}
-  if(error){toast('Error: ', 'error');return;}
+  if(error){toast('Error: '+(error?.message||String(error)), 'error');return;}
   cerrarModal('modal-liberar');
   actualizarBadgeLiberar();
   if(tabActual==='egresos') cargarEgresos();

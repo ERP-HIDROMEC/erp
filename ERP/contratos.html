@@ -381,7 +381,7 @@ async function guardarContrato(){
   };
   let error;
   try{ if(contratoEditId){ await ContratosAPI.actualizarContrato(contratoEditId,payload); } else { await ContratosAPI.crearContrato(payload); } }catch(e){error=e;}
-  if(error){toast('Error: ', 'error');return;}
+  if(error){toast('Error: '+(error?.message||String(error)), 'error');return;}
   cerrarModal('modal-contrato');
   cargarContratos();
 }
