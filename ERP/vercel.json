@@ -2,8 +2,5 @@
   "version": 2,
   "buildCommand": null,
   "outputDirectory": ".",
-  "framework": null,
-  "rewrites": [
-    { "source": "/api/(.*)", "destination": "/lib/$1" }
-  ]
+  "framework": null
 }
