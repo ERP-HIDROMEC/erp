@@ -877,7 +877,6 @@ async function guardarTalonario(){
   // Desactivar talonarios anteriores
   const ntEmpId=document.getElementById('nt-empresa').value;
   let error;
-  let error;
   try{ await RemitosAPI.crearTalonario({
     empresa_id:ntEmpId,
     punto_venta:document.getElementById('nt-pv').value||'0001',
