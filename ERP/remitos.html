@@ -581,6 +581,7 @@ async function guardarRemito(estado){
 
   let remitoId=editId;
   if(editId){
+    let error;
     try{ await RemitosAPI.actualizarRemito(editId,payload); }catch(e){error=e;}
     if(error){toast('Error: ', 'error');return;}
   } else {
@@ -875,6 +876,8 @@ async function guardarTalonario(){
   if(!cai||!vto||!desde||!hasta){toast('Completá todos los campos.', 'warn');return;}
   // Desactivar talonarios anteriores
   const ntEmpId=document.getElementById('nt-empresa').value;
+  let error;
+  let error;
   try{ await RemitosAPI.crearTalonario({
     empresa_id:ntEmpId,
     punto_venta:document.getElementById('nt-pv').value||'0001',
@@ -894,6 +897,7 @@ function cerrarModal2(){document.getElementById('modal-talonario').classList.rem
 
 async function marcarHistoricoFacturado(id){
   if(!(await confirmar('¿Marcar este remito histórico como facturado?'))) return;
+  let error;
   try{ await RemitosAPI.marcarRemitoFacturado(id); }catch(e){error=e;}
   if(error){toast('Error: ', 'error');return;}
   recargar();

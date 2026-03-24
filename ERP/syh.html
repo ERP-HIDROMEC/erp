@@ -623,6 +623,7 @@ async function guardarDocEmpresa(){
     document.getElementById('sde-bar').style.width='100%';
     document.getElementById('sde-progress').style.display='none';
   }
+  let error;
   try{ await SyhAPI.registrarDocumentoEmpresa({
     empresa_id:empId,tipo:document.getElementById('sde-tipo').value,
     descripcion:document.getElementById('sde-desc').value||null,
@@ -1079,6 +1080,7 @@ async function guardarIncidente(){
     if(!ue){const {data:ud}=db.storage.from('syh-docs').getPublicUrl(path);archivoUrl=ud?.publicUrl||null;archivoPatch=path;}
   }
 
+  let error;
   try{ await SyhAPI.registrarIncidente({
     empresa_id:empId,empleado_id:empleadoId||null,
     tipo:document.getElementById('si-tipo').value,
@@ -1250,6 +1252,7 @@ async function guardarPortalDoc(){
   if(!portalId){toast('Selecciona un portal.', 'warn');return;}
 
   const aplica=document.getElementById('mp-aplica').value;
+  let error;
   try{ await SyhAPI.registrarDocumentoPortal({
     empresa_id:empId,
     portal_id:portalId,

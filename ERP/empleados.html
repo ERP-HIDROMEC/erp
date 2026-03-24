@@ -671,6 +671,7 @@ async function guardarSueldo(){
   const neto=parseFloat(document.getElementById('ns-neto').value)||0;
   if(!bruto){toast('Ingresá el monto bruto.', 'warn');return;}
   const pagado=document.getElementById('ns-pagado').value==='true';
+  let error;
   try{ await EmpleadosAPI.registrarSueldo({
     empresa_id:document.getElementById('ns-empresa').value,
     empleado_id:document.getElementById('ns-empleado').value,
@@ -1013,6 +1014,7 @@ async function guardarDocumento(){
     document.getElementById('nd-progress-bar').style.width='100%';
   }
 
+  let error;
   try{ await EmpleadosAPI.registrarDocumentoEmpleado({
     empresa_id:empId,categoria:docCategoria,
     empleado_id:empleadoId,vehiculo_id:vehiculoId,
@@ -1233,6 +1235,7 @@ async function guardarAusencia(){
     document.getElementById('na-upload-progress').style.display='none';
   }
 
+  let error;
   try{ await EmpleadosAPI.registrarAusencia({
     empresa_id:empId2,empleado_id:empId,
     tipo:document.getElementById('na-tipo').value,

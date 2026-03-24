@@ -675,6 +675,7 @@ async function guardarCobro(){
   if(!monto){toast('Ingresá un monto.', 'warn');return;}
 
   // Guardar cobro
+  let error;
   try{ await FacturasAPI.registrarCobro({
     empresa_id:cobroEmpresaId,
     factura_id:cobroFacturaId,
@@ -716,6 +717,7 @@ async function guardarCobro(){
     }));
 
   if(retsAGuardar.length>0){
+    let error;
     try{ await FacturasAPI.crearRetenciones(retsAGuardar); }catch(e){ console.warn('Retenciones:',e); }
     if(errRet) console.warn('Error al guardar retenciones:',errRet.message);
     else console.log(`${retsAGuardar.length} retenciones guardadas en módulo Impuestos`);

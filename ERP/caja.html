@@ -877,6 +877,7 @@ async function guardarCheque(){
   const numero=document.getElementById('nc-numero').value.trim();
   const monto=parseFloat(document.getElementById('nc-monto').value)||0;
   if(!numero||!monto){toast('Completá número y monto.', 'warn');return;}
+  let error;
   try{ await EgresosAPI.crearCheque({
     empresa_id:document.getElementById('nc-empresa').value,
     tipo:document.getElementById('nc-tipo').value,
@@ -1244,6 +1245,7 @@ async function guardarFCI(){
   const monto=parseFloat(document.getElementById('nf-monto').value)||0;
   const fondo=document.getElementById('nf-fondo').value.trim();
   if(!monto||!fondo){toast('Completa fondo y monto.', 'warn');return;}
+  let error;
   try{ await CajaAPI.registrarFCI({
     empresa_id:document.getElementById('nf-empresa').value,
     tipo:document.getElementById('nf-tipo').value,

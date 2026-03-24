@@ -635,6 +635,7 @@ async function cargarClientesRet(){
 async function guardarRetencion(){
   const monto=parseFloat(document.getElementById('nr-monto').value)||0;
   if(!monto){toast('Ingresá el monto.', 'warn');return;}
+  let error;
   try{ await ImpuestosAPI.crearRetencion({
     empresa_id:document.getElementById('nr-empresa').value,
     cliente_id:document.getElementById('nr-cliente').value||null,
@@ -664,6 +665,7 @@ function toggleSocio(){
 async function guardarPago(){
   const monto=parseFloat(document.getElementById('np-monto').value)||0;
   if(!monto){toast('Ingresá el monto.', 'warn');return;}
+  let error;
   try{ await ImpuestosAPI.registrarPago({
     empresa_id:document.getElementById('np-empresa').value,
     tipo:document.getElementById('np-tipo').value,
@@ -764,6 +766,7 @@ async function guardarVarios(){
   const monto=parseFloat(document.getElementById('nv-monto').value)||0;
   const desc=document.getElementById('nv-descripcion').value.trim();
   if(!monto||!desc){toast('Completá descripción y monto.', 'warn');return;}
+  let error;
   try{ await ImpuestosAPI.registrarImpuestoVario({
     empresa_id:document.getElementById('nv-empresa').value,
     tipo:document.getElementById('nv-tipo').value,

@@ -565,6 +565,7 @@ async function guardarDocCliente(){
   const venc = document.getElementById('mdc-vencimiento').value;
   if(!nombre){ toast('El nombre es obligatorio.', 'warn'); return; }
   if(!venc){ toast('La fecha de vencimiento es obligatoria.', 'warn'); return; }
+  let error;
   try{ await ClientesAPI.crearDocCliente({
     cliente_id: _docClienteId,
     nombre,
@@ -593,6 +594,7 @@ async function confirmarRenovar(){
   const fecha = document.getElementById('renovar-fecha').value;
   if(!fecha){ toast('Ingresa la nueva fecha.', 'warn'); return; }
   const notas = document.getElementById('renovar-notas').value || null;
+  let error;
   try{ await ClientesAPI.actualizarDocCliente(docRenovarId,{
     fecha_vencimiento: fecha,
     notas: notas,

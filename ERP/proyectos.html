@@ -738,6 +738,7 @@ async function guardarHoras(){
   const costoHora=parseFloat(document.getElementById('nh-costo-hora').value)||0;
   const tipoHora=document.getElementById('nh-tipo-hora').value;
   const mult=tipoHora==='h100'?2:tipoHora==='h50'?1.5:1;
+  let error;
   try{ await ProyectosAPI.registrarHoras({
     empresa_id:document.getElementById('nh-empresa').value,
     proyecto_id:document.getElementById('nh-proyecto').value,
@@ -809,6 +810,7 @@ async function guardarCosto(){
   const desc=document.getElementById('nc-descripcion').value.trim();
   const monto=parseFloat(document.getElementById('nc-monto').value)||0;
   if(!desc||!monto){toast('Completá descripción y monto.', 'warn');return;}
+  let error;
   try{ await ProyectosAPI.registrarCostoObra({
     empresa_id:document.getElementById('nc-empresa').value,
     proyecto_id:document.getElementById('nc-proyecto').value,

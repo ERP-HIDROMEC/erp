@@ -966,6 +966,7 @@ function abrirNuevoProveedor(){ document.getElementById('modal-proveedor').class
 async function guardarProveedor(){
   const nombre=document.getElementById('np-nombre').value.trim();
   if(!nombre){toast('Ingresá el nombre del proveedor.', 'warn');return;}
+  let error;
   try{ await EgresosAPI.crearProveedor({
     empresa_id:document.getElementById('np-empresa').value,
     nombre:nombre.toUpperCase(),
@@ -1014,6 +1015,7 @@ async function confirmarLiberar(){
   const fecha=document.getElementById('lib-fecha').value;
   if(!fecha){toast('Ingresá la fecha de vencimiento de pago.', 'warn');return;}
   const u=await getUsuario();
+  let error;
   try{ await EgresosAPI.actualizarEgreso(egresoId,{
     liberado_pago:true,
     fecha_vencimiento_pago:fecha,
