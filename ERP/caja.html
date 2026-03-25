@@ -711,8 +711,10 @@ async function procesarExtracto(json){
   // Verificar duplicados contra la BD
   const fechas=[...new Set(movimientos.map(m=>m.fecha))];
   let existentes=new Set();
-  if(fechas.length){
-    const data=await CajaAPI.getMovimientosParaExportar(empId,fechaDesde,fechaHasta);
+  if(fechas.length && empresaId){
+    const fechMin=fechas.sort()[0];
+    const fechMax=fechas.sort().slice(-1)[0];
+    const data=await CajaAPI.getMovimientosParaExportar(empresaId,fechMin,fechMax);
     (data||[]).forEach(r=>existentes.add(`${r.fecha}|${r.monto}`));
   }
 

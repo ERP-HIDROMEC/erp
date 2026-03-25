@@ -925,7 +925,18 @@ async function cargarDocumentos(categoria){
   const en30Str=en30.toISOString().split('T')[0];
 
   let docEmpData=await EmpleadosAPI.getDocumentosEmpleado({categoria});
+  // Lookup de vehículos en memoria (el join directo falla por falta de FK en schema)
+  let vehiculosMap={};
+  if(categoria==='vehiculo'){
+    const vehs=await EmpleadosAPI.getVehiculos({empresaId:emp||undefined});
+    vehs.forEach(v=>{ vehiculosMap[v.id]=v; });
+  }
   if(emp) docEmpData=docEmpData.filter(r=>r.empresa_id===emp);
+  // Inyectar vehiculos en cada doc para que el render pueda usar r.vehiculos?.descripcion
+  docEmpData=docEmpData.map(r=>({
+    ...r,
+    vehiculos: r.vehiculo_id ? (vehiculosMap[r.vehiculo_id]||null) : null,
+  }));
   const data=docEmpData;
   let rows=data||[];
   if(buscar) rows=rows.filter(r=>
