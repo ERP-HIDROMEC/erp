@@ -674,11 +674,9 @@ async function guardarCobro(){
   const monto=parseFloat(document.getElementById('nc-monto').value)||0;
   if(!monto){toast('Ingresá un monto.', 'warn');return;}
 
-  // Guardar cobro
+  // Guardar cobro via RPC atómica — actualiza estado de factura incluido (Fase B)
   let error;
-  try{ await FacturasAPI.registrarCobro({
-    empresa_id:cobroEmpresaId,
-    factura_id:cobroFacturaId,
+  try{ await FacturasAPI.registrarCobro(cobroFacturaId, {
     fecha:document.getElementById('nc-fecha').value,
     monto,
     metodo_pago:document.getElementById('nc-metodo').value,
@@ -688,8 +686,7 @@ async function guardarCobro(){
   }catch(e){error=e;}
   if(error){toast('Error al guardar cobro: ', 'error');return;}
 
-  // Marcar factura como cobrada
-  await FacturasAPI.marcarFacturaCobrada(cobroFacturaId);
+  // Estado de factura ya lo maneja la RPC — no se llama marcarFacturaCobrada()
 
   // Guardar retenciones si hay alguna
   const periodo=document.getElementById('nc-periodo-ret').value;

@@ -600,17 +600,16 @@ async function guardarRemito(estado){
     }
   }
 
-  // Guardar items
-  // items se reemplazan via reemplazarItemsRemito
+  // Guardar items via RPC atómica (Fase B)
   const filas=document.getElementById('items-body').querySelectorAll('tr');
   const itemsData=[];
   filas.forEach((fila,i)=>{
     const inputs=fila.querySelectorAll('input');
     const cant=inputs[0]?.value?.trim();
     const desc=inputs[1]?.value?.trim();
-    if(desc) itemsData.push({remito_id:remitoId,orden:i+1,cantidad:cant||null,descripcion:desc});
+    if(desc) itemsData.push({orden:i+1,cantidad:cant||null,descripcion:desc});
   });
-  await RemitosAPI.reemplazarItemsRemito(remitoId, itemsData);
+  await RemitosAPI.reemplazarItemsRemito(remitoId, empId, payload, itemsData);
 
   cerrarModal();
   await verificarCAI();
