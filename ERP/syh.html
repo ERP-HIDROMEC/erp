@@ -734,9 +734,7 @@ async function guardarCapacitacion(){
   let cap=null,error=null; try{ cap=await SyhAPI.registrarCapacitacion({
     empresa_id:empId,tipo,
     descripcion:document.getElementById('sc-desc').value||null,
-    dictada_por:document.getElementById('sc-dictante').value||null,
-    fecha,
-    duracion_horas:parseFloat(document.getElementById('sc-duracion').value)||null,
+    fecha: fecha||null,
     fecha_vencimiento:document.getElementById('sc-vencimiento').value||null,
     archivo_url:archivoUrl,archivo_path:archivoPatch,
   },asistentes); }catch(e){error=e;}
@@ -1114,21 +1112,17 @@ async function cargarVencimientos(){
   const en60=new Date();en60.setDate(en60.getDate()+60);
   const en60Str=en60.toISOString().split('T')[0];
 
-  const queries=[
-    SyhAPI.getDocsEmpresaProxVencer(60).then(d=>({data:d})),
-    EmpleadosAPI.getDocsProxVencer(60).then(d=>({data:d})),
-    SyhAPI.getCapacitacionesProxVencer(60).then(d=>({data:d})),
-    EmpleadosAPI.getDocumentosEmpleado({categoria:'vehiculo'}).then(d=>({data:d})),
-  ];
-  if(emp) queries.forEach(q=>q.eq('empresa_id',emp));
-
-  const results=await Promise.all(queries);
+  // Queries con empresaId como filtro directo (no .eq sobre Promise)
+  const [docsEmp, docsPersonal, docsCap] = await Promise.all([
+    SyhAPI.getDocsEmpresaProxVencer(60),
+    EmpleadosAPI.getDocsProxVencer(60),
+    SyhAPI.getCapacitacionesProxVencer(60),
+  ]);
   const todas=[
-    ...(results[0].data||[]).map(r=>({...r,origen:'Docs empresa SyH',entidad:r.empresas?.nombre})),
-    ...(results[1].data||[]).map(r=>({...r,origen:'Docs personal',entidad:r.empleados?.nombre||'—'})),
-    ...(results[2].data||[]).map(r=>({...r,origen:'Certificado capacitacion',entidad:r.empresas?.nombre})),
-    ...(results[3].data||[]).map(r=>({...r,origen:'Doc vehiculo',entidad:r.vehiculos?.descripcion||'—'})),
-  ].sort((a,b)=>a.fecha_vencimiento>b.fecha_vencimiento?1:-1);
+    ...(docsEmp||[]).filter(r=>!emp||r.empresa_id===emp).map(r=>({...r,origen:'Docs empresa SyH',entidad:r.empresas?.nombre})),
+    ...(docsPersonal||[]).filter(r=>!emp||r.empresa_id===emp).map(r=>({...r,origen:'Docs personal',entidad:r.empleados?.nombre||'—'})),
+    ...(docsCap||[]).filter(r=>!emp||r.empresa_id===emp).map(r=>({...r,origen:'Certificado capacitacion',entidad:r.empresas?.nombre})),
+  ].filter(r=>r.fecha_vencimiento).sort((a,b)=>a.fecha_vencimiento>b.fecha_vencimiento?1:-1);
 
   const vencidos=todas.filter(r=>r.fecha_vencimiento<hoyStr);
   const en30=todas.filter(r=>r.fecha_vencimiento>=hoyStr&&r.fecha_vencimiento<=new Date(Date.now()+30*86400000).toISOString().split('T')[0]);

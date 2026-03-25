@@ -48,7 +48,7 @@ const SyhAPI = (() => {
     const { data, error } = await db.from('syh_documentos')
       .select('tipo,descripcion,fecha_vencimiento,empresas(nombre)')
       .lte('fecha_vencimiento', limStr)
-      .neq('fecha_vencimiento', null);
+      .not('fecha_vencimiento', 'is', null);
     if (error) throw error;
     return data || [];
   }
@@ -102,7 +102,7 @@ const SyhAPI = (() => {
     const { data, error } = await db.from('syh_capacitaciones')
       .select('tipo,descripcion,fecha_vencimiento,empresas(nombre)')
       .lte('fecha_vencimiento', limStr)
-      .neq('fecha_vencimiento', null);
+      .not('fecha_vencimiento', 'is', null);
     if (error) throw error;
     return data || [];
   }
@@ -237,17 +237,16 @@ const SyhAPI = (() => {
     ] = await Promise.all([
       db.from('syh_documentos')
         .select('tipo,descripcion,fecha_vencimiento,empresas(nombre)')
-        .lte('fecha_vencimiento', limStr).neq('fecha_vencimiento', null),
+        .lte('fecha_vencimiento', limStr).not('fecha_vencimiento', 'is', null),
       db.from('empleados_documentos')
         .select('tipo,descripcion,fecha_vencimiento,empleados(nombre),empresas(nombre)')
-        .lte('fecha_vencimiento', limStr).neq('fecha_vencimiento', null),
+        .lte('fecha_vencimiento', limStr).not('fecha_vencimiento', 'is', null),
       db.from('syh_capacitaciones')
         .select('tipo,descripcion,fecha_vencimiento,empresas(nombre)')
-        .lte('fecha_vencimiento', limStr).neq('fecha_vencimiento', null),
+        .lte('fecha_vencimiento', limStr).not('fecha_vencimiento', 'is', null),
       db.from('empleados_documentos')
-        .select('tipo,descripcion,fecha_vencimiento,vehiculo_id,empresas(nombre)')
-        .eq('categoria', 'vehiculo')
-        .lte('fecha_vencimiento', limStr).neq('fecha_vencimiento', null),
+        .select('tipo,descripcion,fecha_vencimiento,empleado_id,empresas(nombre)')
+        .not('fecha_vencimiento', 'is', null),
     ]);
     return {
       docsEmpresa:    docsEmpresa    || [],
