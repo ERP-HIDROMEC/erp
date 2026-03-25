@@ -365,8 +365,7 @@ async function cargarKpis(){
   const fin=new Date(mes+'-01');fin.setMonth(fin.getMonth()+1);
   const finStr=fin.toISOString().split('T')[0];
 
-  const empIdKpi=document.getElementById('sel-empresa').value;
-  if(!empIdKpi){return;}
+  const empIdKpi=document.getElementById('sel-empresa').value||null;
   const movResumen=await CajaAPI.getResumenCaja(empIdKpi);
   let data=(movResumen.movimientos||[]);
   if(emp) data=data.filter(r=>r.empresa_id===emp);
