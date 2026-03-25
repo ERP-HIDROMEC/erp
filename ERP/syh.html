@@ -1112,7 +1112,6 @@ async function cargarVencimientos(){
   const en60=new Date();en60.setDate(en60.getDate()+60);
   const en60Str=en60.toISOString().split('T')[0];
 
-  // Queries con empresaId como filtro directo (no .eq sobre Promise)
   const [docsEmp, docsPersonal, docsCap] = await Promise.all([
     SyhAPI.getDocsEmpresaProxVencer(60),
     EmpleadosAPI.getDocsProxVencer(60),
