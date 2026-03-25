@@ -674,9 +674,11 @@ async function guardarCobro(){
   const monto=parseFloat(document.getElementById('nc-monto').value)||0;
   if(!monto){toast('Ingresá un monto.', 'warn');return;}
 
-  // Guardar cobro via RPC atómica — actualiza estado de factura incluido (Fase B)
+  // Guardar cobro
   let error;
-  try{ await FacturasAPI.registrarCobro(cobroFacturaId, {
+  try{ await FacturasAPI.registrarCobro({
+    empresa_id:cobroEmpresaId,
+    factura_id:cobroFacturaId,
     fecha:document.getElementById('nc-fecha').value,
     monto,
     metodo_pago:document.getElementById('nc-metodo').value,
@@ -686,7 +688,8 @@ async function guardarCobro(){
   }catch(e){error=e;}
   if(error){toast('Error al guardar cobro: ', 'error');return;}
 
-  // Estado de factura ya lo maneja la RPC — no se llama marcarFacturaCobrada()
+  // Marcar factura como cobrada
+  await FacturasAPI.marcarFacturaCobrada(cobroFacturaId);
 
   // Guardar retenciones si hay alguna
   const periodo=document.getElementById('nc-periodo-ret').value;
@@ -714,18 +717,17 @@ async function guardarCobro(){
     }));
 
   if(retsAGuardar.length>0){
-    let error;
-    try{ await FacturasAPI.crearRetenciones(retsAGuardar); }catch(e){ console.warn('Retenciones:',e); }
+    let errRet;
+    try{ await FacturasAPI.crearRetenciones(retsAGuardar); }catch(e){ errRet=e; }
     if(errRet) console.warn('Error al guardar retenciones:',errRet.message);
     else console.log(`${retsAGuardar.length} retenciones guardadas en módulo Impuestos`);
   }
 
   cerrarModal('modal-cobro');
   cargarFacturas();
-  if(retsAGuardar.length>0){
-    // Mostrar confirmación
-    setTimeout(()=>toast(`✓ Cobro registrado\n✓ ${retsAGuardar.length} retención(es) guardada(s) en Impuestos automáticamente`, 'success'),100);
-  }
+  const msgRet=retsAGuardar.length>0?`
+✓ ${retsAGuardar.length} retención(es) guardada(s) en Impuestos`:'';
+  setTimeout(()=>toast(`✓ Cobro registrado${msgRet}`, 'success'),100);
 }
 
 // ============ REMITOS ============
