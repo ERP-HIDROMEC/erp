@@ -10,13 +10,10 @@ const CajaAPI = (() => {
   // ── Resumen KPIs ─────────────────────────────────────────────
 
   async function getResumenCaja(empresaId) {
-    const [
-      { data: movimientos, error: e1 },
-      { data: fci, error: e2 },
-    ] = await Promise.all([
-      db.from('caja_movimientos').select('tipo,origen,monto').eq('empresa_id', empresaId),
-      db.from('caja_fci').select('tipo,monto').eq('empresa_id', empresaId),
-    ]);
+    let qMov = db.from('caja_movimientos').select('tipo,origen,monto,empresa_id,fecha');
+    let qFci = db.from('caja_fci').select('tipo,monto,empresa_id');
+    if (empresaId) { qMov = qMov.eq('empresa_id', empresaId); qFci = qFci.eq('empresa_id', empresaId); }
+    const [{ data: movimientos, error: e1 }, { data: fci, error: e2 }] = await Promise.all([qMov, qFci]);
     if (e1) throw e1;
     if (e2) throw e2;
     return { movimientos: movimientos || [], fci: fci || [] };
@@ -70,41 +67,37 @@ const CajaAPI = (() => {
   // Consolida: facturas por cobrar + egresos pendientes +
   //            cheques en cartera + cheques emitidos
   async function getFlujoCajaProyectado(empresaId, fechaDesde, fechaHasta) {
+    let qF = db.from('facturas_emitidas')
+      .select('monto_total,fecha_cobro_estimada,empresa_id,clientes(nombre),empresas(nombre)')
+      .not('estado', 'in', '("cobrada","anulada")')
+      .gte('fecha_cobro_estimada', fechaDesde)
+      .lte('fecha_cobro_estimada', fechaHasta)
+      .order('fecha_cobro_estimada');
+    let qE = db.from('egresos')
+      .select('monto,fecha_egreso,empresa_id,descripcion,empresas(nombre)')
+      .eq('pagado', false)
+      .gte('fecha_egreso', fechaDesde)
+      .lte('fecha_egreso', fechaHasta)
+      .order('fecha_egreso');
+    let qCR = db.from('cheques')
+      .select('monto,fecha_vencimiento,empresa_id,titular,numero,empresas(nombre)')
+      .eq('tipo', 'cartera')
+      .gte('fecha_vencimiento', fechaDesde)
+      .lte('fecha_vencimiento', fechaHasta)
+      .order('fecha_vencimiento');
+    let qCE = db.from('cheques')
+      .select('monto,fecha_vencimiento,empresa_id,titular,numero,empresas(nombre)')
+      .eq('tipo', 'emitido')
+      .gte('fecha_vencimiento', fechaDesde)
+      .lte('fecha_vencimiento', fechaHasta)
+      .order('fecha_vencimiento');
+    if (empresaId) { qF=qF.eq('empresa_id',empresaId); qE=qE.eq('empresa_id',empresaId); qCR=qCR.eq('empresa_id',empresaId); qCE=qCE.eq('empresa_id',empresaId); }
     const [
       { data: porCobrar },
       { data: porPagar },
       { data: chqCartera },
       { data: chqEmitidos },
-    ] = await Promise.all([
-      db.from('facturas_emitidas')
-        .select('monto_total,fecha_cobro_estimada,clientes(nombre),empresas(nombre)')
-        .eq('empresa_id', empresaId)
-        .not('estado', 'in', '("cobrada","anulada")')
-        .gte('fecha_cobro_estimada', fechaDesde)
-        .lte('fecha_cobro_estimada', fechaHasta)
-        .order('fecha_cobro_estimada'),
-      db.from('egresos')
-        .select('monto,fecha_egreso,descripcion,empresas(nombre)')
-        .eq('empresa_id', empresaId)
-        .eq('pagado', false)
-        .gte('fecha_egreso', fechaDesde)
-        .lte('fecha_egreso', fechaHasta)
-        .order('fecha_egreso'),
-      db.from('cheques')
-        .select('monto,fecha_vencimiento,titular,numero,empresas(nombre)')
-        .eq('empresa_id', empresaId)
-        .eq('tipo', 'cartera')
-        .gte('fecha_vencimiento', fechaDesde)
-        .lte('fecha_vencimiento', fechaHasta)
-        .order('fecha_vencimiento'),
-      db.from('cheques')
-        .select('monto,fecha_vencimiento,titular,numero,empresas(nombre)')
-        .eq('empresa_id', empresaId)
-        .eq('tipo', 'emitido')
-        .gte('fecha_vencimiento', fechaDesde)
-        .lte('fecha_vencimiento', fechaHasta)
-        .order('fecha_vencimiento'),
-    ]);
+    ] = await Promise.all([qF, qE, qCR, qCE]);
     return {
       porCobrar:   porCobrar   || [],
       porPagar:    porPagar    || [],
