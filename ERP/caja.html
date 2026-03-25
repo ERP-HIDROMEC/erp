@@ -379,10 +379,9 @@ async function cargarKpis(){
   const neto=ingresos-egresos;
 
   // FCI saldo total acumulado
-  let qFCI={data:movResumen.fci};
-  if(emp) qFCI=qFCI.eq('empresa_id',emp);
-  const {data:fciData}=await qFCI;
-  const fciSaldo=(fciData||[]).reduce((s,r)=>s+(r.tipo==='deposito'?Number(r.monto||0):-Number(r.monto||0)),0);
+  let fciRows=(movResumen.fci||[]);
+  if(emp) fciRows=fciRows.filter(r=>r.empresa_id===emp);
+  const fciSaldo=fciRows.reduce((s,r)=>s+(r.tipo==='deposito'?Number(r.monto||0):-Number(r.monto||0)),0);
   const totalDisponible=neto+fciSaldo;
 
   document.getElementById('kpis').innerHTML=`
@@ -445,7 +444,8 @@ async function cargarCheques(){
   // Auto-vencer cheques pendientes con fecha de cobro vencida
   const aVencer=rows.filter(r=>r.estado==='pendiente'&&r.fecha_vencimiento&&r.fecha_vencimiento<hoyStr);
   if(aVencer.length){
-    await EgresosAPI.actualizarEstadoCheques(aVencer.map(r=>r.id),'vencido');
+    // Actualizar uno por uno para evitar el bug de .in() con arrays
+    await Promise.all(aVencer.map(r=>EgresosAPI.actualizarEstadoCheque(r.id,'vencido')));
     aVencer.forEach(r=>r.estado='vencido');
   }
 
@@ -512,18 +512,13 @@ async function cargarFlujo(){
   const en90=new Date();en90.setDate(en90.getDate()+90);
   const en90Str=en90.toISOString().split('T')[0];
 
-  // Facturas por cobrar
-  const flujo=await CajaAPI.getFlujoCajaProyectado(empId,fechaDesde,fechaHasta); let qF={data:flujo.porCobrar};
-  // Egresos pendientes
-  let qE={data:flujo.porPagar};
-  // Cheques recibidos pendientes (cobros)
-  let qCR={data:flujo.chqCartera};
-  // Cheques emitidos pendientes (pagos)
-  let qCE={data:flujo.chqEmitidos};
-
-  if(emp){qF=qF.eq('empresa_id',emp);qE=qE.eq('empresa_id',emp);qCR=qCR.eq('empresa_id',emp);qCE=qCE.eq('empresa_id',emp);}
-
-  const [{data:cobrar},{data:pagar},{data:chqRecib},{data:chqEmit}]=await Promise.all([qF,qE,qCR,qCE]);
+  // Facturas por cobrar — usa emp del selector, fechas hoy→90 días
+  const flujo=await CajaAPI.getFlujoCajaProyectado(emp||null, hoyStr, en90Str);
+  // Filtrar por empresa en memoria (la API ya filtra si emp está seteado)
+  const cobrar=(flujo.porCobrar||[]).filter(r=>!emp||r.empresa_id===emp);
+  const pagar=(flujo.porPagar||[]).filter(r=>!emp||r.empresa_id===emp);
+  const chqRecib=(flujo.chqCartera||[]).filter(r=>!emp||r.empresa_id===emp);
+  const chqEmit=(flujo.chqEmitidos||[]).filter(r=>!emp||r.empresa_id===emp);
 
   const totalCobrar=(cobrar||[]).reduce((s,r)=>s+Number(r.monto_total||0),0)
                   +(chqRecib||[]).reduce((s,r)=>s+Number(r.monto||0),0);
