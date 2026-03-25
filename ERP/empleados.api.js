@@ -111,7 +111,7 @@ const EmpleadosAPI = (() => {
 
     if (filtros.empleadoId) q = q.eq('empleado_id', filtros.empleadoId);
     if (filtros.empresaId)  q = q.eq('empresa_id', filtros.empresaId);
-    if (filtros.categoria)  q = q.eq('categoria', filtros.categoria);
+    // filtros.categoria eliminado — columna no existe en la tabla
 
     const { data, error } = await q;
     if (error) throw error;
