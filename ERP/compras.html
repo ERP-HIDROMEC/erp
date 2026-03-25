@@ -1016,7 +1016,7 @@ async function confirmarLiberar(){
   if(!fecha){toast('Ingresá la fecha de vencimiento de pago.', 'warn');return;}
   const u=await getUsuario();
   let error;
-  try{ await EgresosAPI.actualizarEgreso(egresoId,{
+  try{ await EgresosAPI.actualizarEgreso(liberarId,{
     liberado_pago:true,
     fecha_vencimiento_pago:fecha,
     liberado_por:u?.email||'',
@@ -1032,9 +1032,11 @@ async function confirmarLiberar(){
 
 async function cancelarLiberar(id){
   if(!(await confirmar('¿Quitar la liberación de este egreso?'))) return;
-  await EgresosAPI.actualizarEgreso(egresoId,{
+  let error;
+  try{ await EgresosAPI.actualizarEgreso(id,{
     liberado_pago:false,fecha_vencimiento_pago:null,liberado_por:null,liberado_at:null
-  }).eq('id',id);
+  }); }catch(e){error=e;}
+  if(error){toast('Error: '+(error?.message||String(error)), 'error');return;}
   actualizarBadgeLiberar();
   cargarEgresos();
 }
