@@ -376,8 +376,7 @@ async function guardarContrato(){
     estado:document.getElementById('nc-estado').value,
     fecha_inicio:document.getElementById('nc-inicio').value||null,
     fecha_fin:document.getElementById('nc-fin').value||null,
-    monto_total:parseFloat(document.getElementById('nc-monto').value)||null,
-    monto_ampliacion:parseFloat(document.getElementById('nc-ampliacion').value)||null,
+    // monto_total y monto_ampliacion no existen en la tabla contratos
   };
   let error;
   try{ if(contratoEditId){ await ContratosAPI.actualizarContrato(contratoEditId,payload); } else { await ContratosAPI.crearContrato(payload); } }catch(e){error=e;}
