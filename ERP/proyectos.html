@@ -1,0 +1,1242 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Hidromec ERP — Operaciones</title>
+<link rel="stylesheet" href="erp-layout.css">
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js"></script>
+<script src="erp-utils.js"></script>
+<script src="erp-sidebar.js"></script>
+<script src="empresas.api.js"></script>
+<script src="clientes.api.js"></script>
+<script src="proyectos.api.js"></script>
+<script src="contratos.api.js"></script>
+<script src="empleados.api.js"></script>
+<style>
+  tr:last-child tr:hover .estado-badge{display:inline-block;padding:3px 10px;border-radius:20px;font-size:11px;font-weight:500;}
+  .estado-badge.activo{background:rgba(16,185,129,0.15);color:var(--green);}
+  .estado-badge.pausado{background:rgba(245,158,11,0.15);color:var(--orange);}
+  .estado-badge.finalizado{background:rgba(122,128,153,0.15);color:var(--muted);}
+  .estado-badge.cancelado{background:rgba(239,68,68,0.15);color:var(--red);}
+  .form-row.three{grid-template-columns:1fr 1fr 1fr;}
+  .kpi-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:14px;margin-bottom:20px;}
+  .kpi-card{background:var(--bg2);border:1px solid var(--border);border-radius:12px;padding:18px 20px;position:relative;overflow:hidden;}
+  .kpi-card::before{content:'';position:absolute;top:0;left:0;right:0;height:3px;}
+  .kpi-card.blue::before{background:var(--blue);}
+  .kpi-card.green::before{background:var(--green);}
+  .kpi-card.orange::before{background:var(--orange);}
+  .kpi-card.teal::before{background:var(--teal);}
+  .kpi-.kpi-value{font-size:20px;font-weight:600;font-family:'DM Mono',monospace;}
+  .rentabilidad-bar{height:6px;border-radius:3px;background:var(--bg3);margin-top:8px;overflow:hidden;}
+  .rentabilidad-fill{height:100%;border-radius:3px;transition:width 0.3s;}
+  .detalle-proyecto{background:var(--bg3);border-radius:8px;padding:16px;margin-bottom:14px;}
+  .detalle-proyecto h4{font-size:13px;font-weight:500;margin-bottom:12px;color:var(--muted);text-transform:uppercase;letter-spacing:0.8px;}
+  .detalle-row{display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid var(--border);font-size:13px;}
+  .detalle-row:last-child{border-bottom:none;font-weight:600;}
+  @media(max-width:768px){.main{margin-left:0;padding:16px;}.kpi-grid{grid-template-columns:repeat(2,1fr);}.form-row,.form-row.three{grid-template-columns:1fr;}}
+</style>
+</head>
+<body>
+<div id="overlay" class="overlay" onclick="ERP.closeSidebar()"></div>
+<div id="sidebar-root"></div>
+
+<main class="main">
+  <div class="page-header">
+    <h2>Operaciones</h2>
+    <button class="btn btn-primary" id="btn-nuevo" onclick="abrirNuevo()">+ Nuevo proyecto</button>
+  </div>
+
+  <div class="tabs">
+    <button class="tab active" onclick="cambiarTab('proyectos',this)">Proyectos</button>
+    <button class="tab" onclick="cambiarTab('horas',this)">Horas trabajadas</button>
+    <button class="tab" onclick="cambiarTab('costos',this)">Costos de obra</button>
+    <button class="tab" onclick="cambiarTab('rentabilidad',this)">Rentabilidad</button>
+    <button class="tab" onclick="cambiarTab('ordenes',this)">Órdenes de Trabajo</button>
+  </div>
+
+  <div class="filtros">
+    <select id="f-empresa" onchange="recargar()">
+      <option value="">Todas las empresas</option>
+      <option value="a1000000-0000-0000-0000-000000000001">Hidromec</option>
+      <option value="a2000000-0000-0000-0000-000000000002">Placemem</option>
+    </select>
+    <select id="f-estado" onchange="recargar()">
+      <option value="">Todos los estados</option>
+      <option value="activo">Activo</option>
+      <option value="pausado">Pausado</option>
+      <option value="finalizado">Finalizado</option>
+    </select>
+    <input type="text" id="f-buscar" placeholder="Buscar proyecto o cliente..." oninput="recargar()" style="min-width:220px">
+  </div>
+
+  <div class="kpi-grid" id="kpis"></div>
+
+  <div class="panel">
+    <div id="contenido"><div class="spinner-wrap"><div class="spinner"></div>Cargando...</div></div>
+  </div>
+</main>
+
+<!-- MODAL PROYECTO -->
+<div class="modal-overlay" id="modal-proyecto">
+  <div class="modal">
+    <h3 id="proy-titulo">Nuevo proyecto</h3>
+    <div class="form-row">
+      <div class="form-group">
+        <label>Empresa</label>
+        <select id="np-empresa" onchange="cargarClientesProyecto();cargarCostosRoles()">
+          <option value="a1000000-0000-0000-0000-000000000001">Hidromec</option>
+          <option value="a2000000-0000-0000-0000-000000000002">Placemem</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label>Cliente</label>
+        <select id="np-cliente" onchange="cargarContratosProyecto()"></select>
+      </div>
+    </div>
+    <div class="form-row">
+      <div class="form-group">
+        <label>OC / Contrato <span style="color:var(--red)">*</span></label>
+        <select id="np-contrato">
+          <option value="">— Seleccionar OC o Contrato (obligatorio) —</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label>N° OC / Referencia</label>
+        <input type="text" id="np-oc" placeholder="Ej: OC-2026-001 o CM-6700000001">
+      </div>
+    </div>
+    <div class="form-row full">
+      <div class="form-group">
+        <label>Nombre del proyecto</label>
+        <input type="text" id="np-nombre" placeholder="Ej: Mantenimiento planta Siderca Q1 2026">
+      </div>
+    </div>
+    <div class="form-row">
+      <div class="form-group">
+        <label>Tipo</label>
+        <select id="np-tipo">
+          <option value="mantenimiento">Mantenimiento industrial</option>
+          <option value="fabricacion">Fabricación metalmecánica</option>
+          <option value="edilicio">Servicios edilicio</option>
+          <option value="proyecto">Proyecto</option>
+          <option value="servicio_tecnico">Servicio técnico</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label>Estado</label>
+        <select id="np-estado">
+          <option value="activo">Activo</option>
+          <option value="pausado">Pausado</option>
+          <option value="finalizado">Finalizado</option>
+          <option value="cancelado">Cancelado</option>
+        </select>
+      </div>
+    </div>
+    <div class="form-row">
+      <div class="form-group">
+        <label>Fecha inicio</label>
+        <input type="date" id="np-fecha-inicio">
+      </div>
+      <div class="form-group">
+        <label>Fecha fin estimada</label>
+        <input type="date" id="np-fecha-fin">
+      </div>
+    </div>
+    <div style="font-size:12px;font-weight:500;color:var(--muted);text-transform:uppercase;letter-spacing:0.8px;margin:4px 0 10px">Horas estimadas por categoría</div>
+    <div class="form-row three">
+      <div class="form-group">
+        <label>Ayudante (hs)</label>
+        <input type="number" id="np-hs-ayudante" placeholder="0" oninput="calcularCostoProyecto()">
+      </div>
+      <div class="form-group">
+        <label>Oficial (hs)</label>
+        <input type="number" id="np-hs-oficial" placeholder="0" oninput="calcularCostoProyecto()">
+      </div>
+      <div class="form-group">
+        <label>Of. Especializado (hs)</label>
+        <input type="number" id="np-hs-esp" placeholder="0" oninput="calcularCostoProyecto()">
+      </div>
+    </div>
+    <div class="form-row">
+      <div class="form-group">
+        <label>Supervisor (hs)</label>
+        <input type="number" id="np-hs-supervisor" placeholder="0" oninput="calcularCostoProyecto()">
+      </div>
+      <div class="form-group">
+        <label>Técnico S. e Higiene (hs)</label>
+        <input type="number" id="np-hs-higiene" placeholder="0" oninput="calcularCostoProyecto()">
+      </div>
+    </div>
+    <div class="form-row">
+      <div class="form-group">
+        <label>Materiales estimados ($)</label>
+        <input type="number" id="np-materiales" placeholder="0.00" oninput="calcularCostoProyecto()">
+      </div>
+      <div class="form-group">
+        <label>Precio venta al cliente ($)</label>
+        <input type="number" id="np-presupuesto" placeholder="0.00">
+      </div>
+    </div>
+    <div id="resumen-proyecto" style="background:var(--bg3);border-radius:8px;padding:12px 16px;margin-bottom:14px;display:none">
+      <div style="font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:0.8px;margin-bottom:8px">Resumen estimado</div>
+      <div style="display:flex;gap:20px;flex-wrap:wrap;font-size:13px">
+        <span>Total horas: <strong id="res-horas" style="font-family:'DM Mono',monospace">0h</strong></span>
+        <span>Costo MO: <strong id="res-costo-mo" style="color:var(--orange);font-family:'DM Mono',monospace">$0</strong></span>
+        <span>+ Materiales: <strong id="res-mat" style="color:var(--orange);font-family:'DM Mono',monospace">$0</strong></span>
+        <span>= Costo total: <strong id="res-total" style="color:var(--red);font-family:'DM Mono',monospace">$0</strong></span>
+      </div>
+    </div>
+    <div class="form-row full">
+      <div class="form-group">
+        <label>Descripción</label>
+        <textarea id="np-descripcion" placeholder="Detalle del proyecto..."></textarea>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" onclick="cerrarModal('modal-proyecto')">Cancelar</button>
+      <button class="btn btn-primary" onclick="guardarProyecto()">Guardar proyecto</button>
+    </div>
+  </div>
+</div>
+
+<!-- MODAL HORAS -->
+<div class="modal-overlay" id="modal-horas">
+  <div class="modal">
+    <h3>Imputar horas</h3>
+    <div class="form-row">
+      <div class="form-group">
+        <label>Empresa</label>
+        <select id="nh-empresa" onchange="cargarDatosHoras()">
+          <option value="a1000000-0000-0000-0000-000000000001">Hidromec</option>
+          <option value="a2000000-0000-0000-0000-000000000002">Placemem</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label>Proyecto</label>
+        <select id="nh-proyecto"></select>
+      </div>
+    </div>
+    <div class="form-row">
+      <div class="form-group">
+        <label>Empleado</label>
+        <select id="nh-empleado" onchange="cargarCostoEmpleado()"></select>
+      </div>
+      <div class="form-group">
+        <label>Rol en la tarea</label>
+        <select id="nh-rol">
+          <option value="oficial">Oficial</option>
+          <option value="ayudante">Ayudante</option>
+          <option value="oficial_esp">Of. Especializado</option>
+          <option value="supervisor">Supervisor</option>
+          <option value="administrativo">Administrativo</option>
+        </select>
+      </div>
+    </div>
+    <div class="form-row">
+      <div class="form-group">
+        <label>Tipo de hora</label>
+        <select id="nh-tipo-hora" onchange="calcularCostoHoras()">
+          <option value="normal">Normal (x1)</option>
+          <option value="h50">Hora al 50% (x1.5)</option>
+          <option value="h100">Hora al 100% (x2)</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label style="font-size:10px;color:var(--muted)">Recargo aplicado</label>
+        <input type="text" id="nh-recargo-info" readonly style="color:var(--muted);font-size:12px" value="Sin recargo">
+      </div>
+    </div>
+    <div class="form-row three">
+      <div class="form-group">
+        <label>Fecha</label>
+        <input type="date" id="nh-fecha">
+      </div>
+      <div class="form-group">
+        <label>Horas</label>
+        <input type="number" id="nh-horas" placeholder="8" oninput="calcularCostoHoras()">
+      </div>
+      <div class="form-group">
+        <label>Personas</label>
+        <input type="number" id="nh-personas" value="1" oninput="calcularCostoHoras()">
+      </div>
+    </div>
+    <div class="form-row">
+      <div class="form-group">
+        <label>Costo/hora</label>
+        <input type="number" id="nh-costo-hora" placeholder="0.00" oninput="calcularCostoHoras()">
+      </div>
+      <div class="form-group">
+        <label>Costo total calculado</label>
+        <input type="number" id="nh-costo-total" readonly style="color:var(--orange)">
+      </div>
+    </div>
+    <div class="form-row full">
+      <div class="form-group">
+        <label>Observaciones</label>
+        <input type="text" id="nh-obs" placeholder="Opcional...">
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" onclick="cerrarModal('modal-horas')">Cancelar</button>
+      <button class="btn btn-primary" onclick="guardarHoras()">Guardar horas</button>
+    </div>
+  </div>
+</div>
+
+<!-- MODAL COSTO OBRA -->
+<div class="modal-overlay" id="modal-costo">
+  <div class="modal">
+    <h3>Nuevo costo de obra</h3>
+    <div class="form-row">
+      <div class="form-group">
+        <label>Empresa</label>
+        <select id="nc-empresa" onchange="cargarProyectosCosto()">
+          <option value="a1000000-0000-0000-0000-000000000001">Hidromec</option>
+          <option value="a2000000-0000-0000-0000-000000000002">Placemem</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label>Proyecto</label>
+        <select id="nc-proyecto"></select>
+      </div>
+    </div>
+    <div class="form-row">
+      <div class="form-group">
+        <label>Tipo</label>
+        <select id="nc-tipo">
+          <option value="materiales">Materiales</option>
+          <option value="servicios">Servicios externos</option>
+          <option value="alquiler_equipo">Alquiler de equipo</option>
+          <option value="traslado">Traslado / viáticos</option>
+          <option value="otro">Otro</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label>Monto</label>
+        <input type="number" id="nc-monto" placeholder="0.00">
+      </div>
+    </div>
+    <div class="form-row">
+      <div class="form-group">
+        <label>Fecha</label>
+        <input type="date" id="nc-fecha">
+      </div>
+      <div class="form-group">
+        <label>N° Comprobante</label>
+        <input type="text" id="nc-comprobante" placeholder="Opcional">
+      </div>
+    </div>
+    <div class="form-row full">
+      <div class="form-group">
+        <label>Descripción</label>
+        <input type="text" id="nc-descripcion" placeholder="Detalle del gasto...">
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" onclick="cerrarModal('modal-costo')">Cancelar</button>
+      <button class="btn btn-primary" onclick="guardarCosto()">Guardar</button>
+    </div>
+  </div>
+</div>
+
+<!-- MODAL ORDEN DE TRABAJO -->
+<div class="modal-overlay" id="modal-ot">
+  <div class="modal" style="max-width:620px">
+    <h3 id="ot-titulo">Nueva Orden de Trabajo</h3>
+    <div class="form-row">
+      <div class="form-group">
+        <label>Empresa</label>
+        <select id="not-empresa" onchange="cargarProyectosOT()">
+          <option value="a1000000-0000-0000-0000-000000000001">Hidromec</option>
+          <option value="a2000000-0000-0000-0000-000000000002">Placemem</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label>Proyecto</label>
+        <select id="not-proyecto" onchange="cargarDatosOT()"></select>
+      </div>
+    </div>
+    <div class="form-row">
+      <div class="form-group">
+        <label>Fecha de entrega</label>
+        <input type="date" id="not-fecha-entrega">
+      </div>
+      <div class="form-group">
+        <label>Tipo de trabajo</label>
+        <select id="not-tipo">
+          <option value="fabricacion">Fabricación / Constructivo</option>
+          <option value="mantenimiento">Mantenimiento</option>
+          <option value="montaje">Montaje</option>
+          <option value="reparacion">Reparación</option>
+          <option value="otro">Otro</option>
+        </select>
+      </div>
+    </div>
+    <div style="font-size:12px;font-weight:500;color:var(--muted);text-transform:uppercase;letter-spacing:0.8px;margin:4px 0 10px">Recursos asignados (horas cotizadas)</div>
+    <div class="form-row three">
+      <div class="form-group">
+        <label>Ayudante (hs)</label>
+        <input type="number" id="not-hs-ayudante" placeholder="0">
+      </div>
+      <div class="form-group">
+        <label>Oficial (hs)</label>
+        <input type="number" id="not-hs-oficial" placeholder="0">
+      </div>
+      <div class="form-group">
+        <label>Of. Especializado (hs)</label>
+        <input type="number" id="not-hs-esp" placeholder="0">
+      </div>
+    </div>
+    <div class="form-row">
+      <div class="form-group">
+        <label>Supervisor (hs)</label>
+        <input type="number" id="not-hs-supervisor" placeholder="0">
+      </div>
+      <div class="form-group">
+        <label>Técnico S. e Higiene (hs)</label>
+        <input type="number" id="not-hs-higiene" placeholder="0">
+      </div>
+    </div>
+    <div class="form-row full">
+      <div class="form-group">
+        <label>Descripción / Detalle del trabajo</label>
+        <textarea id="not-descripcion" placeholder="Descripción del trabajo a realizar, materiales, instrucciones especiales..." style="min-height:80px"></textarea>
+      </div>
+    </div>
+    <div class="form-row full">
+      <div class="form-group">
+        <label>Observaciones para taller</label>
+        <textarea id="not-obs" placeholder="Notas para el capataz / jefe de taller..." style="min-height:60px"></textarea>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" onclick="cerrarModal('modal-ot')">Cancelar</button>
+      <button class="btn btn-ghost" onclick="imprimirOT()" style="border-color:var(--green);color:var(--green)">🖨 Imprimir OT</button>
+      <button class="btn btn-primary" onclick="guardarOT()">Guardar OT</button>
+    </div>
+  </div>
+</div>
+
+<script>
+let tabActual='proyectos';
+let proyEditId=null;
+
+async function init(){
+  const usuario = await ERP.initLayout('proyectos');
+  if(!usuario) return;
+  document.getElementById('np-fecha-inicio').value=hoy();
+  document.getElementById('nh-fecha').value=hoy();
+  document.getElementById('nc-fecha').value=hoy();
+  await cargarClientesProyecto();
+  await cargarDatosHoras();
+  await cargarProyectosCosto();
+  await cargarCostosRoles();
+  await cargarProyectos();
+  // Si viene con #horas en la URL, abrir esa pestaña
+  if(window.location.hash === '#horas'){
+    const btn = document.querySelector('.tab:nth-child(2)');
+    if(btn) cambiarTab('horas', btn);
+  } else if(window.location.hash === '#costos'){
+    const btn = document.querySelector('.tab:nth-child(3)');
+    if(btn) cambiarTab('costos', btn);
+  }
+}
+
+function cambiarTab(tab,btn){
+  tabActual=tab;
+  document.querySelectorAll('.tab').forEach(t=>t.classList.remove('active'));
+  btn.classList.add('active');
+  const btnNuevo=document.getElementById('btn-nuevo');
+  if(tab==='proyectos'){btnNuevo.textContent='+ Nuevo proyecto';btnNuevo.style.display='';}
+  else if(tab==='horas'){btnNuevo.textContent='+ Imputar horas';btnNuevo.style.display='';}
+  else if(tab==='costos'){btnNuevo.textContent='+ Costo de obra';btnNuevo.style.display='';}
+  else if(tab==='ordenes'){btnNuevo.textContent='+ Nueva OT';btnNuevo.style.display='';}
+  else btnNuevo.style.display='none';
+  recargar();
+}
+
+function abrirNuevo(){
+  if(tabActual==='proyectos') abrirNuevoProyecto();
+  else if(tabActual==='horas') document.getElementById('modal-horas').classList.add('show');
+  else if(tabActual==='costos') document.getElementById('modal-costo').classList.add('show');
+  else if(tabActual==='ordenes') abrirNuevaOT();
+}
+
+function recargar(){
+  if(tabActual==='proyectos') cargarProyectos();
+  else if(tabActual==='horas') cargarHoras();
+  else if(tabActual==='costos') cargarCostos();
+  else if(tabActual==='ordenes') cargarOrdenesOT();
+  else cargarRentabilidad();
+}
+
+// ===== PROYECTOS =====
+async function cargarClientesProyecto(){
+  const empId=document.getElementById('np-empresa').value;
+  const data=await ClientesAPI.getClientesSelect(empId);
+  document.getElementById('np-cliente').innerHTML='<option value="">Sin cliente asignado</option>'+(data||[]).map(c=>`<option value="${c.id}">${c.nombre}</option>`).join('');
+}
+
+async function cargarProyectos(){
+  document.getElementById('contenido').innerHTML='<div class="spinner-wrap"><div class="spinner"></div>Cargando...</div>';
+  const emp=document.getElementById('f-empresa').value;
+  const estado=document.getElementById('f-estado').value;
+  const buscar=document.getElementById('f-buscar').value.toLowerCase();
+
+  let proyData=await ProyectosAPI.getProyectos({});
+  if(emp) proyData=proyData.filter(r=>r.empresa_id===emp);
+  if(estado) proyData=proyData.filter(r=>r.estado===estado);
+  const data=proyData;
+  let rows=data||[];
+  if(buscar) rows=rows.filter(r=>(r.nombre||'').toLowerCase().includes(buscar)||(r.clientes?.nombre||'').toLowerCase().includes(buscar));
+
+  const activos=rows.filter(r=>r.estado==='activo').length;
+  const finalizados=rows.filter(r=>r.estado==='finalizado').length;
+
+  document.getElementById('kpis').innerHTML=`
+    <div class="kpi-card blue"><div class="kpi-label">Proyectos activos</div><div class="kpi-value">${activos}</div></div>
+    <div class="kpi-card teal"><div class="kpi-label">Finalizados</div><div class="kpi-value">${finalizados}</div></div>
+    <div class="kpi-card orange"><div class="kpi-label">Total proyectos</div><div class="kpi-value">${rows.length}</div></div>
+    <div class="kpi-card green"><div class="kpi-label">Presupuestado total</div><div class="kpi-value" style="font-size:14px">${fmt(rows.reduce((s,r)=>s+Number(r.presupuesto_estimado||0),0))}</div></div>`;
+
+  document.getElementById('contenido').innerHTML=`
+    <div style="overflow-x:auto"><table>
+      <thead><tr><th>Empresa</th><th>Proyecto</th><th>Cliente</th><th>Tipo</th><th>Inicio</th><th>Presupuesto</th><th>Estado</th><th>Acciones</th></tr></thead>
+      <tbody>${rows.length?rows.map(r=>`<tr>
+        <td style="font-size:12px">${r.empresas?.nombre||'—'}</td>
+        <td><strong>${r.nombre}</strong></td>
+        <td>${r.clientes?.nombre||'Sin cliente'}</td>
+        <td style="font-size:12px;color:var(--muted)">${r.tipo||'—'}</td>
+        <td class="mono">${fmtF(r.fecha_inicio)}</td>
+        <td class="mono">${r.presupuesto_estimado?fmt(r.presupuesto_estimado):'—'}</td>
+        <td><span class="estado-badge ${r.estado}">${r.estado}</span></td>
+        <td><div style="display:flex;gap:6px">
+          <button class="btn btn-sm btn-ghost" onclick="verDetalle('${r.id}','${r.nombre.replace(/'/g,"\\'")}')">Ver</button>
+          <button class="btn btn-sm btn-ghost" onclick="editarProyecto('${r.id}')">Editar</button>
+        </div></td>
+      </tr>`).join(''):'<tr><td colspan="8" style="text-align:center;padding:40px;color:var(--muted)">Sin proyectos</td></tr>'}</tbody>
+    </table></div>`;
+}
+
+function abrirNuevoProyecto(){
+  proyEditId=null;
+  document.getElementById('proy-titulo').textContent='Nuevo proyecto';
+  ['np-nombre','np-presupuesto','np-descripcion','np-hs-ayudante','np-hs-oficial',
+   'np-hs-esp','np-hs-supervisor','np-hs-higiene','np-materiales','np-oc'].forEach(id=>document.getElementById(id).value='');
+  document.getElementById('resumen-proyecto').style.display='none';
+  document.getElementById('np-estado').value='activo';
+  document.getElementById('np-tipo').value='mantenimiento';
+  document.getElementById('np-fecha-inicio').value=hoy();
+  document.getElementById('np-fecha-fin').value='';
+  cargarContratosProyecto();
+  document.getElementById('modal-proyecto').classList.add('show');
+}
+
+async function editarProyecto(id){
+  const r=await ProyectosAPI.getProyectoById(id);
+  if(!r) return;
+  proyEditId=id;
+  document.getElementById('proy-titulo').textContent='Editar proyecto';
+  document.getElementById('np-empresa').value=r.empresa_id;
+  await cargarClientesProyecto();
+  document.getElementById('np-cliente').value=r.cliente_id||'';
+  await cargarContratosProyecto();
+  document.getElementById('np-contrato').value=r.contrato_id||'';
+  document.getElementById('np-oc').value=r.numero_oc||'';
+  document.getElementById('np-nombre').value=r.nombre;
+  document.getElementById('np-tipo').value=r.tipo||'mantenimiento';
+  document.getElementById('np-estado').value=r.estado;
+  document.getElementById('np-fecha-inicio').value=r.fecha_inicio||'';
+  document.getElementById('np-fecha-fin').value=r.fecha_fin_estimada||'';
+  document.getElementById('np-presupuesto').value=r.presupuesto_estimado||'';
+  document.getElementById('np-hs-ayudante').value=r.hs_ayudante||'';
+  document.getElementById('np-hs-oficial').value=r.hs_oficial||'';
+  document.getElementById('np-hs-esp').value=r.hs_oficial_esp||'';
+  document.getElementById('np-hs-supervisor').value=r.hs_supervisor||'';
+  document.getElementById('np-hs-higiene').value=r.hs_higiene||'';
+  document.getElementById('np-materiales').value=r.materiales_estimados||'';
+  document.getElementById('np-descripcion').value=r.descripcion||'';
+  calcularCostoProyecto();
+  document.getElementById('modal-proyecto').classList.add('show');
+}
+
+let _costosRoles={ayudante:0,oficial:0,oficial_esp:0,supervisor:0,higiene:0};
+
+async function cargarCostosRoles(){
+  const empId=document.getElementById('np-empresa').value;
+  const data=await ProyectosAPI.getCostosRoles(empId);
+  if(data) data.forEach(r=>{_costosRoles[r.rol]=Number(r.costo_hora||0);});
+}
+
+function calcularCostoProyecto(){
+  const hs_a=parseFloat(document.getElementById('np-hs-ayudante').value)||0;
+  const hs_o=parseFloat(document.getElementById('np-hs-oficial').value)||0;
+  const hs_e=parseFloat(document.getElementById('np-hs-esp').value)||0;
+  const hs_s=parseFloat(document.getElementById('np-hs-supervisor').value)||0;
+  const hs_h=parseFloat(document.getElementById('np-hs-higiene').value)||0;
+  const mat=parseFloat(document.getElementById('np-materiales').value)||0;
+  const totalHs=hs_a+hs_o+hs_e+hs_s+hs_h;
+  const costoMO=hs_a*_costosRoles.ayudante+hs_o*_costosRoles.oficial+
+                hs_e*_costosRoles.oficial_esp+hs_s*_costosRoles.supervisor+
+                hs_h*_costosRoles.higiene;
+  const costoTotal=costoMO+mat;
+  const fmtN=v=>new Intl.NumberFormat('es-AR',{style:'currency',currency:'ARS',maximumFractionDigits:0}).format(v);
+  if(totalHs>0||mat>0){
+    document.getElementById('resumen-proyecto').style.display='block';
+    document.getElementById('res-horas').textContent=totalHs+'h';
+    document.getElementById('res-costo-mo').textContent=fmtN(costoMO);
+    document.getElementById('res-mat').textContent=fmtN(mat);
+    document.getElementById('res-total').textContent=fmtN(costoTotal);
+  } else {
+    document.getElementById('resumen-proyecto').style.display='none';
+  }
+}
+
+async function guardarProyecto(){
+  const nombre=document.getElementById('np-nombre').value.trim();
+  if(!nombre){toast('Ingresá el nombre del proyecto.', 'warn');return;}
+  const contratoId=document.getElementById('np-contrato').value;
+  const ocRef=document.getElementById('np-oc').value.trim();
+  if(!contratoId&&!ocRef){
+    toast('El proyecto requiere una OC o Contrato asociado.\nIngresá el número de OC/Contrato o seleccioná uno existente.', 'warn');
+    return;
+  }
+  const payload={
+    empresa_id:document.getElementById('np-empresa').value,
+    cliente_id:document.getElementById('np-cliente').value||null,
+    contrato_id:contratoId||null,
+    numero_oc:ocRef||null,
+    nombre,tipo:document.getElementById('np-tipo').value,
+    estado:document.getElementById('np-estado').value,
+    fecha_inicio:document.getElementById('np-fecha-inicio').value||null,
+    fecha_fin_estimada:document.getElementById('np-fecha-fin').value||null,
+    presupuesto_estimado:parseFloat(document.getElementById('np-presupuesto').value)||null,
+    hs_ayudante:parseFloat(document.getElementById('np-hs-ayudante').value)||0,
+    hs_oficial:parseFloat(document.getElementById('np-hs-oficial').value)||0,
+    hs_oficial_esp:parseFloat(document.getElementById('np-hs-esp').value)||0,
+    hs_supervisor:parseFloat(document.getElementById('np-hs-supervisor').value)||0,
+    hs_higiene:parseFloat(document.getElementById('np-hs-higiene').value)||0,
+    materiales_estimados:parseFloat(document.getElementById('np-materiales').value)||0,
+    descripcion:document.getElementById('np-descripcion').value||null,
+  };
+  let error;
+  try{ if(proyEditId){ await ProyectosAPI.actualizarProyecto(proyEditId,payload); } else { await ProyectosAPI.crearProyecto(payload); } }catch(e){error=e;}
+  if(error){toast('Error: '+(error?.message||String(error)), 'error');return;}
+  cerrarModal('modal-proyecto');
+  cargarProyectos();
+}
+
+async function cargarContratosProyecto(){
+  const empId=document.getElementById('np-empresa').value;
+  const clienteId=document.getElementById('np-cliente').value;
+  let contData=await ContratosAPI.getContratosSelect(empId);
+  if(clienteId) contData=contData.filter(r=>r.cliente_id===clienteId);
+  const data=contData;
+  const sel=document.getElementById('np-contrato');
+  sel.innerHTML='<option value="">— Sin contrato (ingresar N° OC manualmente) —</option>'+(data||[]).map(c=>`<option value="${c.id}">${c.numero_contrato}${c.descripcion?' — '+c.descripcion:''}</option>`).join('');
+}
+
+async function verDetalle(id,nombre){
+  const [{data:horas},{data:costos},{data:facturas}]=await Promise.all([
+    ProyectosAPI.getImputacionHoras({proyectoId:id}).then(d=>({data:d})),
+    ProyectosAPI.getCostosObra({proyectoId:id}).then(d=>({data:d})),
+    FacturasAPI.getFacturas({proyectoId:id,excluirAnuladas:true}).then(d=>({data:d})),
+  ]);
+  const totalHoras=(horas||[]).reduce((s,r)=>s+Number(r.costo_calculado||0),0);
+  const horasTrabajadas=(horas||[]).reduce((s,r)=>s+(Number(r.horas||0)*Number(r.cantidad_personas||1)),0);
+  const totalCostos=(costos||[]).reduce((s,r)=>s+Number(r.monto||0),0);
+  const totalFacturado=(facturas||[]).reduce((s,r)=>s+Number(r.monto_total||0),0);
+  const costoTotal=totalHoras+totalCostos;
+  const resultado=totalFacturado-costoTotal;
+  const margen=totalFacturado>0?Math.round(resultado/totalFacturado*100):0;
+
+  toast(`Proyecto creado: ${nombre}`, 'success');
+}
+
+// ===== HORAS =====
+async function cargarDatosHoras(){
+  const empId=document.getElementById('nh-empresa').value;
+  const [{data:proyectos},{data:empleados}]=await Promise.all([
+    ProyectosAPI.getProyectosSelect(empId).then(d=>({data:d})),
+    EmpleadosAPI.getEmpleados({empresaId:empId}).then(d=>({data:d})),
+  ]);
+  document.getElementById('nh-proyecto').innerHTML=(proyectos||[]).map(p=>`<option value="${p.id}">${p.nombre}</option>`).join('');
+  document.getElementById('nh-empleado').innerHTML=(empleados||[]).map(e=>`<option value="${e.id}" data-costo="${e.costo_hora}">${e.nombre}</option>`).join('');
+  cargarCostoEmpleado();
+}
+
+function cargarCostoEmpleado(){
+  const sel=document.getElementById('nh-empleado');
+  const opt=sel.options[sel.selectedIndex];
+  if(opt) document.getElementById('nh-costo-hora').value=opt.dataset.costo||0;
+  calcularCostoHoras();
+}
+
+function calcularCostoHoras(){
+  const horas=parseFloat(document.getElementById('nh-horas').value)||0;
+  const personas=parseFloat(document.getElementById('nh-personas').value)||1;
+  const costoHora=parseFloat(document.getElementById('nh-costo-hora').value)||0;
+  const tipoHora=document.getElementById('nh-tipo-hora').value;
+  const mult=tipoHora==='h100'?2:tipoHora==='h50'?1.5:1;
+  const info=tipoHora==='h100'?'× 2.0 (doble)':tipoHora==='h50'?'× 1.5 (cincuenta %)':'× 1.0 (sin recargo)';
+  document.getElementById('nh-recargo-info').value=info;
+  document.getElementById('nh-costo-total').value=(horas*personas*costoHora*mult).toFixed(2);
+}
+
+async function cargarHoras(){
+  document.getElementById('kpis').innerHTML='';
+  document.getElementById('contenido').innerHTML='<div class="spinner-wrap"><div class="spinner"></div>Cargando...</div>';
+  const emp=document.getElementById('f-empresa').value;
+  const buscar=document.getElementById('f-buscar').value.toLowerCase();
+
+  let hsData=await ProyectosAPI.getImputacionHoras({limit:200});
+  if(emp) hsData=hsData.filter(r=>r.empresa_id===emp);
+  const data=hsData;
+  let rows=data||[];
+  if(buscar) rows=rows.filter(r=>(r.proyectos?.nombre||'').toLowerCase().includes(buscar)||(r.empleados?.nombre||'').toLowerCase().includes(buscar));
+
+  const totalHoras=rows.reduce((s,r)=>s+(Number(r.horas||0)*Number(r.cantidad_personas||1)),0);
+  const totalCosto=rows.reduce((s,r)=>s+Number(r.costo_calculado||0),0);
+  const hsExtras=rows.filter(r=>r.tipo_hora&&r.tipo_hora!=='normal').reduce((s,r)=>s+(Number(r.horas||0)*Number(r.cantidad_personas||1)),0);
+
+  document.getElementById('kpis').innerHTML=`
+    <div class="kpi-card blue"><div class="kpi-label">Total horas</div><div class="kpi-value">${totalHoras.toFixed(1)}h</div></div>
+    <div class="kpi-card orange"><div class="kpi-label">Costo total mano de obra</div><div class="kpi-value" style="font-size:16px">${fmt(totalCosto)}</div></div>
+    <div class="kpi-card teal"><div class="kpi-label">Hs. extras (50%/100%)</div><div class="kpi-value">${hsExtras.toFixed(1)}h</div></div>
+    <div class="kpi-card green"><div class="kpi-label">Costo hora promedio</div><div class="kpi-value" style="font-size:16px">${totalHoras>0?fmt(totalCosto/totalHoras):fmt(0)}/h</div></div>`;
+
+  const TIPO_HORA_LABEL={'normal':'Normal','h50':'50%','h100':'100%'};
+  const TIPO_HORA_COLOR={'normal':'var(--muted)','h50':'var(--orange)','h100':'var(--red)'};
+
+  document.getElementById('contenido').innerHTML=`
+    <div style="overflow-x:auto"><table>
+      <thead><tr><th>Empresa</th><th>Fecha</th><th>Proyecto</th><th>Empleado</th><th>Rol</th><th>Tipo hora</th><th>Horas</th><th>Personas</th><th>Costo</th><th>Acciones</th></tr></thead>
+      <tbody>${rows.length?rows.map(r=>{
+        const th=r.tipo_hora||'normal';
+        return`<tr>
+        <td style="font-size:12px">${r.empresas?.nombre||'—'}</td>
+        <td class="mono">${fmtF(r.fecha)}</td>
+        <td style="font-size:12px">${r.proyectos?.nombre||'—'}</td>
+        <td>${r.empleados?.nombre||'—'}</td>
+        <td style="font-size:12px;color:var(--muted)">${r.rol||'—'}</td>
+        <td><span style="font-size:11px;padding:2px 8px;border-radius:4px;background:rgba(0,0,0,0.15);color:${TIPO_HORA_COLOR[th]}">${TIPO_HORA_LABEL[th]||th}</span></td>
+        <td class="mono">${r.horas}h</td>
+        <td class="mono">${r.cantidad_personas}</td>
+        <td class="mono" style="color:var(--orange)">${fmt(r.costo_calculado)}</td>
+        <td><button class="btn btn-sm btn-danger" onclick="borrarHoras('${r.id}')">Borrar</button></td>
+      </tr>`;}).join(''):'<tr><td colspan="10" style="text-align:center;padding:40px;color:var(--muted)">Sin horas imputadas</td></tr>'}</tbody>
+    </table></div>`;
+}
+
+async function guardarHoras(){
+  if(window._saving_guardarHoras) return;
+  window._saving_guardarHoras=true;
+  const horas=parseFloat(document.getElementById('nh-horas').value)||0;
+  if(!horas){toast('Ingresá las horas.', 'warn');return;}
+  const personas=parseFloat(document.getElementById('nh-personas').value)||1;
+  const costoHora=parseFloat(document.getElementById('nh-costo-hora').value)||0;
+  const tipoHora=document.getElementById('nh-tipo-hora').value;
+  const mult=tipoHora==='h100'?2:tipoHora==='h50'?1.5:1;
+  let error;
+  try{ await ProyectosAPI.registrarHoras({
+    empresa_id:document.getElementById('nh-empresa').value,
+    proyecto_id:document.getElementById('nh-proyecto').value,
+    empleado_id:document.getElementById('nh-empleado').value||null,
+    fecha:document.getElementById('nh-fecha').value,
+    rol:document.getElementById('nh-rol').value,
+    tipo_hora:tipoHora,
+    horas,cantidad_personas:personas,
+    costo_hora_usado:costoHora,
+    costo_calculado:horas*personas*costoHora*mult,
+    observaciones:document.getElementById('nh-obs').value||null,
+  });
+  }catch(e){error=e; window._saving_guardarHoras=false;}
+  if(error){window._saving_guardarHoras=false; toast('Error: '+(error.message||error), 'error');return;}
+  window._saving_guardarHoras=false;
+  cerrarModal('modal-horas');
+  cargarHoras();
+}
+
+async function borrarHoras(id){
+  if(!(await confirmar('¿Borrar este registro de horas?'))) return;
+  await ProyectosAPI.eliminarImputacion(id);
+  cargarHoras();
+}
+
+// ===== COSTOS OBRA =====
+async function cargarProyectosCosto(){
+  const empId=document.getElementById('nc-empresa').value;
+  const data=await ProyectosAPI.getProyectosSelect(empId);
+  document.getElementById('nc-proyecto').innerHTML=(data||[]).map(p=>`<option value="${p.id}">${p.nombre}</option>`).join('');
+}
+
+async function cargarCostos(){
+  document.getElementById('kpis').innerHTML='';
+  document.getElementById('contenido').innerHTML='<div class="spinner-wrap"><div class="spinner"></div>Cargando...</div>';
+  const emp=document.getElementById('f-empresa').value;
+  const buscar=document.getElementById('f-buscar').value.toLowerCase();
+
+  let coData=await ProyectosAPI.getCostosObra({});
+  if(emp) coData=coData.filter(r=>r.empresa_id===emp);
+  const data=coData;
+  let rows=data||[];
+  if(buscar) rows=rows.filter(r=>(r.proyectos?.nombre||'').toLowerCase().includes(buscar)||(r.descripcion||'').toLowerCase().includes(buscar));
+
+  const total=rows.reduce((s,r)=>s+Number(r.monto||0),0);
+
+  document.getElementById('kpis').innerHTML=`
+    <div class="kpi-card orange"><div class="kpi-label">Total costos de obra</div><div class="kpi-value" style="font-size:16px">${fmt(total)}</div></div>
+    <div class="kpi-card blue"><div class="kpi-label">Materiales</div><div class="kpi-value" style="font-size:16px">${fmt(rows.filter(r=>r.tipo==='materiales').reduce((s,r)=>s+Number(r.monto||0),0))}</div></div>
+    <div class="kpi-card teal"><div class="kpi-label">Servicios</div><div class="kpi-value" style="font-size:16px">${fmt(rows.filter(r=>r.tipo==='servicios').reduce((s,r)=>s+Number(r.monto||0),0))}</div></div>
+    <div class="kpi-card green"><div class="kpi-label">Otros</div><div class="kpi-value" style="font-size:16px">${fmt(rows.filter(r=>!['materiales','servicios'].includes(r.tipo)).reduce((s,r)=>s+Number(r.monto||0),0))}</div></div>`;
+
+  document.getElementById('contenido').innerHTML=`
+    <div style="overflow-x:auto"><table>
+      <thead><tr><th>Empresa</th><th>Fecha</th><th>Proyecto</th><th>Tipo</th><th>Descripción</th><th>Comprobante</th><th>Monto</th><th>Acciones</th></tr></thead>
+      <tbody>${rows.length?rows.map(r=>`<tr>
+        <td style="font-size:12px">${r.empresas?.nombre||'—'}</td>
+        <td class="mono">${fmtF(r.fecha)}</td>
+        <td style="font-size:12px">${r.proyectos?.nombre||'—'}</td>
+        <td style="font-size:12px;color:var(--muted)">${r.tipo}</td>
+        <td>${r.descripcion}</td>
+        <td class="mono" style="font-size:12px;color:var(--muted)">${r.comprobante||'—'}</td>
+        <td class="mono" style="color:var(--orange)">${fmt(r.monto)}</td>
+        <td><button class="btn btn-sm btn-danger" onclick="borrarCosto('${r.id}')">Borrar</button></td>
+      </tr>`).join(''):'<tr><td colspan="8" style="text-align:center;padding:40px;color:var(--muted)">Sin costos de obra</td></tr>'}</tbody>
+    </table></div>`;
+}
+
+async function guardarCosto(){
+  const desc=document.getElementById('nc-descripcion').value.trim();
+  const monto=parseFloat(document.getElementById('nc-monto').value)||0;
+  if(!desc||!monto){toast('Completá descripción y monto.', 'warn');return;}
+  let error;
+  try{ await ProyectosAPI.registrarCostoObra({
+    empresa_id:document.getElementById('nc-empresa').value,
+    proyecto_id:document.getElementById('nc-proyecto').value,
+    tipo:document.getElementById('nc-tipo').value,
+    descripcion:desc,monto,
+    fecha:document.getElementById('nc-fecha').value,
+    comprobante:document.getElementById('nc-comprobante').value||null,
+  });
+  }catch(e){error=e; window._saving_guardarOT=false;}
+  if(error){window._saving_guardarOT=false; toast('Error: '+(error.message||error), 'error');return;}
+  window._saving_guardarOT=false;
+  cerrarModal('modal-costo');
+  cargarCostos();
+}
+
+async function borrarCosto(id){
+  if(!(await confirmar('¿Borrar este costo?'))) return;
+  await ProyectosAPI.eliminarCostoObra(id);
+  cargarCostos();
+}
+
+// ===== RENTABILIDAD =====
+async function cargarRentabilidad(){
+  document.getElementById('kpis').innerHTML='';
+  document.getElementById('contenido').innerHTML='<div class="spinner-wrap"><div class="spinner"></div>Calculando rentabilidad...</div>';
+  const emp=document.getElementById('f-empresa').value;
+
+  let proyData=await ProyectosAPI.getProyectos({});
+  if(emp) proyData=proyData.filter(r=>r.empresa_id===emp);
+  const proyectos=proyData;
+
+  const resultados=await Promise.all((proyectos||[]).map(async p=>{
+    const [{data:horas},{data:costos},{data:facturas}]=await Promise.all([
+      ProyectosAPI.getImputacionHoras({proyectoId:p.id}).then(d=>({data:d})),
+      ProyectosAPI.getCostosObra({proyectoId:p.id}).then(d=>({data:d})),
+      FacturasAPI.getFacturas({proyectoId:p.id,excluirAnuladas:true}).then(d=>({data:d})),
+    ]);
+    const costoHoras=(horas||[]).reduce((s,r)=>s+Number(r.costo_calculado||0),0);
+    const costoMat=(costos||[]).reduce((s,r)=>s+Number(r.monto||0),0);
+    const facturado=(facturas||[]).reduce((s,r)=>s+Number(r.monto_total||0),0);
+    const costoTotal=costoHoras+costoMat;
+    const resultado=facturado-costoTotal;
+    const margen=facturado>0?Math.round(resultado/facturado*100):0;
+    return{...p,facturado,costoHoras,costoMat,costoTotal,resultado,margen};
+  }));
+
+  const totalFac=resultados.reduce((s,r)=>s+r.facturado,0);
+  const totalCosto=resultados.reduce((s,r)=>s+r.costoTotal,0);
+  const totalRes=totalFac-totalCosto;
+  const margenGral=totalFac>0?Math.round(totalRes/totalFac*100):0;
+
+  document.getElementById('kpis').innerHTML=`
+    <div class="kpi-card blue"><div class="kpi-label">Total facturado</div><div class="kpi-value" style="font-size:16px">${fmt(totalFac)}</div></div>
+    <div class="kpi-card orange"><div class="kpi-label">Costo total</div><div class="kpi-value" style="font-size:16px">${fmt(totalCosto)}</div></div>
+    <div class="kpi-card ${totalRes>=0?'green':'teal'}"><div class="kpi-label">Resultado total</div><div class="kpi-value" style="font-size:16px;color:${totalRes>=0?'var(--green)':'var(--red)'}">${fmt(totalRes)}</div></div>
+    <div class="kpi-card teal"><div class="kpi-label">Margen general</div><div class="kpi-value">${margenGral}%</div></div>`;
+
+  document.getElementById('contenido').innerHTML=`
+    <div style="overflow-x:auto"><table>
+      <thead><tr><th>Empresa</th><th>Proyecto</th><th>Cliente</th><th>Estado</th><th>Facturado</th><th>Costo MO</th><th>Costo Mat.</th><th>Resultado</th><th>Margen</th></tr></thead>
+      <tbody>${resultados.map(r=>`<tr>
+        <td style="font-size:12px">${r.empresas?.nombre||'—'}</td>
+        <td><strong>${r.nombre}</strong></td>
+        <td style="font-size:12px">${r.clientes?.nombre||'—'}</td>
+        <td><span class="estado-badge ${r.estado}">${r.estado}</span></td>
+        <td class="mono">${fmt(r.facturado)}</td>
+        <td class="mono" style="color:var(--orange)">${fmt(r.costoHoras)}</td>
+        <td class="mono" style="color:var(--orange)">${fmt(r.costoMat)}</td>
+        <td class="mono" style="color:${r.resultado>=0?'var(--green)':'var(--red)'}">${fmt(r.resultado)}</td>
+        <td>
+          <div style="display:flex;align-items:center;gap:8px">
+            <span style="font-family:'DM Mono',monospace;font-size:12px;color:${r.margen>=20?'var(--green)':r.margen>=0?'var(--orange)':'var(--red)'}">${r.margen}%</span>
+            <div class="rentabilidad-bar" style="width:60px"><div class="rentabilidad-fill" style="width:${Math.min(Math.abs(r.margen),100)}%;background:${r.margen>=20?'var(--green)':r.margen>=0?'var(--orange)':'var(--red)'}"></div></div>
+          </div>
+        </td>
+      </tr>`).join('')}</tbody>
+    </table></div>`;
+}
+
+// ═══════════════ ÓRDENES DE TRABAJO ═══════════════
+let otEditId=null;
+
+async function abrirNuevaOT(){
+  otEditId=null;
+  document.getElementById('ot-titulo').textContent='Nueva Orden de Trabajo';
+  ['not-hs-ayudante','not-hs-oficial','not-hs-esp','not-hs-supervisor','not-hs-higiene','not-descripcion','not-obs'].forEach(id=>document.getElementById(id).value='');
+  document.getElementById('not-tipo').value='fabricacion';
+  document.getElementById('not-fecha-entrega').value='';
+  await cargarProyectosOT();
+  document.getElementById('modal-ot').classList.add('show');
+}
+
+async function cargarProyectosOT(){
+  const empId=document.getElementById('not-empresa').value;
+  const data=await ProyectosAPI.getProyectosParaOT(empId);
+  const sel=document.getElementById('not-proyecto');
+  sel.innerHTML='<option value="">— Seleccionar proyecto —</option>'+(data||[]).map(p=>`<option value="${p.id}" data-json='${JSON.stringify({hs_a:p.hs_ayudante,hs_o:p.hs_oficial,hs_e:p.hs_oficial_esp,hs_s:p.hs_supervisor,hs_h:p.hs_higiene,desc:p.descripcion,cliente:p.clientes?.nombre,contrato:p.contratos?.numero_contrato||p.numero_oc})}'>
+    ${p.nombre}${p.clientes?.nombre?' — '+p.clientes.nombre:''}
+  </option>`).join('');
+}
+
+function cargarDatosOT(){
+  const sel=document.getElementById('not-proyecto');
+  const opt=sel.options[sel.selectedIndex];
+  if(!opt||!opt.dataset.json) return;
+  try{
+    const d=JSON.parse(opt.dataset.json);
+    document.getElementById('not-hs-ayudante').value=d.hs_a||'';
+    document.getElementById('not-hs-oficial').value=d.hs_o||'';
+    document.getElementById('not-hs-esp').value=d.hs_e||'';
+    document.getElementById('not-hs-supervisor').value=d.hs_s||'';
+    document.getElementById('not-hs-higiene').value=d.hs_h||'';
+    if(d.desc) document.getElementById('not-descripcion').value=d.desc;
+  }catch(e){ /* preview */ }
+}
+
+async function guardarOT(){
+  if(window._saving_guardarOT) return;
+  window._saving_guardarOT=true;
+  const proyId=document.getElementById('not-proyecto').value;
+  if(!proyId){toast('Seleccioná un proyecto.', 'warn');return;}
+  const payload={
+    empresa_id:document.getElementById('not-empresa').value,
+    proyecto_id:proyId,
+    tipo:document.getElementById('not-tipo').value,
+    fecha_entrega:document.getElementById('not-fecha-entrega').value||null,
+    hs_ayudante:parseFloat(document.getElementById('not-hs-ayudante').value)||0,
+    hs_oficial:parseFloat(document.getElementById('not-hs-oficial').value)||0,
+    hs_oficial_esp:parseFloat(document.getElementById('not-hs-esp').value)||0,
+    hs_supervisor:parseFloat(document.getElementById('not-hs-supervisor').value)||0,
+    hs_higiene:parseFloat(document.getElementById('not-hs-higiene').value)||0,
+    descripcion:document.getElementById('not-descripcion').value||null,
+    observaciones:document.getElementById('not-obs').value||null,
+    estado:'emitida',
+  };
+  let error;
+  try{ if(otEditId){ await ProyectosAPI.actualizarOrdenTrabajo(otEditId,payload); } else { await ProyectosAPI.crearOrdenTrabajo(payload); } }catch(e){error=e;}
+  if(error){toast('Error: '+(error?.message||String(error)), 'error');return;}
+  cerrarModal('modal-ot');
+  cargarOrdenesOT();
+}
+
+async function cargarOrdenesOT(){
+  document.getElementById('kpis').innerHTML='';
+  document.getElementById('contenido').innerHTML='<div class="spinner-wrap"><div class="spinner"></div>Cargando...</div>';
+  const emp=document.getElementById('f-empresa').value;
+  const buscar=document.getElementById('f-buscar').value.toLowerCase();
+
+  let otData=await ProyectosAPI.getOrdenesTrabajo({limit:200});
+  if(emp) otData=otData.filter(r=>r.empresa_id===emp);
+  const data=otData;
+  let rows=data||[];
+  if(buscar) rows=rows.filter(r=>(r.proyectos?.nombre||'').toLowerCase().includes(buscar));
+
+  const ESTADO_COLOR={emitida:'var(--blue)',en_proceso:'var(--orange)',completada:'var(--green)',cancelada:'var(--muted)'};
+
+  document.getElementById('contenido').innerHTML=`
+    <div style="overflow-x:auto"><table>
+      <thead><tr><th>Empresa</th><th>Proyecto / OC</th><th>Tipo</th><th>Recursos (hs)</th><th>Entrega</th><th>Estado</th><th>Acciones</th></tr></thead>
+      <tbody>${rows.length?rows.map(r=>{
+        const oc=r.proyectos?.contratos?.numero_contrato||r.proyectos?.numero_oc||'—';
+        const totalHs=(Number(r.hs_ayudante||0)+Number(r.hs_oficial||0)+Number(r.hs_oficial_esp||0)+Number(r.hs_supervisor||0)+Number(r.hs_higiene||0));
+        return`<tr>
+          <td style="font-size:12px">${r.empresas?.nombre||'—'}</td>
+          <td>
+            <div style="font-weight:500;font-size:13px">${r.proyectos?.nombre||'—'}</div>
+            <div style="font-size:11px;color:var(--muted)">${oc}</div>
+          </td>
+          <td style="font-size:12px;color:var(--muted)">${r.tipo}</td>
+          <td>
+            <div style="font-size:11px;display:flex;gap:6px;flex-wrap:wrap">
+              ${r.hs_ayudante?`<span style="background:var(--bg3);padding:1px 6px;border-radius:4px">Ay: ${r.hs_ayudante}h</span>`:''}
+              ${r.hs_oficial?`<span style="background:var(--bg3);padding:1px 6px;border-radius:4px">Of: ${r.hs_oficial}h</span>`:''}
+              ${r.hs_oficial_esp?`<span style="background:var(--bg3);padding:1px 6px;border-radius:4px">Esp: ${r.hs_oficial_esp}h</span>`:''}
+              ${r.hs_supervisor?`<span style="background:var(--bg3);padding:1px 6px;border-radius:4px">Sup: ${r.hs_supervisor}h</span>`:''}
+              ${r.hs_higiene?`<span style="background:var(--bg3);padding:1px 6px;border-radius:4px">SH: ${r.hs_higiene}h</span>`:''}
+              <span style="color:var(--muted)">= ${totalHs}h</span>
+            </div>
+          </td>
+          <td class="mono">${r.fecha_entrega?fmtF(r.fecha_entrega):'—'}</td>
+          <td><span style="font-size:11px;padding:2px 8px;border-radius:4px;background:rgba(0,0,0,0.2);color:${ESTADO_COLOR[r.estado||'emitida']}">${r.estado||'emitida'}</span></td>
+          <td><div style="display:flex;gap:6px">
+            <button class="btn btn-sm btn-ghost" onclick="imprimirOTById('${r.id}')">🖨 Imprimir</button>
+            <button class="btn btn-sm btn-ghost" onclick="editarOT('${r.id}')">Editar</button>
+            ${r.estado!=='completada'?`<button class="btn btn-sm btn-success" onclick="cambiarEstadoOT('${r.id}','completada')">✓</button>`:''}
+          </div></td>
+        </tr>`;
+      }).join(''):'<tr><td colspan="7" style="text-align:center;padding:40px;color:var(--muted)">Sin órdenes de trabajo</td></tr>'}</tbody>
+    </table></div>`;
+}
+
+async function editarOT(id){
+  const r=await ProyectosAPI.getOrdenTrabajoById(id);
+  if(!r) return;
+  otEditId=id;
+  document.getElementById('ot-titulo').textContent='Editar Orden de Trabajo';
+  document.getElementById('not-empresa').value=r.empresa_id;
+  await cargarProyectosOT();
+  document.getElementById('not-proyecto').value=r.proyecto_id||'';
+  document.getElementById('not-tipo').value=r.tipo||'fabricacion';
+  document.getElementById('not-fecha-entrega').value=r.fecha_entrega||'';
+  document.getElementById('not-hs-ayudante').value=r.hs_ayudante||'';
+  document.getElementById('not-hs-oficial').value=r.hs_oficial||'';
+  document.getElementById('not-hs-esp').value=r.hs_oficial_esp||'';
+  document.getElementById('not-hs-supervisor').value=r.hs_supervisor||'';
+  document.getElementById('not-hs-higiene').value=r.hs_higiene||'';
+  document.getElementById('not-descripcion').value=r.descripcion||'';
+  document.getElementById('not-obs').value=r.observaciones||'';
+  document.getElementById('modal-ot').classList.add('show');
+}
+
+async function cambiarEstadoOT(id,estado){
+  await ProyectosAPI.cambiarEstadoOT(id,estado);
+  cargarOrdenesOT();
+}
+
+async function imprimirOTById(id){
+  const r=await ProyectosAPI.getOrdenTrabajoById(otEditId);
+  if(r) generarPDFOrdenTrabajo(r);
+}
+
+function imprimirOT(){
+  const proyId=document.getElementById('not-proyecto').value;
+  if(!proyId){toast('Seleccioná un proyecto primero.', 'warn');return;}
+  const sel=document.getElementById('not-proyecto');
+  const opt=sel.options[sel.selectedIndex];
+  let d={};
+  try{d=JSON.parse(opt.dataset.json||'{}');}catch(e){}
+  const r={
+    proyectos:{nombre:opt.textContent.trim(),numero_oc:d.contrato,clientes:{nombre:d.cliente},empresas:{nombre:document.getElementById('not-empresa').value==='a1000000-0000-0000-0000-000000000001'?'Hidromec S.R.L.':'Placemem S.R.L.'}},
+    tipo:document.getElementById('not-tipo').value,
+    fecha_entrega:document.getElementById('not-fecha-entrega').value,
+    hs_ayudante:parseFloat(document.getElementById('not-hs-ayudante').value)||0,
+    hs_oficial:parseFloat(document.getElementById('not-hs-oficial').value)||0,
+    hs_oficial_esp:parseFloat(document.getElementById('not-hs-esp').value)||0,
+    hs_supervisor:parseFloat(document.getElementById('not-hs-supervisor').value)||0,
+    hs_higiene:parseFloat(document.getElementById('not-hs-higiene').value)||0,
+    descripcion:document.getElementById('not-descripcion').value,
+    observaciones:document.getElementById('not-obs').value,
+    id:'BORRADOR',
+  };
+  generarPDFOrdenTrabajo(r);
+}
+
+function generarPDFOrdenTrabajo(r){
+  const {jsPDF}=window.jspdf;
+  const doc=new jsPDF({format:'a4',unit:'mm'});
+  const fmtD=d=>d?new Date(d+'T12:00:00').toLocaleDateString('es-AR'):'—';
+  const L=10,W=190,midX=105,T=8;
+
+  // Borde doble
+  doc.setDrawColor(0,0,0);doc.setLineWidth(0.8);doc.rect(L,T,W,275);
+  doc.setLineWidth(0.3);doc.rect(L+1,T+1,W-2,273);
+
+  // Header gris
+  doc.setFillColor(245,245,245);doc.rect(L+1,T+1,W-2,40,'F');
+
+  // Empresa izq
+  doc.setFontSize(16);doc.setFont('helvetica','bold');doc.setTextColor(0,0,0);
+  doc.text(r.proyectos?.empresas?.nombre||'Hidromec S.R.L.',L+5,T+14);
+  doc.setFontSize(8);doc.setFont('helvetica','normal');doc.setTextColor(80,80,80);
+  doc.text('Colectora Oeste 1525 - Zárate, Bs. As.',L+5,T+20);
+  doc.text('Tel: 03487-456419',L+5,T+26);
+
+  // Divisor vertical
+  doc.setDrawColor(180,180,180);doc.setLineWidth(0.3);doc.line(midX-10,T+1,midX-10,T+41);
+
+  // Título centro
+  doc.setDrawColor(0,0,0);doc.setLineWidth(0.6);
+  doc.setFontSize(18);doc.setFont('helvetica','bold');doc.setTextColor(0,0,0);
+  doc.text('ORDEN DE TRABAJO',midX+15,T+13,{align:'center'});
+  doc.setFontSize(10);doc.setFont('helvetica','normal');
+  doc.text('Fecha emisión: '+new Date().toLocaleDateString('es-AR'),midX+15,T+22,{align:'center'});
+  doc.text('Tipo: '+r.tipo.toUpperCase(),midX+15,T+30,{align:'center'});
+
+  // OT N°
+  doc.setFontSize(9);doc.setFont('helvetica','bold');
+  doc.text('OT N°:',160,T+6);
+  doc.setFont('courier','bold');doc.setFontSize(11);
+  doc.text(String(r.id||'').substring(0,8).toUpperCase(),178,T+6);
+
+  // Separador
+  doc.setLineWidth(0.5);doc.setDrawColor(0,0,0);doc.line(L+1,T+41,L+W-1,T+41);
+
+  // Datos del proyecto
+  const yP=T+41;
+  doc.setFillColor(250,250,250);doc.rect(L+1,yP,W-2,32,'F');
+  const lx=L+4,vx=L+40;
+  doc.setFontSize(8);doc.setFont('helvetica','bold');doc.setTextColor(0,0,0);
+  doc.text('PROYECTO:',lx,yP+8);
+  doc.setFont('helvetica','normal');doc.setFontSize(10);
+  doc.text(r.proyectos?.nombre||'—',vx,yP+8);
+
+  doc.setFont('helvetica','bold');doc.setFontSize(8);
+  doc.text('CLIENTE:',lx,yP+16);
+  doc.setFont('helvetica','normal');
+  doc.text(r.proyectos?.clientes?.nombre||'—',vx,yP+16);
+
+  doc.setFont('helvetica','bold');
+  doc.text('OC / CONTRATO:',lx,yP+24);
+  doc.setFont('helvetica','normal');
+  doc.text(r.proyectos?.contratos?.numero_contrato||r.proyectos?.numero_oc||'—',vx,yP+24);
+
+  // Derecha datos
+  doc.setFont('helvetica','bold');doc.setFontSize(8);
+  doc.text('FECHA ENTREGA:',midX+10,yP+8);
+  doc.setFont('helvetica','normal');doc.setFontSize(11);
+  doc.setTextColor(r.fecha_entrega?200:100,50,50);
+  doc.text(fmtD(r.fecha_entrega),midX+44,yP+8);
+  doc.setTextColor(0,0,0);
+
+  doc.setFont('helvetica','bold');doc.setFontSize(8);
+  doc.text('ESTADO:',midX+10,yP+16);
+  doc.setFont('helvetica','normal');
+  doc.text('EMITIDA',midX+28,yP+16);
+
+  // Separador
+  doc.setLineWidth(0.4);doc.line(L+1,yP+32,L+W-1,yP+32);
+
+  // Tabla recursos
+  const yR=yP+32;
+  doc.setFillColor(220,220,220);doc.rect(L+1,yR,W-2,8,'F');
+  doc.setFontSize(11);doc.setFont('helvetica','bold');doc.setTextColor(0,0,0);
+  doc.text('RECURSOS ASIGNADOS',midX,yR+6,{align:'center'});
+  doc.setLineWidth(0.3);doc.line(L+1,yR+8,L+W-1,yR+8);
+
+  const cols=[
+    {label:'AYUDANTE',hs:r.hs_ayudante||0},
+    {label:'OFICIAL',hs:r.hs_oficial||0},
+    {label:'OF. ESPECIALIZADO',hs:r.hs_oficial_esp||0},
+    {label:'SUPERVISOR',hs:r.hs_supervisor||0},
+    {label:'TÉC. S. E HIG.',hs:r.hs_higiene||0},
+  ];
+  const colW=W/cols.length;
+  const yRC=yR+8;
+
+  // Header columnas
+  doc.setFontSize(8);doc.setFont('helvetica','bold');doc.setTextColor(80,80,80);
+  cols.forEach((c,i)=>{
+    const cx=L+1+i*colW+colW/2;
+    doc.text(c.label,cx,yRC+6,{align:'center'});
+  });
+  doc.setDrawColor(200,200,200);doc.line(L+1,yRC+8,L+W-1,yRC+8);
+
+  // Valores horas
+  const yRV=yRC+8;
+  doc.setFillColor(252,252,252);doc.rect(L+1,yRV,W-2,16,'F');
+  cols.forEach((c,i)=>{
+    const cx=L+1+i*colW+colW/2;
+    doc.setFontSize(20);doc.setFont('courier','bold');doc.setTextColor(0,0,0);
+    doc.text(c.hs>0?String(c.hs)+'h':'—',cx,yRV+13,{align:'center'});
+    if(i>0){doc.setDrawColor(220,220,220);doc.setLineWidth(0.2);doc.line(L+1+i*colW,yRV,L+1+i*colW,yRV+16);}
+  });
+  doc.setLineWidth(0.4);doc.setDrawColor(0,0,0);doc.line(L+1,yRV+16,L+W-1,yRV+16);
+
+  // Total horas
+  const yRT=yRV+16;
+  const totalHs=cols.reduce((s,c)=>s+c.hs,0);
+  doc.setFillColor(30,36,54);doc.rect(L+1,yRT,W-2,10,'F');
+  doc.setFontSize(10);doc.setFont('helvetica','bold');doc.setTextColor(255,255,255);
+  doc.text('TOTAL HORAS COTIZADAS:',L+6,yRT+7);
+  doc.setFontSize(14);doc.setFont('courier','bold');
+  doc.text(totalHs+'h',L+W-8,yRT+7,{align:'right'});
+
+  // Descripción del trabajo
+  const yD=yRT+14;
+  doc.setFillColor(230,230,230);doc.rect(L+1,yD,W-2,8,'F');
+  doc.setFontSize(11);doc.setFont('helvetica','bold');doc.setTextColor(0,0,0);
+  doc.text('DESCRIPCIÓN DEL TRABAJO',midX,yD+6,{align:'center'});
+  doc.setLineWidth(0.3);doc.line(L+1,yD+8,L+W-1,yD+8);
+
+  const yDC=yD+8;
+  doc.setFillColor(255,255,255);doc.rect(L+1,yDC,W-2,45,'F');
+  doc.setFontSize(10);doc.setFont('helvetica','normal');doc.setTextColor(0,0,0);
+  if(r.descripcion){
+    const lines=doc.splitTextToSize(r.descripcion,W-12);
+    doc.text(lines,L+6,yDC+8);
+  }
+  doc.setLineWidth(0.3);doc.line(L+1,yDC+45,L+W-1,yDC+45);
+
+  // Observaciones
+  const yO=yDC+45;
+  doc.setFillColor(245,245,245);doc.rect(L+1,yO,W-2,7,'F');
+  doc.setFontSize(9);doc.setFont('helvetica','bold');
+  doc.text('OBSERVACIONES / NOTAS PARA TALLER:',L+4,yO+5);
+  doc.setLineWidth(0.2);doc.line(L+1,yO+7,L+W-1,yO+7);
+
+  const yOC=yO+7;
+  doc.setFillColor(255,255,255);doc.rect(L+1,yOC,W-2,35,'F');
+  if(r.observaciones){
+    doc.setFontSize(10);doc.setFont('helvetica','normal');doc.setTextColor(0,0,0);
+    const obsLines=doc.splitTextToSize(r.observaciones,W-12);
+    doc.text(obsLines,L+6,yOC+8);
+  }
+  doc.setLineWidth(0.3);doc.setDrawColor(0,0,0);doc.line(L+1,yOC+35,L+W-1,yOC+35);
+
+  // Firmado
+  const yF=yOC+35;
+  doc.setLineWidth(0.4);doc.line(L+1,yF,L+W-1,yF);
+  doc.setFontSize(8.5);doc.setFont('helvetica','italic');doc.setTextColor(60,60,60);
+  doc.text('Recibido conforme / Jefe de Taller',L+5,yF+7);
+  doc.line(L+5,yF+18,L+80,yF+18);
+  doc.line(L+100,yF+18,L+W-8,yF+18);
+  doc.setFontSize(8);doc.setFont('helvetica','normal');doc.setTextColor(0,0,0);
+  doc.text('FIRMA Y ACLARACIÓN',L+35,yF+23,{align:'center'});
+  doc.text('FECHA',L+140,yF+23,{align:'center'});
+
+  // Pie
+  const yPie=yF+26;
+  doc.setFillColor(240,240,240);doc.rect(L+1,yPie,W-2,18,'F');
+  doc.setLineWidth(0.3);doc.line(L+1,yPie,L+W-1,yPie);
+  doc.setFontSize(8);doc.setFont('helvetica','bold');doc.setTextColor(0,0,0);
+  doc.text('⚠ ESTE DOCUMENTO NO CONTIENE INFORMACIÓN DE COSTOS — USO EXCLUSIVO DE TALLER',midX,yPie+6,{align:'center'});
+  doc.setFontSize(7.5);doc.setFont('helvetica','normal');doc.setTextColor(100,100,100);
+  doc.text('Sistema ERP — Hidromec SRL / Placemem SRL   |   '+new Date().toLocaleString('es-AR'),midX,yPie+13,{align:'center'});
+
+  doc.save('OrdenTrabajo_'+String(r.id||'borrador').substring(0,8)+'.pdf');
+}
+
+function cerrarModal(id){document.getElementById(id).classList.remove('show');}
+// logout() → ahora en ERP.logout() (erp-sidebar.js)
+
+init();
+</script>
+</body>
+</html>
