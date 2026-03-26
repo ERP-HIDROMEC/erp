@@ -1418,12 +1418,22 @@ async function procesarXLS(input) {
     return;
   }
 
-  // Buscar empleados en la BD por DNI
+  // Buscar empleados en la BD — sin filtro de empresa para encontrar de ambas
   const empId = document.getElementById('f-empresa').value || 'a1000000-0000-0000-0000-000000000001';
-  const empleadosBD = await EmpleadosAPI.getEmpleados({ empresaId: empId });
+  const empleadosBD = await EmpleadosAPI.getEmpleados({ soloActivos: false });
   const mapaDni = {};
   (empleadosBD || []).forEach(e => {
-    if (e.dni) mapaDni[e.dni.replace(/\D/g,'')] = e;
+    if (e.dni) {
+      const dniLimpio = String(e.dni).replace(/\D/g,'');
+      mapaDni[dniLimpio] = e;
+      // También indexar por CUIL completo si coincide
+      if (dniLimpio.length === 8) {
+        mapaDni['20'+dniLimpio+'0'] = e;
+        mapaDni['23'+dniLimpio+'0'] = e;
+        mapaDni['27'+dniLimpio+'0'] = e;
+        mapaDni['24'+dniLimpio+'0'] = e;
+      }
+    }
   });
 
   // Construir filas para preview
@@ -1435,8 +1445,10 @@ async function procesarXLS(input) {
   tbody.innerHTML = '';
 
   parsed.empleados.forEach(emp => {
-    const dniLimpio = emp.cuil.replace(/\D/g,'').slice(2,-1); // CUIL → DNI (sin prefijo/sufijo)
-    const empBD = mapaDni[emp.cuil.replace(/\D/g,'')] || mapaDni[dniLimpio];
+    const cuilLimpio = emp.cuil.replace(/\D/g,'');
+    // DNI = dígitos del medio del CUIL (posición 2 a 9, 8 dígitos)
+    const dniLimpio = cuilLimpio.length >= 10 ? cuilLimpio.substring(2, cuilLimpio.length - 1) : cuilLimpio;
+    const empBD = mapaDni[cuilLimpio] || mapaDni[dniLimpio];
     const matched = !!empBD;
     if (!matched) noMatch++;
 
@@ -1449,8 +1461,8 @@ async function procesarXLS(input) {
       empleado_nombre: emp.nombre,
       empleado_cuil: emp.cuil,
       empresa_id: empId,
-      periodo: parsed.periodo,
-      tipo: parsed.tipoLiq,
+      periodo: emp.periodo || parsed.periodo,
+      tipo: emp.tipoLiq || parsed.tipoLiq,
       monto_bruto: bruto,
       deducciones: aportes,
       monto_neto: neto,
@@ -1461,7 +1473,7 @@ async function procesarXLS(input) {
     const tr = document.createElement('tr');
     tr.innerHTML = `
       <td style="padding:7px 8px;font-size:12px;border-bottom:1px solid var(--border)">${emp.nombre}</td>
-      <td style="padding:7px 8px;font-size:12px;border-bottom:1px solid var(--border)">${parsed.tipoLiq}</td>
+      <td style="padding:7px 8px;font-size:12px;border-bottom:1px solid var(--border)">${emp.tipoLiq || parsed.tipoLiq}</td>
       <td style="padding:7px 8px;font-family:'DM Mono',monospace;font-size:12px;border-bottom:1px solid var(--border)">${fmt(bruto)}</td>
       <td style="padding:7px 8px;font-family:'DM Mono',monospace;font-size:12px;color:var(--red);border-bottom:1px solid var(--border)">-${fmt(aportes)}</td>
       <td style="padding:7px 8px;font-family:'DM Mono',monospace;font-size:12px;color:var(--green);border-bottom:1px solid var(--border)">${fmt(neto)}</td>
@@ -1555,73 +1567,86 @@ function parsearNumeroAR(s) {
   return parseFloat(clean) || 0;
 }
 
+function detectarTipoLiq(desc) {
+  const d = desc.toLowerCase();
+  if (d.includes('adelanto')) return 'adelanto';
+  if ((d.includes('1') || d.includes('1er') || d.includes('primera')) && d.includes('quinc')) return '1ra_quincena';
+  if ((d.includes('2') || d.includes('2da') || d.includes('segunda')) && d.includes('quinc')) return '2da_quincena';
+  if (d.includes('vacac')) return 'vacaciones';
+  if (d.includes('aguinaldo') || d.includes('sac')) return 'aguinaldo';
+  if (d.includes('final') || d.includes('desempleo')) return 'liquidacion_final';
+  if (d.includes('maestranza') || d.includes('socios') || d.includes('normales')) return 'mensual';
+  if (d.includes('maternidad')) return 'maternidad';
+  return 'mensual';
+}
+
 function parsearLiquidacion(strings) {
-  // Detectar período y tipo de liquidación
-  let periodo = '';
-  let tipoLiq = 'mensual';
+  // Encontrar todas las liquidaciones con sus rangos
+  const liquidaciones = [];
+  let periodoBase = '';
 
-  for (const s of strings) {
-    const mLiq = s.match(/Liquidaci[oó]n\s*:\s*(\d+)\s*-\s*(\d{4})\s*(.+)/i);
-    if (mLiq && !periodo) {
-      const mes = mLiq[1].padStart(2,'0');
-      const anio = mLiq[2];
-      periodo = `${anio}-${mes}`;
-      const desc = mLiq[3].toLowerCase();
-      if (desc.includes('1') && desc.includes('quinc')) tipoLiq = '1ra_quincena';
-      else if (desc.includes('2') && desc.includes('quinc')) tipoLiq = '2da_quincena';
-      else if (desc.includes('adelanto')) tipoLiq = 'adelanto';
-      else tipoLiq = 'mensual';
-      break;
+  for (let i = 0; i < strings.length; i++) {
+    const mLiq = strings[i].match(/^Liquidaci[oó]n\s*:\s*(\d+)\s*-\s*(\d{4})\s*(.+)/i);
+    if (mLiq) {
+      if (!periodoBase) {
+        periodoBase = `${mLiq[2]}-${mLiq[1].padStart(2,'0')}`;
+      }
+      liquidaciones.push({
+        idx: i,
+        periodo: `${mLiq[2]}-${mLiq[1].padStart(2,'0')}`,
+        tipoLiq: detectarTipoLiq(mLiq[3]),
+        desc: mLiq[3].trim(),
+      });
     }
   }
 
-  // Parsear empleados
-  const empleados = [];
-  let i = 0;
+  if (!liquidaciones.length) return { periodo: '', tipoLiq: 'mensual', empleados: [] };
 
-  while (i < strings.length) {
-    const s = strings[i];
-    const mEmp = s.match(/^Empleado\s*:\s*\d+\s*-\s*(.+?)\s*-\s*([\d]{10,11})\s*$/);
-    if (mEmp) {
-      const nombre = mEmp[1].trim();
-      const cuil = mEmp[2].trim();
+  // Parsear empleados dentro de cada liquidación
+  const todasLiqEmpleados = [];
 
-      // Avanzar hasta encontrar los 3 totales finales del empleado
-      // El patrón es: al final hay 3 números grandes seguidos que son remun_total, no_remun_total, aportes_total
-      let remun = 0, noRemun = 0, aportes = 0;
-      let j = i + 1;
-      const numeros = [];
+  for (let li = 0; li < liquidaciones.length; li++) {
+    const liq = liquidaciones[li];
+    const endIdx = li + 1 < liquidaciones.length ? liquidaciones[li+1].idx : strings.length;
 
-      // Recolectar todos los números hasta el próximo empleado o fin
-      while (j < strings.length) {
-        const sj = strings[j];
-        if (sj.match(/^Empleado\s*:/)) break;
-        if (sj.match(/^Liquidaci[oó]n\s*:/)) break;
-        // Es un número AR con decimales?
-        if (sj.match(/^-?[\d]{1,3}(?:\.\d{3})*,\d{2}$/)) {
-          numeros.push({ val: parsearNumeroAR(sj), idx: j });
+    let i = liq.idx + 1;
+    while (i < endIdx) {
+      const s = strings[i];
+      const mEmp = s.match(/^Empleado\s*:\s*\d+\s*-\s*(.+?)\s*-\s*([\d]{10,11})\s*$/);
+      if (mEmp) {
+        const nombre = mEmp[1].trim();
+        const cuil = mEmp[2].trim();
+        let j = i + 1;
+        const numeros = [];
+        while (j < endIdx) {
+          const sj = strings[j];
+          if (sj.match(/^Empleado\s*:/)) break;
+          if (sj.match(/^-?[\d]{1,3}(?:\.\d{3})*,\d{2}$/)) {
+            numeros.push(parsearNumeroAR(sj));
+          }
+          j++;
         }
-        j++;
+        if (numeros.length >= 3) {
+          const last3 = numeros.slice(-3);
+          const remun   = Math.abs(last3[0]);
+          const noRemun = Math.abs(last3[1]);
+          const aportes = Math.abs(last3[2]);
+          if (remun > 0 || noRemun > 0) {
+            todasLiqEmpleados.push({
+              nombre, cuil, remun, noRemun, aportes,
+              periodo: liq.periodo,
+              tipoLiq: liq.tipoLiq,
+            });
+          }
+        }
+        i = j;
+      } else {
+        i++;
       }
-
-      // Los últimos 3 números del bloque son los totales
-      if (numeros.length >= 3) {
-        const last3 = numeros.slice(-3);
-        remun   = Math.abs(last3[0].val);
-        noRemun = Math.abs(last3[1].val);
-        aportes = Math.abs(last3[2].val);
-      }
-
-      if (remun > 0 || noRemun > 0) {
-        empleados.push({ nombre, cuil, remun, noRemun, aportes });
-      }
-      i = j;
-    } else {
-      i++;
     }
   }
 
-  return { periodo, tipoLiq, empleados };
+  return { periodo: periodoBase, tipoLiq: 'multiple', empleados: todasLiqEmpleados };
 }
 
 </script>
