@@ -102,6 +102,12 @@
         <input type="text" id="ne-dni" placeholder="12345678">
       </div>
       <div class="form-group">
+        <label>CUIL</label>
+        <input type="text" id="ne-cuil" placeholder="20-12345678-0">
+      </div>
+    </div>
+    <div class="form-row">
+      <div class="form-group">
         <label>Categoría / Rol</label>
         <input type="text" id="ne-categoria" placeholder="Ej: Oficial, Supervisor...">
       </div>
@@ -541,11 +547,12 @@ async function cargarEmpleados(){
 
   document.getElementById('contenido').innerHTML=`
     <div style="overflow-x:auto"><table>
-      <thead><tr><th>Empresa</th><th>Nombre</th><th>DNI</th><th>Categoría</th><th>Contrato</th><th>Costo/hora</th><th>Estado</th><th>Acciones</th></tr></thead>
+      <thead><tr><th>Empresa</th><th>Nombre</th><th>DNI</th><th>CUIL</th><th>Categoría</th><th>Contrato</th><th>Costo/hora</th><th>Estado</th><th>Acciones</th></tr></thead>
       <tbody>${rows.length?rows.map(r=>`<tr>
         <td style="font-size:12px">${r.empresas?.nombre||'—'}</td>
         <td><strong>${r.nombre}</strong></td>
         <td class="mono">${r.dni||'—'}</td>
+          <td class="mono" style="font-size:12px">${r.cuil||'—'}</td>
         <td style="font-size:12px;color:var(--muted)">${r.categoria||'—'}</td>
         <td><span class="tag ${r.tipo_contrato}">${r.tipo_contrato}</span></td>
         <td class="mono">${fmt(r.costo_hora)}/h</td>
@@ -561,7 +568,7 @@ async function cargarEmpleados(){
 function abrirNuevoEmpleado(){
   empEditId=null;
   document.getElementById('emp-titulo').textContent='Nuevo empleado';
-  ['ne-nombre','ne-dni','ne-categoria','ne-costo'].forEach(id=>document.getElementById(id).value='');
+  ['ne-nombre','ne-dni','ne-cuil','ne-categoria','ne-costo'].forEach(id=>document.getElementById(id).value='');
   document.getElementById('ne-tipo').value='convenio';
   document.getElementById('ne-activo').value='true';
   document.getElementById('modal-empleado').classList.add('show');
@@ -574,6 +581,7 @@ async function editarEmpleado(id){
   document.getElementById('emp-titulo').textContent='Editar empleado';
   document.getElementById('ne-empresa').value=r.empresa_id;
   document.getElementById('ne-nombre').value=r.nombre;
+  document.getElementById('ne-cuil').value=r.cuil||'';
   document.getElementById('ne-dni').value=r.dni||'';
   document.getElementById('ne-categoria').value=r.categoria||'';
   document.getElementById('ne-tipo').value=r.tipo_contrato;
@@ -589,6 +597,7 @@ async function guardarEmpleado(){
     empresa_id:document.getElementById('ne-empresa').value,
     nombre:nombre.toUpperCase(),
     dni:document.getElementById('ne-dni').value||null,
+    cuil:document.getElementById('ne-cuil').value||null,
     categoria:document.getElementById('ne-categoria').value||null,
     tipo_contrato:document.getElementById('ne-tipo').value,
     costo_hora:parseFloat(document.getElementById('ne-costo').value)||0,
@@ -1423,14 +1432,17 @@ async function procesarXLS(input) {
   const empleadosBD = await EmpleadosAPI.getEmpleados({ soloActivos: false });
   const mapaDni = {};
   (empleadosBD || []).forEach(e => {
+    // Indexar por CUIL directo (match exacto — lo más confiable)
+    if (e.cuil) {
+      const cuilLimpio = String(e.cuil).replace(/\D/g,'');
+      if (cuilLimpio) mapaDni[cuilLimpio] = e;
+    }
+    // Indexar por DNI como fallback
     if (e.dni !== null && e.dni !== undefined) {
-      // dni puede ser número o string en la BD — convertir siempre a string limpio
       const dniLimpio = String(e.dni).replace(/\D/g,'').replace(/^0+/,'');
       if (dniLimpio) {
         mapaDni[dniLimpio] = e;
-        // Indexar también con cero adelante por si acaso
         mapaDni['0'+dniLimpio] = e;
-        // Indexar por posibles CUILs derivados
         ['20','23','24','27'].forEach(pref => {
           ['0','1','2','3','4','5','6','7','8','9'].forEach(ver => {
             mapaDni[pref+dniLimpio+ver] = e;
@@ -1452,7 +1464,22 @@ async function procesarXLS(input) {
     const cuilLimpio = emp.cuil.replace(/\D/g,'');
     // DNI = dígitos del medio del CUIL (posición 2 a 9, 8 dígitos)
     const dniLimpio = cuilLimpio.length >= 10 ? cuilLimpio.substring(2, cuilLimpio.length - 1) : cuilLimpio;
-    const empBD = mapaDni[cuilLimpio] || mapaDni[dniLimpio];
+    // Match por CUIL/DNI primero, si no matchea buscar por nombre
+    let empBD = mapaDni[cuilLimpio] || mapaDni[dniLimpio];
+    if (!empBD) {
+      // Fallback: buscar por nombre normalizado
+      const nomXLS = emp.nombre.toLowerCase()
+        .replace(/[,\.]/g,'').replace(/\s+/g,' ').trim();
+      empBD = (empleadosBD || []).find(e => {
+        const nomBD = (e.nombre||'').toLowerCase()
+          .replace(/[,\.]/g,'').replace(/\s+/g,' ').trim();
+        // Chequear si las palabras clave del nombre XLS están en el nombre BD
+        const palabrasXLS = nomXLS.split(' ').filter(p=>p.length>2);
+        const palabrasBD  = nomBD.split(' ').filter(p=>p.length>2);
+        const matches = palabrasXLS.filter(p => palabrasBD.some(b => b.includes(p)||p.includes(b)));
+        return matches.length >= Math.min(2, palabrasXLS.length);
+      });
+    }
     const matched = !!empBD;
     if (!matched) noMatch++;
 
