@@ -39,8 +39,10 @@
 <div id="sidebar-root"></div>
 
 <main class="main">
+<input type="file" id="xls-input" accept=".xls,.xlsx" style="display:none" onchange="procesarXLS(this)">
   <div class="page-header">
     <h2>RRHH</h2>
+    <button class="btn btn-ghost" id="btn-importar-xls" onclick="document.getElementById('xls-input').click()" style="display:none">↑ Importar XLS</button>
     <button class="btn btn-primary" id="btn-nuevo" onclick="abrirNuevo()">+ Nuevo empleado</button>
   </div>
 
@@ -475,7 +477,7 @@ function cambiarTab(tab,btn){
   btn.classList.add('active');
   const btnNuevo=document.getElementById('btn-nuevo');
   const noDoc=['ausentismo','costos'];
-  if(tab==='sueldos') btnNuevo.textContent='+ Registrar sueldo';
+  if(tab==='sueldos'){ btnNuevo.textContent='+ Registrar sueldo'; document.getElementById('btn-importar-xls').style.display=''; } else { document.getElementById('btn-importar-xls').style.display='none'; }
   else if(tab==='vehiculos') btnNuevo.textContent='+ Nuevo vehiculo/equipo';
   else if(tab==='docs-empresa') btnNuevo.textContent='+ Subir documento';
   else if(tab==='docs-vehiculos') btnNuevo.textContent='+ Subir documento';
@@ -924,7 +926,7 @@ async function cargarDocumentos(categoria){
   const en30=new Date();en30.setDate(en30.getDate()+30);
   const en30Str=en30.toISOString().split('T')[0];
 
-  let docEmpData=await EmpleadosAPI.getDocumentosEmpleado({});
+  let docEmpData=await EmpleadosAPI.getDocumentosEmpleado({categoria});
   if(emp) docEmpData=docEmpData.filter(r=>r.empresa_id===emp);
   const data=docEmpData;
   let rows=data||[];
@@ -1390,6 +1392,269 @@ function cerrarModal(id){document.getElementById(id).classList.remove('show');}
 // logout() → ahora en ERP.logout() (erp-sidebar.js)
 
 init();
+
+
+// ══════════════════════════════════════════════════════════════
+// IMPORTADOR XLS SUELDOS (formato BIFF — sistema liquidación)
+// ══════════════════════════════════════════════════════════════
+
+let _importRows = [];   // filas procesadas para confirmar
+
+async function procesarXLS(input) {
+  const file = input.files[0];
+  if (!file) return;
+  input.value = '';
+
+  const buffer = await file.arrayBuffer();
+  const bytes = new Uint8Array(buffer);
+
+  // Extraer strings del BIFF (bytes legibles en Latin-1)
+  const strings = extraerStringsBIFF(bytes);
+
+  // Parsear empleados y totales
+  const parsed = parsearLiquidacion(strings);
+  if (!parsed.empleados.length) {
+    toast('No se encontraron empleados en el archivo.', 'warn');
+    return;
+  }
+
+  // Buscar empleados en la BD por DNI
+  const empId = document.getElementById('f-empresa').value || 'a1000000-0000-0000-0000-000000000001';
+  const empleadosBD = await EmpleadosAPI.getEmpleados({ empresaId: empId });
+  const mapaDni = {};
+  (empleadosBD || []).forEach(e => {
+    if (e.dni) mapaDni[e.dni.replace(/\D/g,'')] = e;
+  });
+
+  // Construir filas para preview
+  _importRows = [];
+  const fmt = v => new Intl.NumberFormat('es-AR', { style: 'currency', currency: 'ARS', maximumFractionDigits: 0 }).format(v || 0);
+
+  let noMatch = 0;
+  const tbody = document.getElementById('import-tabla-body');
+  tbody.innerHTML = '';
+
+  parsed.empleados.forEach(emp => {
+    const dniLimpio = emp.cuil.replace(/\D/g,'').slice(2,-1); // CUIL → DNI (sin prefijo/sufijo)
+    const empBD = mapaDni[emp.cuil.replace(/\D/g,'')] || mapaDni[dniLimpio];
+    const matched = !!empBD;
+    if (!matched) noMatch++;
+
+    const bruto = emp.remun + emp.noRemun;
+    const aportes = emp.aportes;
+    const neto = bruto - aportes;
+
+    _importRows.push({
+      empleado_bd_id: empBD?.id || null,
+      empleado_nombre: emp.nombre,
+      empleado_cuil: emp.cuil,
+      empresa_id: empId,
+      periodo: parsed.periodo,
+      tipo: parsed.tipoLiq,
+      monto_bruto: bruto,
+      deducciones: aportes,
+      monto_neto: neto,
+      pagado: false,
+      matched,
+    });
+
+    const tr = document.createElement('tr');
+    tr.innerHTML = `
+      <td style="padding:7px 8px;font-size:12px;border-bottom:1px solid var(--border)">${emp.nombre}</td>
+      <td style="padding:7px 8px;font-size:12px;border-bottom:1px solid var(--border)">${parsed.tipoLiq}</td>
+      <td style="padding:7px 8px;font-family:'DM Mono',monospace;font-size:12px;border-bottom:1px solid var(--border)">${fmt(bruto)}</td>
+      <td style="padding:7px 8px;font-family:'DM Mono',monospace;font-size:12px;color:var(--red);border-bottom:1px solid var(--border)">-${fmt(aportes)}</td>
+      <td style="padding:7px 8px;font-family:'DM Mono',monospace;font-size:12px;color:var(--green);border-bottom:1px solid var(--border)">${fmt(neto)}</td>
+      <td style="padding:7px 8px;font-size:12px;border-bottom:1px solid var(--border)">
+        ${matched 
+          ? '<span style="color:var(--green)">✓ '+empBD.nombre+'</span>'
+          : '<span style="color:var(--orange)">⚠ No encontrado</span>'}
+      </td>`;
+    tbody.appendChild(tr);
+  });
+
+  const totalBruto = _importRows.reduce((s,r) => s + r.monto_bruto, 0);
+  const totalNeto  = _importRows.reduce((s,r) => s + r.monto_neto, 0);
+
+  document.getElementById('import-resumen').innerHTML =
+    `<strong>Período:</strong> ${parsed.periodo} &nbsp;|&nbsp; 
+     <strong>Tipo:</strong> ${parsed.tipoLiq} &nbsp;|&nbsp;
+     <strong>Empleados:</strong> ${parsed.empleados.length} &nbsp;|&nbsp;
+     <strong>Total bruto:</strong> <span style="color:var(--green)">${fmt(totalBruto)}</span> &nbsp;|&nbsp;
+     <strong>Total neto:</strong> <span style="color:var(--green)">${fmt(totalNeto)}</span>`;
+
+  document.getElementById('import-no-match-warn').innerHTML = noMatch > 0
+    ? `⚠ ${noMatch} empleado(s) no encontrados en la BD — se importarán igual sin empleado_id asignado. Podés asignarlos manualmente después.`
+    : '✓ Todos los empleados fueron encontrados en la base de datos.';
+  document.getElementById('import-no-match-warn').style.color = noMatch > 0 ? 'var(--orange)' : 'var(--green)';
+
+  document.getElementById('modal-import-xls').classList.add('show');
+}
+
+async function confirmarImportXLS() {
+  const btn = document.getElementById('btn-confirmar-import');
+  btn.disabled = true;
+  btn.textContent = 'Importando...';
+
+  let ok = 0, err = 0;
+  for (const row of _importRows) {
+    try {
+      await EmpleadosAPI.registrarSueldo({
+        empresa_id: row.empresa_id,
+        empleado_id: row.empleado_bd_id || null,
+        periodo: row.periodo,
+        tipo: row.tipo,
+        monto_bruto: row.monto_bruto,
+        deducciones: row.deducciones,
+        monto_neto: row.monto_neto,
+        pagado: false,
+        fecha_pago: null,
+      });
+      ok++;
+    } catch(e) {
+      console.error('Error importando', row.empleado_nombre, e);
+      err++;
+    }
+  }
+
+  btn.disabled = false;
+  btn.textContent = 'Importar todos';
+  cerrarModal('modal-import-xls');
+  _importRows = [];
+  toast(`Importación completada: ${ok} registros OK${err ? ', ' + err + ' errores' : ''}.`, err ? 'warn' : 'success');
+  cargarSueldos();
+}
+
+// ── Parser BIFF ───────────────────────────────────────────────
+
+function extraerStringsBIFF(bytes) {
+  // Extraer secuencias de bytes ASCII/Latin-1 legibles
+  const result = [];
+  let current = '';
+  for (let i = 0; i < bytes.length; i++) {
+    const b = bytes[i];
+    if (b >= 0x20 && b <= 0x7e) {
+      current += String.fromCharCode(b);
+    } else if (b >= 0x80 && b <= 0xff) {
+      // Latin-1 extended — mapear caracteres comunes
+      const map = {0xe9:'é',0xe1:'á',0xed:'í',0xf3:'ó',0xfa:'ú',0xf1:'ñ',0xfc:'ü',0xd3:'Ó',0xc9:'É',0xcd:'Í',0xda:'Ú',0xc1:'Á',0xd1:'Ñ',0xba:'º',0xaa:'ª',0xf4:'ô',0xeb:'ë'};
+      current += map[b] || '';
+    } else {
+      if (current.trim().length >= 3) result.push(current.trim());
+      current = '';
+    }
+  }
+  if (current.trim().length >= 3) result.push(current.trim());
+  return result;
+}
+
+function parsearNumeroAR(s) {
+  // "1.234.567,89" → 1234567.89
+  if (!s) return 0;
+  const clean = String(s).replace(/\./g,'').replace(',','.');
+  return parseFloat(clean) || 0;
+}
+
+function parsearLiquidacion(strings) {
+  // Detectar período y tipo de liquidación
+  let periodo = '';
+  let tipoLiq = 'mensual';
+
+  for (const s of strings) {
+    const mLiq = s.match(/Liquidaci[oó]n\s*:\s*(\d+)\s*-\s*(\d{4})\s*(.+)/i);
+    if (mLiq && !periodo) {
+      const mes = mLiq[1].padStart(2,'0');
+      const anio = mLiq[2];
+      periodo = `${anio}-${mes}`;
+      const desc = mLiq[3].toLowerCase();
+      if (desc.includes('1') && desc.includes('quinc')) tipoLiq = '1ra_quincena';
+      else if (desc.includes('2') && desc.includes('quinc')) tipoLiq = '2da_quincena';
+      else if (desc.includes('adelanto')) tipoLiq = 'adelanto';
+      else tipoLiq = 'mensual';
+      break;
+    }
+  }
+
+  // Parsear empleados
+  const empleados = [];
+  let i = 0;
+
+  while (i < strings.length) {
+    const s = strings[i];
+    const mEmp = s.match(/^Empleado\s*:\s*\d+\s*-\s*(.+?)\s*-\s*([\d]{10,11})\s*$/);
+    if (mEmp) {
+      const nombre = mEmp[1].trim();
+      const cuil = mEmp[2].trim();
+
+      // Avanzar hasta encontrar los 3 totales finales del empleado
+      // El patrón es: al final hay 3 números grandes seguidos que son remun_total, no_remun_total, aportes_total
+      let remun = 0, noRemun = 0, aportes = 0;
+      let j = i + 1;
+      const numeros = [];
+
+      // Recolectar todos los números hasta el próximo empleado o fin
+      while (j < strings.length) {
+        const sj = strings[j];
+        if (sj.match(/^Empleado\s*:/)) break;
+        if (sj.match(/^Liquidaci[oó]n\s*:/)) break;
+        // Es un número AR con decimales?
+        if (sj.match(/^-?[\d]{1,3}(?:\.\d{3})*,\d{2}$/)) {
+          numeros.push({ val: parsearNumeroAR(sj), idx: j });
+        }
+        j++;
+      }
+
+      // Los últimos 3 números del bloque son los totales
+      if (numeros.length >= 3) {
+        const last3 = numeros.slice(-3);
+        remun   = Math.abs(last3[0].val);
+        noRemun = Math.abs(last3[1].val);
+        aportes = Math.abs(last3[2].val);
+      }
+
+      if (remun > 0 || noRemun > 0) {
+        empleados.push({ nombre, cuil, remun, noRemun, aportes });
+      }
+      i = j;
+    } else {
+      i++;
+    }
+  }
+
+  return { periodo, tipoLiq, empleados };
+}
+
 </script>
+
+<!-- MODAL IMPORTAR SUELDOS XLS -->
+<div class="modal-overlay" id="modal-import-xls">
+  <div class="modal" style="max-width:720px">
+    <h3>Importar sueldos desde XLS</h3>
+    <p style="font-size:13px;color:var(--muted);margin-bottom:16px">
+      Revisá los datos antes de confirmar. Se van a insertar en la tabla de sueldos.
+    </p>
+    <div id="import-resumen" style="background:var(--bg3);border-radius:8px;padding:12px;margin-bottom:14px;font-size:13px"></div>
+    <div style="overflow-x:auto;max-height:400px;overflow-y:auto">
+      <table style="width:100%;border-collapse:collapse">
+        <thead style="position:sticky;top:0;background:var(--bg2)">
+          <tr>
+            <th style="padding:8px;font-size:11px;color:var(--muted);text-align:left;border-bottom:1px solid var(--border)">Empleado</th>
+            <th style="padding:8px;font-size:11px;color:var(--muted);text-align:left;border-bottom:1px solid var(--border)">Tipo liquidación</th>
+            <th style="padding:8px;font-size:11px;color:var(--muted);text-align:left;border-bottom:1px solid var(--border)">Bruto</th>
+            <th style="padding:8px;font-size:11px;color:var(--muted);text-align:left;border-bottom:1px solid var(--border)">Aportes</th>
+            <th style="padding:8px;font-size:11px;color:var(--muted);text-align:left;border-bottom:1px solid var(--border)">Neto</th>
+            <th style="padding:8px;font-size:11px;color:var(--muted);text-align:left;border-bottom:1px solid var(--border)">Match BD</th>
+          </tr>
+        </thead>
+        <tbody id="import-tabla-body"></tbody>
+      </table>
+    </div>
+    <div style="margin-top:12px;padding:10px;background:var(--bg3);border-radius:8px;font-size:12px;color:var(--muted)" id="import-no-match-warn"></div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" onclick="cerrarModal('modal-import-xls')">Cancelar</button>
+      <button class="btn btn-success" id="btn-confirmar-import" onclick="confirmarImportXLS()">Importar todos</button>
+    </div>
+  </div>
+</div>
 </body>
 </html>
