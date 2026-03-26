@@ -236,34 +236,55 @@
 
     <!-- RETENCIONES -->
     <div style="background:var(--bg3);border-radius:10px;padding:16px;margin:16px 0">
-      <div style="font-size:12px;font-weight:500;color:var(--muted);text-transform:uppercase;letter-spacing:0.8px;margin-bottom:12px">
-        Retenciones recibidas en este pago
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">
+        <div style="font-size:12px;font-weight:500;color:var(--muted);text-transform:uppercase;letter-spacing:0.8px">
+          Retenciones recibidas en este pago
+        </div>
+        <div style="font-size:12px;color:var(--muted)">
+          Base (neto s/IVA): <strong id="ret-base-label" style="color:var(--text);font-family:'DM Mono',monospace">$0</strong>
+        </div>
       </div>
-      <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px">
-        <div class="form-group">
-          <label>Ret. IVA</label>
-          <input type="number" id="ret-iva" placeholder="0.00" oninput="calcularNetoPercibido()">
-        </div>
-        <div class="form-group">
-          <label>Ret. Ganancias</label>
-          <input type="number" id="ret-ganancias" placeholder="0.00" oninput="calcularNetoPercibido()">
-        </div>
-        <div class="form-group">
-          <label>Ret. IIBB</label>
-          <input type="number" id="ret-iibb" placeholder="0.00" oninput="calcularNetoPercibido()">
-        </div>
-        <div class="form-group">
-          <label>Ret. SUSS</label>
-          <input type="number" id="ret-suss" placeholder="0.00" oninput="calcularNetoPercibido()">
-        </div>
-        <div class="form-group">
-          <label>Tasa Municipal</label>
-          <input type="number" id="ret-municipal" placeholder="0.00" oninput="calcularNetoPercibido()">
-        </div>
-        <div class="form-group">
-          <label>Otras</label>
-          <input type="number" id="ret-otras" placeholder="0.00" oninput="calcularNetoPercibido()">
-        </div>
+      <!-- Headers -->
+      <div style="display:grid;grid-template-columns:1.4fr 0.8fr 1.2fr;gap:6px;margin-bottom:4px">
+        <div style="font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:0.6px">Tipo</div>
+        <div style="font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:0.6px">% (manual)</div>
+        <div style="font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:0.6px">Monto $</div>
+      </div>
+      <!-- IVA -->
+      <div style="display:grid;grid-template-columns:1.4fr 0.8fr 1.2fr;gap:6px;margin-bottom:6px;align-items:center">
+        <div style="font-size:13px;color:var(--muted)">Ret. IVA</div>
+        <input type="number" id="pct-iva" placeholder="0.00" step="0.01" min="0" max="100" oninput="pctAMonto('iva')" style="padding:7px 10px;background:var(--bg2);border:1px solid var(--border);border-radius:7px;color:var(--text);font-size:13px;font-family:'DM Sans',sans-serif;outline:none">
+        <input type="number" id="ret-iva" placeholder="0.00" oninput="calcularNetoPercibido()" style="padding:7px 10px;background:var(--bg2);border:1px solid var(--border);border-radius:7px;color:var(--text);font-size:13px;font-family:'DM Sans',sans-serif;outline:none">
+      </div>
+      <!-- Ganancias -->
+      <div style="display:grid;grid-template-columns:1.4fr 0.8fr 1.2fr;gap:6px;margin-bottom:6px;align-items:center">
+        <div style="font-size:13px;color:var(--muted)">Ret. Ganancias</div>
+        <input type="number" id="pct-ganancias" placeholder="0.00" step="0.01" min="0" max="100" oninput="pctAMonto('ganancias')" style="padding:7px 10px;background:var(--bg2);border:1px solid var(--border);border-radius:7px;color:var(--text);font-size:13px;font-family:'DM Sans',sans-serif;outline:none">
+        <input type="number" id="ret-ganancias" placeholder="0.00" oninput="calcularNetoPercibido()" style="padding:7px 10px;background:var(--bg2);border:1px solid var(--border);border-radius:7px;color:var(--text);font-size:13px;font-family:'DM Sans',sans-serif;outline:none">
+      </div>
+      <!-- IIBB -->
+      <div style="display:grid;grid-template-columns:1.4fr 0.8fr 1.2fr;gap:6px;margin-bottom:6px;align-items:center">
+        <div style="font-size:13px;color:var(--muted)">Ret. IIBB</div>
+        <input type="number" id="pct-iibb" placeholder="0.00" step="0.01" min="0" max="100" oninput="pctAMonto('iibb')" style="padding:7px 10px;background:var(--bg2);border:1px solid var(--border);border-radius:7px;color:var(--text);font-size:13px;font-family:'DM Sans',sans-serif;outline:none">
+        <input type="number" id="ret-iibb" placeholder="0.00" oninput="calcularNetoPercibido()" style="padding:7px 10px;background:var(--bg2);border:1px solid var(--border);border-radius:7px;color:var(--text);font-size:13px;font-family:'DM Sans',sans-serif;outline:none">
+      </div>
+      <!-- SUSS -->
+      <div style="display:grid;grid-template-columns:1.4fr 0.8fr 1.2fr;gap:6px;margin-bottom:6px;align-items:center">
+        <div style="font-size:13px;color:var(--muted)">Ret. SUSS</div>
+        <input type="number" id="pct-suss" placeholder="0.00" step="0.01" min="0" max="100" oninput="pctAMonto('suss')" style="padding:7px 10px;background:var(--bg2);border:1px solid var(--border);border-radius:7px;color:var(--text);font-size:13px;font-family:'DM Sans',sans-serif;outline:none">
+        <input type="number" id="ret-suss" placeholder="0.00" oninput="calcularNetoPercibido()" style="padding:7px 10px;background:var(--bg2);border:1px solid var(--border);border-radius:7px;color:var(--text);font-size:13px;font-family:'DM Sans',sans-serif;outline:none">
+      </div>
+      <!-- Municipal -->
+      <div style="display:grid;grid-template-columns:1.4fr 0.8fr 1.2fr;gap:6px;margin-bottom:6px;align-items:center">
+        <div style="font-size:13px;color:var(--muted)">Tasa Municipal</div>
+        <input type="number" id="pct-municipal" placeholder="0.00" step="0.01" min="0" max="100" oninput="pctAMonto('municipal')" style="padding:7px 10px;background:var(--bg2);border:1px solid var(--border);border-radius:7px;color:var(--text);font-size:13px;font-family:'DM Sans',sans-serif;outline:none">
+        <input type="number" id="ret-municipal" placeholder="0.00" oninput="calcularNetoPercibido()" style="padding:7px 10px;background:var(--bg2);border:1px solid var(--border);border-radius:7px;color:var(--text);font-size:13px;font-family:'DM Sans',sans-serif;outline:none">
+      </div>
+      <!-- Otras -->
+      <div style="display:grid;grid-template-columns:1.4fr 0.8fr 1.2fr;gap:6px;margin-bottom:6px;align-items:center">
+        <div style="font-size:13px;color:var(--muted)">Otras</div>
+        <input type="number" id="pct-otras" placeholder="0.00" step="0.01" oninput="pctAMonto('otras')" style="padding:7px 10px;background:var(--bg2);border:1px solid var(--border);border-radius:7px;color:var(--text);font-size:13px;font-family:'DM Sans',sans-serif;outline:none">
+        <input type="number" id="ret-otras" placeholder="0.00" oninput="calcularNetoPercibido()" style="padding:7px 10px;background:var(--bg2);border:1px solid var(--border);border-radius:7px;color:var(--text);font-size:13px;font-family:'DM Sans',sans-serif;outline:none">
       </div>
       <div style="display:flex;justify-content:space-between;align-items:center;margin-top:12px;padding-top:12px;border-top:1px solid var(--border)">
         <div style="font-size:12px;color:var(--muted)">
@@ -464,7 +485,7 @@ async function cargarFacturas(){
           <td>${r.fecha_cobro_estimada?`<span style="font-size:12px${venc?';color:var(--red)':''}">${fmtF(r.fecha_cobro_estimada)}${venc?` <span class="dias-badge">${dias}d</span>`:''}</span>`:'—'}</td>
           <td>
             <div style="display:flex;gap:6px">
-              ${r.estado!=='cobrada'&&r.estado!=='anulada'&&!esNC(r)?`<button class="btn btn-sm btn-success" onclick="abrirCobro('${r.id}','${r.empresa_id}','${r.numero_factura}','${r.monto_total}')">Cobrar</button>`:''}
+              ${r.estado!=='cobrada'&&r.estado!=='anulada'&&!esNC(r)?`<button class="btn btn-sm btn-success" onclick="abrirCobro('${r.id}','${r.empresa_id}','${r.numero_factura}','${r.monto_total}','${r.monto_neto||0}')">Cobrar</button>`:''}
               <button class="btn btn-sm btn-ghost" onclick="editarFactura('${r.id}')">Editar</button>
               ${r.estado!=='anulada'&&!esNC(r)?`<button class="btn btn-sm btn-danger" onclick="anularFactura('${r.id}','${r.numero_factura}')">Anular</button>`:''}
             </div>
@@ -635,10 +656,13 @@ async function anularFactura(id,numero){
 }
 
 // ============ COBROS ============
-function abrirCobro(factId,empId,numero,total){
+let cobroMontoNeto=0;
+
+function abrirCobro(factId,empId,numero,total,neto){
   cobroFacturaId=factId;
   cobroEmpresaId=empId;
   const t=parseFloat(total)||0;
+  cobroMontoNeto=parseFloat(neto)||0;
   document.getElementById('cobro-factura-info').textContent=`Factura ${numero} — Total: ${fmt(t)}`;
   document.getElementById('nc-fecha').value=hoy();
   document.getElementById('nc-total-factura').value=t;
@@ -646,12 +670,24 @@ function abrirCobro(factId,empId,numero,total){
   document.getElementById('nc-cheque').value='';
   document.getElementById('nc-obs').value='';
   document.getElementById('nc-periodo-ret').value=new Date().toISOString().substring(0,7);
-  // Limpiar retenciones
-  ['ret-iva','ret-ganancias','ret-iibb','ret-suss','ret-municipal','ret-otras'].forEach(id=>{
+  // Mostrar base neto s/IVA
+  const fmtN=v=>new Intl.NumberFormat('es-AR',{style:'currency',currency:'ARS',maximumFractionDigits:0}).format(v||0);
+  document.getElementById('ret-base-label').textContent=fmtN(cobroMontoNeto);
+  // Limpiar retenciones y porcentajes
+  ['ret-iva','ret-ganancias','ret-iibb','ret-suss','ret-municipal','ret-otras',
+   'pct-iva','pct-ganancias','pct-iibb','pct-suss','pct-municipal','pct-otras'].forEach(id=>{
     document.getElementById(id).value='';
   });
   calcularNetoPercibido();
   document.getElementById('modal-cobro').classList.add('show');
+}
+
+// Calcula monto desde porcentaje sobre base neto s/IVA
+function pctAMonto(tipo){
+  const pct=parseFloat(document.getElementById('pct-'+tipo).value)||0;
+  const monto=cobroMontoNeto>0?(cobroMontoNeto*pct/100):0;
+  document.getElementById('ret-'+tipo).value=monto>0?monto.toFixed(2):'';
+  calcularNetoPercibido();
 }
 
 function calcularNetoPercibido(){
