@@ -1143,8 +1143,8 @@ async function cargarVencimientos(){
     <div class="panel"><div style="overflow-x:auto"><table>
       <thead><tr><th>Origen</th><th>Entidad</th><th>Tipo</th><th>Descripcion</th><th>Vencimiento</th><th>Estado</th></tr></thead>
       <tbody>${todas.length?todas.filter(r=>r.fecha_vencimiento).map(r=>{
-        const esV=r.fecha_vencimiento<hoyStr;
-        const dias=Math.ceil((new Date(r.fecha_vencimiento+'T12:00:00')-new Date())/(1000*60*60*24));
+        const esV=r.fecha_vencimiento&&r.fecha_vencimiento<hoyStr;
+        const dias=r.fecha_vencimiento?Math.ceil((new Date(r.fecha_vencimiento+'T12:00:00')-new Date())/(1000*60*60*24)):null;
         return`<tr>
           <td><span style="font-size:11px;padding:2px 8px;border-radius:4px;background:var(--bg3);color:var(--muted)">${r.origen}</span></td>
           <td style="font-weight:500">${r.entidad||'—'}</td>
@@ -1152,7 +1152,7 @@ async function cargarVencimientos(){
           <td style="font-size:12px">${r.descripcion||'—'}</td>
           <td class="mono" style="color:${esV?'var(--red)':dias<=30?'var(--orange)':'var(--text)'}">
             ${r.fecha_vencimiento?new Date(r.fecha_vencimiento+'T12:00:00').toLocaleDateString('es-AR'):'—'}
-            ${esV?'<div style="font-size:10px;color:var(--red)">VENCIDO</div>':`<div style="font-size:10px;color:${dias<=30?'var(--orange)':'var(--muted)'}">${dias}d</div>`}
+            ${r.fecha_vencimiento?(esV?'<div style="font-size:10px;color:var(--red)">VENCIDO</div>':`<div style="font-size:10px;color:${dias<=30?'var(--orange)':'var(--muted)'}">${dias}d</div>`):''}
           </td>
           <td>${esV?'<span style="font-size:11px;padding:2px 10px;border-radius:20px;background:rgba(239,68,68,0.15);color:var(--red)">Vencido</span>':
               dias<=30?'<span style="font-size:11px;padding:2px 10px;border-radius:20px;background:rgba(245,158,11,0.15);color:var(--orange)">Por vencer</span>':
@@ -1384,7 +1384,7 @@ async function cargarPortales(){
         <tbody>${rows.length?rows.map(r=>{
           const esV=r.fecha_vencimiento<hoyStr;
           const esP=r.fecha_vencimiento>=hoyStr&&r.fecha_vencimiento<=en30Str;
-          const dias=Math.ceil((new Date(r.fecha_vencimiento+'T12:00:00')-new Date())/(1000*60*60*24));
+          const dias=r.fecha_vencimiento?Math.ceil((new Date(r.fecha_vencimiento+'T12:00:00')-new Date())/(1000*60*60*24)):null;
           const entidad=r.aplica_a==='empleado'?(r.empleados?.nombre||'—'):
                         r.aplica_a==='vehiculo'?(r.vehiculos?.descripcion||(r.vehiculos?.patente||'—')):
                         (r.empresas?.nombre||'Empresa');

@@ -924,7 +924,6 @@ async function cargarDocumentos(categoria){
   const en30=new Date();en30.setDate(en30.getDate()+30);
   const en30Str=en30.toISOString().split('T')[0];
 
-  // Sin filtro categoria — columna no existe en BD
   let docEmpData=await EmpleadosAPI.getDocumentosEmpleado({});
   if(emp) docEmpData=docEmpData.filter(r=>r.empresa_id===emp);
   const data=docEmpData;
