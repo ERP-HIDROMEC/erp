@@ -393,8 +393,7 @@ async function cargarPrecios(){
   if(!contratoSelId){
     // Mostrar todos los contratos para seleccionar
     const emp=document.getElementById('f-empresa').value;
-    const emp2=document.getElementById('f-empresa').value;
-    let ctActData=await ContratosAPI.getContratosSelect(emp2||'');
+    let ctActData=await ContratosAPI.getContratosSelect(emp2||null);
     if(emp) ctActData=ctActData.filter(r=>r.empresa_id===emp);
     const contratos=ctActData;
     document.getElementById('kpis').innerHTML='';

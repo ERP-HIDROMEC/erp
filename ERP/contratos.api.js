@@ -23,11 +23,12 @@ const ContratosAPI = (() => {
 
   async function getContratosSelect(empresaId) {
     // Lista liviana para dropdowns — solo contratos activos
-    const { data, error } = await db.from('contratos')
+    let q = db.from('contratos')
       .select('id,numero_contrato,descripcion,clientes(nombre)')
-      .eq('empresa_id', empresaId)
       .eq('estado', 'activo')
       .order('numero_contrato');
+    if (empresaId) q = q.eq('empresa_id', empresaId);
+    const { data, error } = await q;
     if (error) throw error;
     return data || [];
   }
