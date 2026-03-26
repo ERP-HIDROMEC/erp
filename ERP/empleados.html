@@ -477,13 +477,13 @@ function cambiarTab(tab,btn){
   btn.classList.add('active');
   const btnNuevo=document.getElementById('btn-nuevo');
   const noDoc=['ausentismo','costos'];
-  if(tab==='sueldos'){ btnNuevo.textContent='+ Registrar sueldo'; document.getElementById('btn-importar-xls').style.display=''; } else { document.getElementById('btn-importar-xls').style.display='none'; }
+  document.getElementById('btn-importar-xls').style.display=tab==='sueldos'?'':'none';
+  if(tab==='sueldos') btnNuevo.textContent='+ Registrar sueldo';
   else if(tab==='vehiculos') btnNuevo.textContent='+ Nuevo vehiculo/equipo';
   else if(tab==='docs-empresa') btnNuevo.textContent='+ Subir documento';
   else if(tab==='docs-vehiculos') btnNuevo.textContent='+ Subir documento';
   else if(tab==='docs-personal') btnNuevo.textContent='+ Subir documento';
   else if(tab==='ausencias') btnNuevo.textContent='+ Registrar ausencia';
-  else if(tab==='vehiculos') btnNuevo.textContent='+ Nuevo vehiculo/equipo';
   else if(noDoc.includes(tab)) btnNuevo.textContent='';
   else btnNuevo.textContent='+ Nuevo empleado';
   btnNuevo.style.display=noDoc.includes(tab)?'none':'';
