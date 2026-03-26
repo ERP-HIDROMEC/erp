@@ -594,16 +594,33 @@ async function guardarRemito(estado){
     }
   }
 
-  // Guardar items via RPC atómica (Fase B)
+  // Guardar items
   const filas=document.getElementById('items-body').querySelectorAll('tr');
   const itemsData=[];
   filas.forEach((fila,i)=>{
     const inputs=fila.querySelectorAll('input');
     const cant=inputs[0]?.value?.trim();
     const desc=inputs[1]?.value?.trim();
-    if(desc) itemsData.push({orden:i+1,cantidad:cant||null,descripcion:desc});
+    if(desc) itemsData.push({
+      orden:i+1,
+      cantidad:cant||null,
+      descripcion:desc,
+      cantidad_num:parseFloat(cant)||null,
+      precio_unitario:0,
+      subtotal:0,
+    });
   });
-  await RemitosAPI.reemplazarItemsRemito(remitoId, empId, payload, itemsData);
+  if(itemsData.length){
+    let errItems;
+    try{ await RemitosAPI.reemplazarItemsRemito(remitoId, empId, payload, itemsData); }catch(e){errItems=e;}
+    if(errItems){
+      // Fallback: insert directo si la RPC falla
+      try{ await RemitosAPI.insertarItemsDirecto(remitoId, itemsData); }catch(e2){
+        console.error('Error guardando items:', e2);
+        toast('Items no guardados: '+(e2?.message||String(e2)), 'warn');
+      }
+    }
+  }
 
   cerrarModal();
   await verificarCAI();

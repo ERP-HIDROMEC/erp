@@ -101,13 +101,31 @@ const RemitosAPI = (() => {
     return data || [];
   }
 
-  async function reemplazarItemsRemito(remitoId, items) {
-    // Borrar items existentes y reinsertar
+  async function reemplazarItemsRemito(remitoId, empresaId, remito, items) {
+    // RPC atómica — reemplaza el delete+insert suelto (Fase B)
+    const { data, error } = await db.rpc('guardar_remito_con_items', {
+      p_remito: { ...remito, id: remitoId, empresa_id: empresaId },
+      p_items:  items || [],
+    });
+    if (error) throw error;
+    return data;
+  }
+
+  // Fallback directo si la RPC falla
+  async function insertarItemsDirecto(remitoId, items) {
     await db.from('remito_items_v2').delete().eq('remito_id', remitoId);
-    if (items && items.length) {
-      const { error } = await db.from('remito_items_v2').insert(items);
-      if (error) throw error;
-    }
+    if (!items || !items.length) return;
+    const rows = items.map(it => ({
+      remito_id: remitoId,
+      orden: it.orden,
+      cantidad: it.cantidad || null,
+      descripcion: it.descripcion,
+      cantidad_num: it.cantidad_num || null,
+      precio_unitario: it.precio_unitario || 0,
+      subtotal: it.subtotal || 0,
+    }));
+    const { error } = await db.from('remito_items_v2').insert(rows);
+    if (error) throw error;
   }
 
   // ── Mutaciones de remitos ───────────────────────────────────
@@ -239,6 +257,7 @@ const RemitosAPI = (() => {
     getFacturasDeRemitos,
     getItemsRemito,
     reemplazarItemsRemito,
+    insertarItemsDirecto,
     crearRemito,
     actualizarRemito,
     anularRemito,
