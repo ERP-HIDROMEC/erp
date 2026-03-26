@@ -86,7 +86,8 @@ const EmpleadosAPI = (() => {
   }
 
   async function registrarSueldo(payload) {
-    const { error } = await db.from('sueldos').insert(payload);
+    const { error } = await db.from('sueldos')
+      .upsert(payload, { onConflict: 'empleado_id,periodo,tipo', ignoreDuplicates: true });
     if (error) throw error;
   }
 
@@ -126,7 +127,7 @@ const EmpleadosAPI = (() => {
     const { data, error } = await db.from('empleados_documentos')
       .select('tipo,descripcion,fecha_vencimiento,empleados(nombre),empresas(nombre)')
       .lte('fecha_vencimiento', limStr)
-      .not('fecha_vencimiento', 'is', null);
+      .neq('fecha_vencimiento', null);
     if (error) throw error;
     return data || [];
   }
