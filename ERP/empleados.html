@@ -924,17 +924,14 @@ async function cargarDocumentos(categoria){
   const en30=new Date();en30.setDate(en30.getDate()+30);
   const en30Str=en30.toISOString().split('T')[0];
 
-  // Tabla empleados_documentos no tiene columna categoria ni vehiculo_id — query sin join vehiculos
-  let { data: docEmpData, error: docErr } = await db.from('empleados_documentos')
-    .select('*,empleados(nombre),empresas(nombre)')
-    .order('fecha_vencimiento', { ascending: true, nullsFirst: false });
-  if(docErr) throw docErr;
-  docEmpData = docEmpData || [];
-  if(emp) docEmpData = docEmpData.filter(r=>r.empresa_id===emp);
-  const data = docEmpData;
-  let rows = data;
+  // Sin filtro categoria — columna no existe en BD
+  let docEmpData=await EmpleadosAPI.getDocumentosEmpleado({});
+  if(emp) docEmpData=docEmpData.filter(r=>r.empresa_id===emp);
+  const data=docEmpData;
+  let rows=data||[];
   if(buscar) rows=rows.filter(r=>
     (r.empleados?.nombre||'').toLowerCase().includes(buscar)||
+    (r.vehiculos?.descripcion||'').toLowerCase().includes(buscar)||
     (r.tipo||'').toLowerCase().includes(buscar)||
     (r.descripcion||'').toLowerCase().includes(buscar)
   );
