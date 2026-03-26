@@ -1423,15 +1423,19 @@ async function procesarXLS(input) {
   const empleadosBD = await EmpleadosAPI.getEmpleados({ soloActivos: false });
   const mapaDni = {};
   (empleadosBD || []).forEach(e => {
-    if (e.dni) {
-      const dniLimpio = String(e.dni).replace(/\D/g,'');
-      mapaDni[dniLimpio] = e;
-      // También indexar por CUIL completo si coincide
-      if (dniLimpio.length === 8) {
-        mapaDni['20'+dniLimpio+'0'] = e;
-        mapaDni['23'+dniLimpio+'0'] = e;
-        mapaDni['27'+dniLimpio+'0'] = e;
-        mapaDni['24'+dniLimpio+'0'] = e;
+    if (e.dni !== null && e.dni !== undefined) {
+      // dni puede ser número o string en la BD — convertir siempre a string limpio
+      const dniLimpio = String(e.dni).replace(/\D/g,'').replace(/^0+/,'');
+      if (dniLimpio) {
+        mapaDni[dniLimpio] = e;
+        // Indexar también con cero adelante por si acaso
+        mapaDni['0'+dniLimpio] = e;
+        // Indexar por posibles CUILs derivados
+        ['20','23','24','27'].forEach(pref => {
+          ['0','1','2','3','4','5','6','7','8','9'].forEach(ver => {
+            mapaDni[pref+dniLimpio+ver] = e;
+          });
+        });
       }
     }
   });
