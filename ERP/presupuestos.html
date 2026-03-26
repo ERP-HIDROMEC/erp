@@ -7,12 +7,15 @@
 <link rel="stylesheet" href="erp-layout.css">
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 <script src="erp-utils.js"></script>
 <script src="erp-sidebar.js"></script>
 <script src="empresas.api.js"></script>
 <script src="clientes.api.js"></script>
 <script src="proyectos.api.js"></script>
 <script src="empleados.api.js"></script>
+<script src="contratos.api.js"></script>
+<script src="remitos.api.js"></script>
 <script src="presupuestos.api.js"></script>
 <style>
   .btn-warning{background:rgba(245,158,11,0.15);color:var(--orange);border:1px solid rgba(245,158,11,0.2);}
@@ -23,18 +26,21 @@
   .kpi-card.green::before{background:var(--green);}
   .kpi-card.orange::before{background:var(--orange);}
   .kpi-card.red::before{background:var(--red);}
-  .kpi-.kpi-value{font-size:20px;font-weight:600;font-family:'DM Mono',monospace;}
-  tr:last-child tr:hover .estado.borrador{background:rgba(122,128,153,0.15);color:var(--muted);}
+  .kpi-label{font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:0.8px;margin-bottom:8px;}
+  .kpi-value{font-size:20px;font-weight:600;font-family:'DM Mono',monospace;}
+  .estado.borrador{background:rgba(122,128,153,0.15);color:var(--muted);}
   .estado.enviado{background:rgba(59,130,246,0.15);color:var(--blue);}
   .estado.aprobado{background:rgba(16,185,129,0.15);color:var(--green);}
   .estado.rechazado{background:rgba(239,68,68,0.15);color:var(--red);}
-  .modal-sub{font-size:13px;color:var(--muted);margin-bottom:24px;}
-  .form-row.three{grid-template-columns:1fr 1fr 1fr;}
-  .resumen-box{background:var(--bg3);border-radius:10px;padding:16px;margin:14px 0;}
-  .resumen-row{display:flex;justify-content:space-between;padding:5px 0;font-size:13px;border-bottom:1px solid var(--border);}
-  .resumen-row:last-child{border-bottom:none;font-weight:600;font-size:14px;padding-top:10px;}
-  .margen-badge{display:inline-block;padding:4px 12px;border-radius:20px;font-size:13px;font-weight:600;}
-  @media(max-width:768px){.main{margin-left:0;padding:16px;}.kpi-grid{grid-template-columns:repeat(2,1fr);}.form-row,.form-row.three{grid-template-columns:1fr;}}
+  .modal-sub{font-size:13px;color:var(--muted);margin-bottom:16px;}
+  .items-table{width:100%;border-collapse:collapse;margin-top:8px;}
+  .items-table th{padding:7px 10px;font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:0.7px;border-bottom:1px solid var(--border);background:var(--bg3);text-align:left;}
+  .items-table td{padding:6px 4px;border-bottom:1px solid var(--border);}
+  .items-table input{width:100%;padding:6px 8px;background:var(--bg2);border:1px solid var(--border);border-radius:6px;color:var(--text);font-size:13px;font-family:'DM Sans',sans-serif;outline:none;}
+  .items-table input:focus{border-color:var(--blue);}
+  .items-table input[readonly]{background:var(--bg3);color:var(--muted);}
+  .total-bar{display:flex;justify-content:flex-end;align-items:center;gap:24px;padding:12px 4px;border-top:2px solid var(--border);margin-top:4px;}
+  @media(max-width:768px){.main{margin-left:0;padding:16px;}.kpi-grid{grid-template-columns:repeat(2,1fr);}.form-row{grid-template-columns:1fr;}}
 </style>
 </head>
 <body>
@@ -72,9 +78,8 @@
 
 <!-- MODAL PRESUPUESTO -->
 <div class="modal-overlay" id="modal-pres">
-  <div class="modal">
+  <div class="modal" style="max-width:780px">
     <h3 id="pres-titulo">Nuevo presupuesto</h3>
-    <p class="modal-sub">Calculá el costo interno y el precio de venta para la propuesta comercial</p>
 
     <div class="form-row">
       <div class="form-group">
@@ -86,13 +91,15 @@
       </div>
       <div class="form-group">
         <label>Cliente</label>
-        <select id="np-cliente"></select>
+        <select id="np-cliente" onchange="cargarContratosCliente()"></select>
       </div>
     </div>
     <div class="form-row">
       <div class="form-group">
-        <label>Proyecto (opcional)</label>
-        <select id="np-proyecto"></select>
+        <label>Contrato (para cargar items)</label>
+        <select id="np-contrato" onchange="cargarItemsContrato()">
+          <option value="">Sin contrato</option>
+        </select>
       </div>
       <div class="form-group">
         <label>N° Presupuesto</label>
@@ -101,71 +108,48 @@
     </div>
     <div class="form-row full">
       <div class="form-group">
-        <label>Descripción del trabajo</label>
-        <textarea id="np-descripcion" placeholder="Describí el alcance del trabajo..."></textarea>
-      </div>
-    </div>
-
-    <div style="font-size:12px;font-weight:500;color:var(--muted);text-transform:uppercase;letter-spacing:0.8px;margin:16px 0 12px">Costos estimados</div>
-
-    <div class="form-row three">
-      <div class="form-group">
-        <label>Horas estimadas</label>
-        <input type="number" id="np-horas" placeholder="0" oninput="calcularPresupuesto()">
-      </div>
-      <div class="form-group">
-        <label>Costo hora promedio</label>
-        <input type="number" id="np-costo-hora" placeholder="0.00" oninput="calcularPresupuesto()">
-      </div>
-      <div class="form-group">
-        <label>Costo mano de obra</label>
-        <input type="number" id="np-costo-horas" placeholder="0.00" readonly style="color:var(--orange)">
+        <label>Descripción / Título del presupuesto</label>
+        <input type="text" id="np-descripcion" placeholder="Ej: Mandril ICC 335441 — Reparación completa">
       </div>
     </div>
     <div class="form-row">
       <div class="form-group">
-        <label>Materiales estimados</label>
-        <input type="number" id="np-materiales" placeholder="0.00" oninput="calcularPresupuesto()">
+        <label>Orden de compra cliente (opcional)</label>
+        <input type="text" id="np-oc" placeholder="CM- 6700352427">
       </div>
       <div class="form-group">
-        <label>Otros costos</label>
-        <input type="number" id="np-otros" placeholder="0.00" oninput="calcularPresupuesto()">
+        <label>Condición de venta</label>
+        <select id="np-condicion">
+          <option value="CTA. CTE.">Cuenta corriente</option>
+          <option value="CONTADO">Contado</option>
+          <option value="30 DIAS">30 días</option>
+          <option value="60 DIAS">60 días</option>
+        </select>
       </div>
     </div>
 
-    <div class="resumen-box" id="resumen-calculo">
-      <div class="resumen-row"><span style="color:var(--muted)">Costo mano de obra</span><span id="r-mo">$0</span></div>
-      <div class="resumen-row"><span style="color:var(--muted)">Costo materiales</span><span id="r-mat">$0</span></div>
-      <div class="resumen-row"><span style="color:var(--muted)">Otros costos</span><span id="r-otros">$0</span></div>
-      <div class="resumen-row"><span>Costo total interno</span><span id="r-costo-total" style="color:var(--orange)">$0</span></div>
+    <!-- ITEMS -->
+    <div style="margin:16px 0 8px;display:flex;align-items:center;justify-content:space-between">
+      <div style="font-size:12px;font-weight:500;color:var(--muted);text-transform:uppercase;letter-spacing:0.8px">Items del presupuesto</div>
+      <button class="btn btn-sm btn-ghost" onclick="agregarItemRow()">+ Agregar item</button>
     </div>
-
-    <div style="font-size:12px;font-weight:500;color:var(--muted);text-transform:uppercase;letter-spacing:0.8px;margin:16px 0 12px">Precio de venta</div>
-
-    <div class="form-row three">
-      <div class="form-group">
-        <label>% Margen deseado</label>
-        <input type="number" id="np-margen-pct" placeholder="30" oninput="calcularPrecioVenta()">
-      </div>
-      <div class="form-group">
-        <label>Precio venta sugerido</label>
-        <input type="number" id="np-precio-sugerido" readonly style="color:var(--green)">
-      </div>
-      <div class="form-group">
-        <label>Precio venta final</label>
-        <input type="number" id="np-precio-venta" placeholder="0.00" oninput="calcularMargenReal()">
-      </div>
+    <div style="overflow-x:auto">
+      <table class="items-table">
+        <thead>
+          <tr>
+            <th style="width:42%">Descripción</th>
+            <th style="width:12%">Cantidad</th>
+            <th style="width:18%">Precio unitario</th>
+            <th style="width:18%">Subtotal</th>
+            <th style="width:10%"></th>
+          </tr>
+        </thead>
+        <tbody id="items-body"></tbody>
+      </table>
     </div>
-
-    <div class="resumen-box">
-      <div class="resumen-row"><span style="color:var(--muted)">Costo total</span><span id="r2-costo">$0</span></div>
-      <div class="resumen-row"><span style="color:var(--muted)">Precio de venta</span><span id="r2-venta">$0</span></div>
-      <div class="resumen-row">
-        <span>Margen real</span>
-        <span id="r2-margen">
-          <span class="margen-badge" id="margen-badge" style="background:var(--bg3);color:var(--muted)">0%</span>
-        </span>
-      </div>
+    <div class="total-bar">
+      <span style="font-size:13px;color:var(--muted)">Total presupuesto:</span>
+      <span id="pres-total" style="font-size:20px;font-weight:600;font-family:'DM Mono',monospace;color:var(--green)">$0</span>
     </div>
 
     <div class="form-row">
@@ -185,8 +169,8 @@
     </div>
     <div class="form-row full">
       <div class="form-group">
-        <label>Observaciones</label>
-        <textarea id="np-obs" placeholder="Condiciones, vigencia, notas..."></textarea>
+        <label>Observaciones / Condiciones</label>
+        <textarea id="np-obs" placeholder="Vigencia del presupuesto, condiciones especiales..."></textarea>
       </div>
     </div>
 
@@ -198,8 +182,39 @@
   </div>
 </div>
 
+<!-- MODAL CONVERTIR A REMITO -->
+<div class="modal-overlay" id="modal-remito">
+  <div class="modal" style="max-width:560px">
+    <h3>Convertir a remito</h3>
+    <p class="modal-sub" id="conv-info"></p>
+    <div class="form-row">
+      <div class="form-group">
+        <label>Fecha del remito</label>
+        <input type="date" id="conv-fecha">
+      </div>
+      <div class="form-group">
+        <label>Sector</label>
+        <input type="text" id="conv-sector" placeholder="EFRI, TAGE, etc.">
+      </div>
+    </div>
+    <div style="background:var(--bg3);border-radius:8px;padding:14px;margin:12px 0">
+      <div style="font-size:12px;color:var(--muted);margin-bottom:10px">Seleccioná los items a incluir en el remito:</div>
+      <div id="conv-items-list"></div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" onclick="cerrarModalRemito()">Cancelar</button>
+      <button class="btn btn-success" onclick="confirmarConvertirRemito()">Crear remito</button>
+    </div>
+  </div>
+</div>
+
 <script>
 let editId=null;
+let _presItems=[];   // items en memoria del modal
+let _convPres=null;  // presupuesto en conversión
+let _convItems=[];   // items del presupuesto en conversión
+
+const LOGO_B64='LOGO_PLACEHOLDER';
 
 async function init(){
   const usuario = await ERP.initLayout('presupuestos');
@@ -208,67 +223,99 @@ async function init(){
   await cargarPresupuestos();
 }
 
+// ── Modal datos ───────────────────────────────────────────────
+
 async function cargarDatosModal(){
   const empId=document.getElementById('np-empresa').value;
-  const [{data:clientes},{data:proyectos}]=await Promise.all([
-    ClientesAPI.getClientesSelect(empId).then(d=>({data:d})),
-    ProyectosAPI.getProyectosSelect(empId,['activo','pausado']).then(d=>({data:d})),
-  ]);
-  document.getElementById('np-cliente').innerHTML='<option value="">Sin cliente</option>'+(clientes||[]).map(c=>`<option value="${c.id}">${c.nombre}</option>`).join('');
-  document.getElementById('np-proyecto').innerHTML='<option value="">Sin proyecto asociado</option>'+(proyectos||[]).map(p=>`<option value="${p.id}">${p.nombre}</option>`).join('');
-
-  // Costo hora promedio de empleados activos de esa empresa
-  const emps=await EmpleadosAPI.getEmpleadosConCostoHora(empId);
-  if(emps&&emps.length){
-    const promedio=emps.reduce((s,e)=>s+Number(e.costo_hora||0),0)/emps.length;
-    document.getElementById('np-costo-hora').value=Math.round(promedio);
-    calcularPresupuesto();
-  }
+  const clientes=await ClientesAPI.getClientesSelect(empId);
+  document.getElementById('np-cliente').innerHTML=
+    '<option value="">Sin cliente</option>'+
+    (clientes||[]).map(c=>`<option value="${c.id}">${c.nombre}</option>`).join('');
+  document.getElementById('np-contrato').innerHTML='<option value="">Sin contrato</option>';
 }
 
-function calcularPresupuesto(){
-  const horas=parseFloat(document.getElementById('np-horas').value)||0;
-  const costoHora=parseFloat(document.getElementById('np-costo-hora').value)||0;
-  const materiales=parseFloat(document.getElementById('np-materiales').value)||0;
-  const otros=parseFloat(document.getElementById('np-otros').value)||0;
-  const mo=horas*costoHora;
-  const total=mo+materiales+otros;
-  document.getElementById('np-costo-horas').value=mo.toFixed(2);
-  document.getElementById('r-mo').textContent=fmt(mo);
-  document.getElementById('r-mat').textContent=fmt(materiales);
-  document.getElementById('r-otros').textContent=fmt(otros);
-  document.getElementById('r-costo-total').textContent=fmt(total);
-  document.getElementById('r2-costo').textContent=fmt(total);
-  calcularPrecioVenta();
+async function cargarContratosCliente(){
+  const empId=document.getElementById('np-empresa').value;
+  const clienteId=document.getElementById('np-cliente').value;
+  const sel=document.getElementById('np-contrato');
+  sel.innerHTML='<option value="">Sin contrato</option>';
+  if(!clienteId) return;
+  const contratos=await ContratosAPI.getContratosSelect(empId);
+  const filtrados=(contratos||[]).filter(c=>!c.clientes||c.clientes?.nombre||true);
+  sel.innerHTML='<option value="">Sin contrato</option>'+
+    filtrados.map(c=>`<option value="${c.id}">${c.numero_contrato||c.id.substring(0,8)} — ${c.descripcion||''}</option>`).join('');
 }
 
-function calcularPrecioVenta(){
-  const mo=parseFloat(document.getElementById('np-costo-horas').value)||0;
-  const mat=parseFloat(document.getElementById('np-materiales').value)||0;
-  const otros=parseFloat(document.getElementById('np-otros').value)||0;
-  const total=mo+mat+otros;
-  const margenPct=parseFloat(document.getElementById('np-margen-pct').value)||30;
-  const sugerido=total>0?total/(1-margenPct/100):0;
-  document.getElementById('np-precio-sugerido').value=Math.round(sugerido);
-  if(!document.getElementById('np-precio-venta').value){
-    document.getElementById('np-precio-venta').value=Math.round(sugerido);
-    calcularMargenReal();
-  }
+async function cargarItemsContrato(){
+  const contratoId=document.getElementById('np-contrato').value;
+  if(!contratoId){ limpiarItems(); return; }
+  const items=await ContratosAPI.getItemsContrato(contratoId);
+  limpiarItems();
+  (items||[]).forEach(it=>{
+    agregarItemRow(it.descripcion, 1, it.precio_unitario, it.id);
+  });
+  calcularTotal();
 }
 
-function calcularMargenReal(){
-  const mo=parseFloat(document.getElementById('np-costo-horas').value)||0;
-  const mat=parseFloat(document.getElementById('np-materiales').value)||0;
-  const otros=parseFloat(document.getElementById('np-otros').value)||0;
-  const total=mo+mat+otros;
-  const venta=parseFloat(document.getElementById('np-precio-venta').value)||0;
-  document.getElementById('r2-venta').textContent=fmt(venta);
-  const margen=venta>0?Math.round((venta-total)/venta*100):0;
-  const badge=document.getElementById('margen-badge');
-  badge.textContent=margen+'%';
-  badge.style.background=margen>=30?'rgba(16,185,129,0.15)':margen>=15?'rgba(245,158,11,0.15)':'rgba(239,68,68,0.15)';
-  badge.style.color=margen>=30?'var(--green)':margen>=15?'var(--orange)':'var(--red)';
+// ── Items ─────────────────────────────────────────────────────
+
+function limpiarItems(){
+  document.getElementById('items-body').innerHTML='';
+  _presItems=[];
+  calcularTotal();
 }
+
+function agregarItemRow(desc='', cant=1, precio=0, contratoItemId=null){
+  const tbody=document.getElementById('items-body');
+  const tr=document.createElement('tr');
+  tr.dataset.contratoItemId=contratoItemId||'';
+  tr.innerHTML=`
+    <td><input type="text" placeholder="Descripción del trabajo" value="${esc(desc)}" oninput="calcularTotal()"></td>
+    <td><input type="number" placeholder="1" value="${cant||1}" min="0" step="0.01" oninput="calcularSubtotal(this)"></td>
+    <td><input type="number" placeholder="0.00" value="${precio||''}" min="0" step="0.01" oninput="calcularSubtotal(this)"></td>
+    <td><input type="number" readonly value="${((cant||1)*(precio||0)).toFixed(2)}" style="color:var(--green)"></td>
+    <td style="text-align:center"><button onclick="this.closest('tr').remove();calcularTotal()" style="background:none;border:none;color:var(--muted);cursor:pointer;font-size:16px;padding:4px">×</button></td>`;
+  tbody.appendChild(tr);
+  calcularTotal();
+}
+
+function esc(s){ return String(s||'').replace(/"/g,'&quot;'); }
+
+function calcularSubtotal(input){
+  const tr=input.closest('tr');
+  const cant=parseFloat(tr.querySelectorAll('input')[1].value)||0;
+  const precio=parseFloat(tr.querySelectorAll('input')[2].value)||0;
+  tr.querySelectorAll('input')[3].value=(cant*precio).toFixed(2);
+  calcularTotal();
+}
+
+function calcularTotal(){
+  let total=0;
+  document.querySelectorAll('#items-body tr').forEach(tr=>{
+    const sub=parseFloat(tr.querySelectorAll('input')[3]?.value)||0;
+    total+=sub;
+  });
+  const fmt=v=>new Intl.NumberFormat('es-AR',{style:'currency',currency:'ARS',maximumFractionDigits:0}).format(v);
+  document.getElementById('pres-total').textContent=fmt(total);
+  return total;
+}
+
+function getItemsDelModal(){
+  const rows=document.querySelectorAll('#items-body tr');
+  return [...rows].map((tr,i)=>{
+    const inputs=tr.querySelectorAll('input');
+    return{
+      orden:i+1,
+      descripcion:inputs[0].value.trim(),
+      cantidad:parseFloat(inputs[1].value)||1,
+      precio_unitario:parseFloat(inputs[2].value)||0,
+      subtotal:parseFloat(inputs[3].value)||0,
+      contrato_item_id:tr.dataset.contratoItemId||null,
+    };
+  }).filter(it=>it.descripcion);
+}
+
+// ── CRUD Presupuestos ─────────────────────────────────────────
 
 async function cargarPresupuestos(){
   document.getElementById('contenido').innerHTML='<div class="spinner-wrap"><div class="spinner"></div>Cargando...</div>';
@@ -276,10 +323,9 @@ async function cargarPresupuestos(){
   const estado=document.getElementById('f-estado').value;
   const buscar=document.getElementById('f-buscar').value.toLowerCase();
 
-  let presData=await PresupuestosAPI.getPresupuestos({});
-  if(emp) presData=presData.filter(r=>r.empresa_id===emp);
-  if(estado) presData=presData.filter(r=>r.estado===estado);
-  const data=presData;
+  let data=await PresupuestosAPI.getPresupuestos({});
+  if(emp) data=data.filter(r=>r.empresa_id===emp);
+  if(estado) data=data.filter(r=>r.estado===estado);
   let rows=data||[];
   if(buscar) rows=rows.filter(r=>(r.descripcion||'').toLowerCase().includes(buscar)||(r.clientes?.nombre||'').toLowerCase().includes(buscar));
 
@@ -287,55 +333,51 @@ async function cargarPresupuestos(){
   const enviados=rows.filter(r=>r.estado==='enviado');
   const totalAprobado=aprobados.reduce((s,r)=>s+Number(r.precio_venta||0),0);
   const totalEnviado=enviados.reduce((s,r)=>s+Number(r.precio_venta||0),0);
-  const tasaEfectividad=rows.length>0?Math.round(aprobados.length/rows.filter(r=>r.estado!=='borrador').length*100||0):0;
+  const enviadosYMas=rows.filter(r=>r.estado!=='borrador');
+  const tasa=enviadosYMas.length>0?Math.round(aprobados.length/enviadosYMas.length*100):0;
+  const fmt=v=>new Intl.NumberFormat('es-AR',{style:'currency',currency:'ARS',maximumFractionDigits:0}).format(v||0);
 
   document.getElementById('kpis').innerHTML=`
-    <div class="kpi-card blue"><div class="kpi-label">Total presupuestos</div><div class="kpi-value">${rows.length}</div></div>
+    <div class="kpi-card blue"><div class="kpi-label">Total</div><div class="kpi-value">${rows.length}</div></div>
     <div class="kpi-card green"><div class="kpi-label">Aprobados</div><div class="kpi-value">${aprobados.length} — ${fmt(totalAprobado)}</div></div>
-    <div class="kpi-card orange"><div class="kpi-label">En espera (enviados)</div><div class="kpi-value">${enviados.length} — ${fmt(totalEnviado)}</div></div>
-    <div class="kpi-card ${tasaEfectividad>=50?'green':'red'}"><div class="kpi-label">Tasa de aprobación</div><div class="kpi-value">${tasaEfectividad}%</div></div>`;
+    <div class="kpi-card orange"><div class="kpi-label">Enviados</div><div class="kpi-value">${enviados.length} — ${fmt(totalEnviado)}</div></div>
+    <div class="kpi-card ${tasa>=50?'green':'red'}"><div class="kpi-label">Tasa aprobación</div><div class="kpi-value">${tasa}%</div></div>`;
 
   document.getElementById('contenido').innerHTML=`
     <div style="overflow-x:auto"><table>
       <thead><tr>
         <th>Empresa</th><th>N°</th><th>Cliente</th><th>Descripción</th>
-        <th>Costo interno</th><th>Precio venta</th><th>Margen</th>
-        <th>Estado</th><th>Fecha envío</th><th>Acciones</th>
+        <th>Total</th><th>Estado</th><th>Fecha envío</th><th>Acciones</th>
       </tr></thead>
-      <tbody>${rows.length?rows.map(r=>{
-        const margen=r.precio_venta>0?Math.round((r.precio_venta-r.costo_total)/r.precio_venta*100):0;
-        return`<tr>
-          <td style="font-size:12px">${r.empresas?.nombre||'—'}</td>
-          <td class="mono">${r.numero||'—'}</td>
-          <td>${r.clientes?.nombre||'Sin cliente'}</td>
-          <td style="max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:12px">${r.descripcion||'—'}</td>
-          <td class="mono" style="color:var(--orange)">${fmt(r.costo_total)}</td>
-          <td class="mono" style="color:var(--green)">${fmt(r.precio_venta)}</td>
-          <td>
-            <span style="font-family:'DM Mono',monospace;font-size:12px;padding:2px 8px;border-radius:4px;
-              background:${margen>=30?'rgba(16,185,129,0.15)':margen>=15?'rgba(245,158,11,0.15)':'rgba(239,68,68,0.15)'};
-              color:${margen>=30?'var(--green)':margen>=15?'var(--orange)':'var(--red)'}">${margen}%</span>
-          </td>
-          <td><span class="estado ${r.estado}">${r.estado}</span></td>
-          <td class="mono" style="font-size:12px">${fmtF(r.fecha_envio)}</td>
-          <td><div style="display:flex;gap:6px">
-            <button class="btn btn-sm btn-ghost" onclick="editarPresupuesto('${r.id}')">Editar</button>
-            ${r.estado==='aprobado'?`<button class="btn btn-sm btn-success" onclick="convertirAProyecto('${r.id}')">→ Proyecto</button>`:''}
-            ${r.estado==='borrador'||r.estado==='enviado'?`<button class="btn btn-sm btn-warning" onclick="cambiarEstado('${r.id}','enviado')">Enviar</button>`:''}
-            <button class="btn btn-sm btn-danger" onclick="borrar('${r.id}')">Borrar</button>
-          </div></td>
-        </tr>`;
-      }).join(''):'<tr><td colspan="10" style="text-align:center;padding:40px;color:var(--muted)">Sin presupuestos</td></tr>'}</tbody>
+      <tbody>${rows.length?rows.map(r=>`<tr>
+        <td style="font-size:12px">${r.empresas?.nombre||'—'}</td>
+        <td class="mono">${r.numero||'—'}</td>
+        <td>${r.clientes?.nombre||'Sin cliente'}</td>
+        <td style="max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:12px">${r.descripcion||'—'}</td>
+        <td class="mono" style="color:var(--green)">${fmt(r.precio_venta)}</td>
+        <td><span class="estado ${r.estado}">${r.estado}</span></td>
+        <td class="mono" style="font-size:12px">${fmtF(r.fecha_envio)}</td>
+        <td><div style="display:flex;gap:5px;flex-wrap:wrap">
+          <button class="btn btn-sm btn-ghost" onclick="editarPresupuesto('${r.id}')">Editar</button>
+          <button class="btn btn-sm btn-ghost" onclick="generarPDF('${r.id}')">PDF</button>
+          ${r.estado==='aprobado'||r.estado==='enviado'?`<button class="btn btn-sm btn-success" onclick="abrirConvertirRemito('${r.id}')">→ Remito</button>`:''}
+          ${r.estado==='aprobado'?`<button class="btn btn-sm btn-success" onclick="convertirAProyecto('${r.id}')">→ Proyecto</button>`:''}
+          ${r.estado==='borrador'||r.estado==='enviado'?`<button class="btn btn-sm btn-warning" onclick="cambiarEstado('${r.id}','enviado')">Enviar</button>`:''}
+          <button class="btn btn-sm btn-danger" onclick="borrar('${r.id}')">Borrar</button>
+        </div></td>
+      </tr>`).join(''):'<tr><td colspan="8" style="text-align:center;padding:40px;color:var(--muted)">Sin presupuestos</td></tr>'}</tbody>
     </table></div>`;
 }
 
 function abrirNuevo(){
   editId=null;
   document.getElementById('pres-titulo').textContent='Nuevo presupuesto';
-  ['np-numero','np-descripcion','np-horas','np-materiales','np-otros','np-precio-venta','np-obs'].forEach(id=>document.getElementById(id).value='');
+  ['np-numero','np-descripcion','np-oc','np-obs'].forEach(id=>document.getElementById(id).value='');
   document.getElementById('np-estado').value='borrador';
-  document.getElementById('np-margen-pct').value='30';
   document.getElementById('np-fecha-envio').value='';
+  document.getElementById('np-condicion').value='CTA. CTE.';
+  limpiarItems();
+  for(let i=0;i<3;i++) agregarItemRow();
   cargarDatosModal();
   document.getElementById('modal-pres').classList.add('show');
 }
@@ -348,52 +390,55 @@ async function editarPresupuesto(id){
   document.getElementById('np-empresa').value=r.empresa_id;
   await cargarDatosModal();
   document.getElementById('np-cliente').value=r.cliente_id||'';
-  document.getElementById('np-proyecto').value=r.proyecto_id||'';
+  await cargarContratosCliente();
   document.getElementById('np-numero').value=r.numero||'';
   document.getElementById('np-descripcion').value=r.descripcion||'';
-  document.getElementById('np-horas').value=r.horas_estimadas||'';
-  document.getElementById('np-costo-hora').value=r.horas_estimadas&&r.costo_horas?Math.round(r.costo_horas/r.horas_estimadas):'';
-  document.getElementById('np-materiales').value=r.materiales_estimados||'';
-  document.getElementById('np-otros').value=r.otros_costos||'';
-  document.getElementById('np-precio-venta').value=r.precio_venta||'';
-  document.getElementById('np-margen-pct').value=r.margen_porcentaje||'30';
+  document.getElementById('np-oc').value=r.observaciones?.startsWith('OC:')?r.observaciones.replace('OC:','').trim():'';
+  document.getElementById('np-condicion').value=r.observaciones||'CTA. CTE.';
   document.getElementById('np-estado').value=r.estado;
   document.getElementById('np-fecha-envio').value=r.fecha_envio||'';
   document.getElementById('np-obs').value=r.observaciones||'';
-  calcularPresupuesto();
+  // Cargar items
+  limpiarItems();
+  const items=await PresupuestosAPI.getItemsPresupuesto(id);
+  if(items.length){
+    items.forEach(it=>agregarItemRow(it.descripcion,it.cantidad,it.precio_unitario,it.contrato_item_id));
+  } else {
+    for(let i=0;i<3;i++) agregarItemRow();
+  }
   document.getElementById('modal-pres').classList.add('show');
 }
 
 async function guardarPresupuesto(estadoOverride){
   const desc=document.getElementById('np-descripcion').value.trim();
-  if(!desc){toast('Ingresá la descripción del trabajo.', 'warn');return;}
-  const mo=parseFloat(document.getElementById('np-costo-horas').value)||0;
-  const mat=parseFloat(document.getElementById('np-materiales').value)||0;
-  const otros=parseFloat(document.getElementById('np-otros').value)||0;
-  const costoTotal=mo+mat+otros;
-  const precioVenta=parseFloat(document.getElementById('np-precio-venta').value)||0;
-  const margen=precioVenta>0?Math.round((precioVenta-costoTotal)/precioVenta*100):0;
+  if(!desc){toast('Ingresá la descripción.', 'warn');return;}
+  const items=getItemsDelModal();
+  if(!items.length){toast('Agregá al menos un item.', 'warn');return;}
+  const total=items.reduce((s,it)=>s+it.subtotal,0);
 
   const payload={
     empresa_id:document.getElementById('np-empresa').value,
     cliente_id:document.getElementById('np-cliente').value||null,
-    proyecto_id:document.getElementById('np-proyecto').value||null,
     numero:document.getElementById('np-numero').value||null,
     descripcion:desc,
-    horas_estimadas:parseFloat(document.getElementById('np-horas').value)||null,
-    costo_horas:mo||null,
-    materiales_estimados:mat||null,
-    otros_costos:otros||null,
-    costo_total:costoTotal||null,
-    precio_venta:precioVenta||null,
-    margen_porcentaje:margen||null,
+    precio_venta:total,
+    costo_total:total,
     estado:estadoOverride||document.getElementById('np-estado').value,
     fecha_envio:document.getElementById('np-fecha-envio').value||null,
     observaciones:document.getElementById('np-obs').value||null,
   };
-  let error;
-  try{ if(editId){ await PresupuestosAPI.actualizarPresupuesto(editId,payload); } else { await PresupuestosAPI.crearPresupuesto(payload); } }catch(e){error=e;}
-  if(error){toast('Error: ', 'error');return;}
+
+  let error,pres;
+  try{
+    if(editId){
+      await PresupuestosAPI.actualizarPresupuesto(editId,payload);
+      pres={id:editId,empresa_id:payload.empresa_id};
+    } else {
+      pres=await PresupuestosAPI.crearPresupuesto(payload);
+    }
+    await PresupuestosAPI.reemplazarItemsPresupuesto(pres.id,payload.empresa_id,items);
+  }catch(e){error=e;}
+  if(error){toast('Error: '+(error?.message||String(error)),'error');return;}
   cerrarModal();
   cargarPresupuestos();
 }
@@ -406,20 +451,20 @@ async function cambiarEstado(id,estado){
 async function convertirAProyecto(id){
   const p=await PresupuestosAPI.getPresupuestoById(id);
   if(!p) return;
-  if(!(await confirmar(`¿Crear proyecto desde el presupuesto "${p.descripcion.substring(0,50)}"?`))) return;
-  try{ await ProyectosAPI.crearProyecto({
-    empresa_id:p.empresa_id,
-    cliente_id:p.cliente_id,
-    nombre:p.descripcion.substring(0,100),
-    tipo:'proyecto',
-    estado:'activo',
-    presupuesto_estimado:p.precio_venta,
-    fecha_inicio:hoy(),
-  });
+  if(!(await confirmar(`¿Crear proyecto desde "${(p.descripcion||'').substring(0,50)}"?`))) return;
+  let error;
+  try{
+    await ProyectosAPI.crearProyecto({
+      empresa_id:p.empresa_id,cliente_id:p.cliente_id,
+      nombre:(p.descripcion||'').substring(0,100),
+      tipo:'proyecto',estado:'activo',
+      presupuesto_estimado:p.precio_venta,
+      fecha_inicio:hoy(),
+    });
   }catch(e){error=e;}
-  if(error){toast('Error: ', 'error');return;}
+  if(error){toast('Error: '+(error?.message||String(error)),'error');return;}
   await PresupuestosAPI.cambiarEstado(id,'aprobado');
-  toast('Proyecto creado. Podés verlo en el módulo Operaciones → Proyectos.', 'success');
+  toast('Proyecto creado.','success');
   cargarPresupuestos();
 }
 
@@ -429,8 +474,244 @@ async function borrar(id){
   cargarPresupuestos();
 }
 
+// ── CONVERTIR A REMITO ────────────────────────────────────────
+
+async function abrirConvertirRemito(id){
+  const p=await PresupuestosAPI.getPresupuestoById(id);
+  const items=await PresupuestosAPI.getItemsPresupuesto(id);
+  _convPres=p;
+  _convItems=items;
+
+  document.getElementById('conv-info').textContent=
+    `Presupuesto ${p.numero||p.id.substring(0,8)} — ${p.clientes?.nombre||''} — ${new Intl.NumberFormat('es-AR',{style:'currency',currency:'ARS',maximumFractionDigits:0}).format(p.precio_venta||0)}`;
+  document.getElementById('conv-fecha').value=hoy();
+  document.getElementById('conv-sector').value='';
+
+  document.getElementById('conv-items-list').innerHTML=items.map((it,i)=>`
+    <label style="display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:1px solid var(--border);cursor:pointer">
+      <input type="checkbox" id="conv-it-${i}" checked style="width:16px;height:16px;accent-color:var(--blue)">
+      <div style="flex:1">
+        <div style="font-size:13px">${it.descripcion}</div>
+        <div style="font-size:11px;color:var(--muted)">${it.cantidad} × ${new Intl.NumberFormat('es-AR',{style:'currency',currency:'ARS',maximumFractionDigits:0}).format(it.precio_unitario||0)} = ${new Intl.NumberFormat('es-AR',{style:'currency',currency:'ARS',maximumFractionDigits:0}).format(it.subtotal||0)}</div>
+      </div>
+    </label>`).join('');
+
+  document.getElementById('modal-remito').classList.add('show');
+}
+
+async function confirmarConvertirRemito(){
+  if(!_convPres) return;
+  const fecha=document.getElementById('conv-fecha').value;
+  const sector=document.getElementById('conv-sector').value||null;
+  if(!fecha){toast('Ingresá la fecha.','warn');return;}
+
+  // Items seleccionados
+  const itemsSelec=_convItems.filter((_,i)=>document.getElementById(`conv-it-${i}`)?.checked);
+  if(!itemsSelec.length){toast('Seleccioná al menos un item.','warn');return;}
+
+  const total=itemsSelec.reduce((s,it)=>s+Number(it.subtotal||0),0);
+
+  // Crear remito
+  let error,remito;
+  try{
+    remito=await RemitosAPI.crearRemito({
+      empresa_id:_convPres.empresa_id,
+      cliente_id:_convPres.cliente_id,
+      fecha,sector,
+      orden_compra:null,
+      estado:'emitido',
+      total_valorizado:total,
+      migrado:false,
+      numero:Date.now(),
+      numero_formateado:'PRES-'+(_convPres.numero||_convPres.id.substring(0,6)),
+      punto_venta:'0001',
+    });
+    // Items del remito
+    const rItems=itemsSelec.map((it,i)=>({
+      orden:i+1,
+      cantidad:String(it.cantidad),
+      descripcion:it.descripcion,
+      cantidad_num:it.cantidad,
+      precio_unitario:it.precio_unitario,
+      subtotal:it.subtotal,
+    }));
+    await RemitosAPI.reemplazarItemsRemito(remito.id,_convPres.empresa_id,remito,rItems);
+    // Marcar presupuesto como aprobado si estaba enviado
+    if(_convPres.estado==='enviado') await PresupuestosAPI.cambiarEstado(_convPres.id,'aprobado');
+  }catch(e){error=e;}
+  if(error){toast('Error: '+(error?.message||String(error)),'error');return;}
+
+  cerrarModalRemito();
+  toast('Remito creado correctamente.','success');
+  cargarPresupuestos();
+}
+
+function cerrarModalRemito(){
+  document.getElementById('modal-remito').classList.remove('show');
+  _convPres=null; _convItems=[];
+}
+
+// ── PDF ───────────────────────────────────────────────────────
+
+async function generarPDF(id){
+  const p=await PresupuestosAPI.getPresupuestoById(id);
+  if(!p){toast('No se encontró el presupuesto.','warn');return;}
+  const items=await PresupuestosAPI.getItemsPresupuesto(id);
+
+  const {jsPDF}=window.jspdf;
+  const doc=new jsPDF({format:'a4',unit:'mm'});
+  const L=10,R=200,W=190,midX=105,T=8;
+  const fmt=v=>new Intl.NumberFormat('es-AR',{style:'currency',currency:'ARS',maximumFractionDigits:0}).format(v||0);
+  const fmtF2=v=>v?new Date(v+'T12:00:00').toLocaleDateString('es-AR'):'—';
+
+  const esPlacemem=(p.empresas?.nombre||'').toUpperCase().includes('PLACEMEM');
+  const EMP=esPlacemem?{
+    nombre:'PLACEMEM S.R.L.',cuit:'30-71163249-9',iibb:'30-71163249-9',
+    inicio:'01/01/2015',dir:'3 de Febrero 353 - Zárate - Bs.As.',tel:'',email:'',
+  }:{
+    nombre:'HIDROMEC S.R.L.',cuit:'30-71163249-9',iibb:'30-71163249-9',
+    inicio:'01/01/2011',dir:'Colectora Oeste 1525 - Zárate - Bs.As.',
+    tel:'Tel: 03487-456419',email:'administracion@hidromecsrl.com.ar',
+  };
+
+  // ── Header ──
+  doc.setDrawColor(0,0,0); doc.setLineWidth(0.8);
+  doc.rect(L,T,W,275);
+  doc.setLineWidth(0.3); doc.rect(L+1,T+1,W-2,273);
+  doc.setFillColor(245,245,245); doc.rect(L+1,T+1,W-2,42,'F');
+
+  // Logo / nombre empresa
+  doc.setFillColor(245,245,245); doc.rect(L+3,T+3,55,22,'F');
+  doc.setFontSize(11); doc.setFont('helvetica','bold'); doc.setTextColor(0,0,0);
+  doc.text(EMP.nombre,L+5,T+15);
+
+  // Datos empresa izq
+  doc.setFontSize(7.5); doc.setFont('helvetica','normal'); doc.setTextColor(80,80,80);
+  doc.text(EMP.dir,L+4,T+28);
+  if(EMP.tel) doc.text(EMP.tel,L+4,T+33);
+  if(EMP.email) doc.text(EMP.email,L+4,T+38);
+
+  // Línea divisoria vertical
+  doc.setDrawColor(180,180,180); doc.setLineWidth(0.3);
+  doc.line(midX-15,T+1,midX-15,T+43);
+
+  // Caja P (presupuesto)
+  doc.setDrawColor(0,0,0); doc.setLineWidth(0.8);
+  doc.rect(midX-12,T+4,14,14);
+  doc.setFontSize(16); doc.setFont('helvetica','bold'); doc.setTextColor(0,0,0);
+  doc.text('P',midX-5,T+14,{align:'center'});
+  doc.setFontSize(6.5); doc.setFont('helvetica','normal'); doc.setTextColor(80,80,80);
+  doc.text('PRESUPUESTO',midX-5,T+19,{align:'center'});
+
+  // Título
+  doc.setFontSize(22); doc.setFont('helvetica','bold'); doc.setTextColor(0,0,0);
+  doc.text('PRESUPUESTO',midX+24,T+13,{align:'center'});
+  doc.setFontSize(12); doc.setFont('helvetica','normal');
+  doc.text('N° '+(p.numero||'—'),midX+24,T+22,{align:'center'});
+  doc.setFontSize(10);
+  doc.text('Fecha: '+fmtF2(p.fecha_envio||new Date().toISOString().split('T')[0]),midX+24,T+30,{align:'center'});
+
+  // Datos empresa der
+  doc.setFontSize(7.5); doc.setTextColor(60,60,60);
+  doc.text('C.U.I.T.: '+EMP.cuit,R-5,T+16,{align:'right'});
+  doc.text('I. Brutos: '+EMP.iibb,R-5,T+21,{align:'right'});
+  doc.text('Inicio: '+EMP.inicio,R-5,T+26,{align:'right'});
+  doc.setFontSize(8); doc.setFont('helvetica','bold'); doc.setTextColor(0,0,0);
+  doc.text('I.V.A. Responsable Inscripto',R-5,T+38,{align:'right'});
+
+  // Separador
+  doc.setDrawColor(0,0,0); doc.setLineWidth(0.5);
+  doc.line(L+1,T+43,R-1,T+43);
+
+  // ── Datos cliente ──
+  const yC=T+43;
+  doc.setFillColor(250,250,250); doc.rect(L+1,yC,W-2,30,'F');
+  const lX=L+4,vX=L+30;
+  doc.setFontSize(8); doc.setFont('helvetica','bold'); doc.setTextColor(0,0,0);
+  doc.text('SEÑOR (ES):',lX,yC+7);
+  doc.setFont('helvetica','normal'); doc.setFontSize(9);
+  doc.text(p.clientes?.nombre||'',vX,yC+7);
+  doc.setFont('helvetica','bold'); doc.setFontSize(8);
+  doc.text('C.U.I.T.:',lX,yC+14);
+  doc.setFont('helvetica','normal');
+  doc.text(p.clientes?.cuit||'',vX,yC+14);
+  doc.setFont('helvetica','bold');
+  doc.text('COND. VENTA:',lX,yC+21);
+  doc.setFont('helvetica','normal');
+  doc.text('A CONVENIR',vX,yC+21);
+  doc.setFont('helvetica','bold');
+  doc.text('OBSERVACIONES:',midX+10,yC+7);
+  doc.setFont('helvetica','normal'); doc.setFontSize(7.5);
+  const obs=doc.splitTextToSize(p.observaciones||'',55);
+  doc.text(obs,midX+10,yC+14);
+
+  doc.setLineWidth(0.5); doc.line(L+1,yC+30,R-1,yC+30);
+
+  // ── Items ──
+  const yD=yC+30;
+  doc.setFillColor(230,230,230); doc.rect(L+1,yD,W-2,8,'F');
+  doc.setFontSize(10); doc.setFont('helvetica','bold'); doc.setTextColor(0,0,0);
+  doc.text('DESCRIPCIÓN DEL TRABAJO',midX,yD+6,{align:'center'});
+  doc.line(L+1,yD+8,R-1,yD+8);
+
+  // Columnas
+  const colDesc=L+2,colCant=L+130,colPU=L+150,colSub=L+172;
+  doc.setFontSize(7.5); doc.setFont('helvetica','bold'); doc.setTextColor(80,80,80);
+  doc.text('DESCRIPCIÓN',colDesc+2,yD+14);
+  doc.text('CANT.',colCant,yD+14,{align:'center'});
+  doc.text('P. UNIT.',colPU+8,yD+14,{align:'center'});
+  doc.text('SUBTOTAL',colSub+8,yD+14,{align:'center'});
+  doc.setDrawColor(200,200,200); doc.line(L+1,yD+16,R-1,yD+16);
+
+  // Items
+  doc.setFont('helvetica','normal'); doc.setFontSize(9); doc.setTextColor(0,0,0);
+  let iy=yD+23;
+  const maxY=yD+145;
+  let totalPDF=0;
+  (items||[]).forEach((it,idx)=>{
+    if(iy>maxY) return;
+    const desc=String(it.descripcion||'');
+    const lines=doc.splitTextToSize(desc,120);
+    const rowH=Math.max(7,lines.length*5);
+    if(idx%2===0){doc.setFillColor(252,252,252);doc.rect(L+1,iy-5,W-2,rowH,'F');}
+    doc.text(lines,colDesc+2,iy);
+    doc.text(String(it.cantidad||1),colCant,iy,{align:'center'});
+    doc.text(fmt(it.precio_unitario),colPU+18,iy,{align:'right'});
+    doc.text(fmt(it.subtotal),colSub+18,iy,{align:'right'});
+    totalPDF+=Number(it.subtotal||0);
+    iy+=rowH;
+    doc.setDrawColor(230,230,230); doc.setLineWidth(0.1);
+    doc.line(L+1,iy-2,R-1,iy-2);
+  });
+
+  // Líneas verticales tabla
+  doc.setDrawColor(0,0,0); doc.setLineWidth(0.3);
+  [colCant-4,colPU-4,colSub-4].forEach(x=>doc.line(x,yD+8,x,Math.min(iy,maxY)));
+
+  // ── Total ──
+  const yT=Math.min(iy+2,maxY+2);
+  doc.setLineWidth(0.5); doc.line(L+1,yT,R-1,yT);
+  doc.setFillColor(240,240,240); doc.rect(L+1,yT,W-2,12,'F');
+  doc.setFontSize(11); doc.setFont('helvetica','bold'); doc.setTextColor(0,0,0);
+  doc.text('TOTAL PRESUPUESTO:',R-60,yT+8);
+  doc.setFontSize(13); doc.setFont('courier','bold');
+  doc.text(fmt(totalPDF),R-5,yT+8,{align:'right'});
+  doc.setLineWidth(0.5); doc.line(L+1,yT+12,R-1,yT+12);
+
+  // ── Vigencia / pie ──
+  const yP=yT+14;
+  doc.setFontSize(8); doc.setFont('helvetica','italic'); doc.setTextColor(80,80,80);
+  doc.text('Presupuesto válido por 30 días desde la fecha de emisión. Precios sujetos a variación sin previo aviso.',L+4,yP+6);
+  doc.text('HIDROMEC S.R.L. no se responsabiliza por demoras ajenas a su operación.',L+4,yP+11);
+
+  // Título copia
+  doc.setFontSize(9); doc.setFont('helvetica','bold'); doc.setTextColor(100,100,100);
+  doc.text('ORIGINAL',R-5,T+6,{align:'right'});
+
+  doc.save('Presupuesto_'+(p.numero||p.id.substring(0,8))+'_'+(p.clientes?.nombre||'cliente').replace(/ /g,'_')+'.pdf');
+}
+
 function cerrarModal(){document.getElementById('modal-pres').classList.remove('show');}
-// logout() → ahora en ERP.logout() (erp-sidebar.js)
 
 init();
 </script>
