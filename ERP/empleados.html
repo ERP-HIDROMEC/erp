@@ -1005,6 +1005,10 @@ async function guardarDocumento(){
   const fileInput=document.getElementById('nd-archivo');
   const file=fileInput.files[0];
 
+  // Recalcular categoría desde tabActual al momento de guardar
+  const catActual=tabActual==='docs-empresa'?'empresa':tabActual==='docs-vehiculos'?'vehiculo':'personal';
+  docCategoria=catActual;
+
   let empleadoId=null,vehiculoId=null;
   if(docCategoria==='personal') empleadoId=document.getElementById('nd-empleado').value||null;
   if(docCategoria==='vehiculo') vehiculoId=document.getElementById('nd-vehiculo')?.value||null;
