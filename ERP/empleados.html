@@ -1027,8 +1027,8 @@ async function guardarDocumento(){
 
   let error;
   try{ await EmpleadosAPI.registrarDocumentoEmpleado({
-    empresa_id:empId,categoria:docCategoria,
-    empleado_id:empleadoId,vehiculo_id:vehiculoId,
+    empresa_id:empId,
+    empleado_id:empleadoId||null,
     tipo,descripcion:desc||null,
     fecha_vencimiento:venc||null,
     archivo_url:archivoUrl,archivo_path:archivoPatch,
