@@ -1,0 +1,991 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Hidromec ERP — Facturación</title>
+<link rel="stylesheet" href="erp-layout.css">
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="erp-utils.js"></script>
+<script src="erp-core.js"></script>
+<script src="erp-sidebar.js"></script>
+<script src="empresas.api.js"></script>
+<script src="clientes.api.js"></script>
+<script src="facturas.api.js"></script>
+<script src="remitos.api.js"></script>
+<style>
+  /* TABS */
+  /* FILTROS */
+  /* BOTONES */
+  /* PANEL */
+  /* TABLE */
+  tr:last-child tr:hover /* ESTADOS */
+  .estado.cobrada_parcial{background:rgba(59,130,246,0.15);color:var(--blue);}
+  .estado.borrador{background:rgba(139,92,246,0.15);color:var(--purple);}
+  .estado.enviado{background:rgba(245,158,11,0.15);color:var(--orange);}
+  .estado.aprobado{background:rgba(16,185,129,0.15);color:var(--green);}
+  .estado.rechazado{background:rgba(239,68,68,0.15);color:var(--red);}
+  .estado.facturado{background:rgba(16,185,129,0.15);color:var(--green);}
+
+  /* MODAL */
+  /* UPLOAD ZONE */
+  .vencida-row @media(max-width:768px){.main{margin-left:0;padding:16px;}}
+</style>
+</head>
+<body>
+
+<div id="overlay" class="overlay" onclick="ERP.closeSidebar()"></div>
+<div id="sidebar-root"></div>
+
+<main class="main">
+  <div class="page-header">
+    <h2>Facturación</h2>
+    <div style="display:flex;gap:8px">
+      <button class="btn btn-ghost" onclick="abrirImport()">↑ Importar AFIP</button>
+      <button class="btn btn-primary" id="btn-nuevo" onclick="abrirNuevo()">+ Nueva factura</button>
+    </div>
+  </div>
+
+  <div class="tabs">
+    <button class="tab active" onclick="cambiarTab('facturas',this)">Facturas</button>
+    <button class="tab" onclick="cambiarTab('remitos',this)">Remitos</button>
+    <button class="tab" onclick="cambiarTab('cobros',this)">Cobros</button>
+  </div>
+
+  <!-- FILTROS FACTURAS -->
+  <div id="filtros-facturas" class="filtros">
+    <select id="f-empresa" onchange="cargarFacturas()">
+      <option value="">Todas las empresas</option>
+      <option value="a1000000-0000-0000-0000-000000000001">Hidromec</option>
+      <option value="a2000000-0000-0000-0000-000000000002">Placemem</option>
+    </select>
+    <select id="f-estado" onchange="cargarFacturas()">
+      <option value="">Todos los estados</option>
+      <option value="pendiente">Pendiente</option>
+      <option value="cobrada_parcial">Cobrada parcial</option>
+      <option value="cobrada">Cobrada</option>
+      <option value="vencida">Vencida</option>
+      <option value="anulada">Anulada</option>
+    </select>
+    <select id="f-tipo" onchange="cargarFacturas()">
+      <option value="">Todos los tipos</option>
+      <option value="A">Factura A</option>
+      <option value="B">Factura B</option>
+      <option value="FCE">FCE</option>
+      <option value="NC">Nota de crédito</option>
+      <option value="ND">Nota de débito</option>
+    </select>
+    <input type="month" id="f-mes" onchange="cargarFacturas()">
+    <input type="text" id="f-buscar" placeholder="Buscar cliente o número..." oninput="cargarFacturas()">
+  </div>
+
+  <!-- FILTROS REMITOS -->
+  <div id="filtros-remitos" class="filtros" style="display:none">
+    <select id="r-empresa" onchange="cargarRemitos()">
+      <option value="">Todas las empresas</option>
+      <option value="a1000000-0000-0000-0000-000000000001">Hidromec</option>
+      <option value="a2000000-0000-0000-0000-000000000002">Placemem</option>
+    </select>
+    <select id="r-estado" onchange="cargarRemitos()">
+      <option value="">Todos los estados</option>
+      <option value="pendiente">Pendiente</option>
+      <option value="facturado">Facturado</option>
+    </select>
+  </div>
+
+  <!-- FILTROS COBROS -->
+  <div id="filtros-cobros" class="filtros" style="display:none">
+    <select id="c-empresa" onchange="cargarCobros()">
+      <option value="">Todas las empresas</option>
+      <option value="a1000000-0000-0000-0000-000000000001">Hidromec</option>
+      <option value="a2000000-0000-0000-0000-000000000002">Placemem</option>
+    </select>
+    <input type="month" id="c-mes" onchange="cargarCobros()">
+  </div>
+
+  <!-- CONTENIDO -->
+  <div class="panel">
+    <div id="contenido"><div class="spinner-wrap"><div class="spinner"></div>Cargando...</div></div>
+  </div>
+</main>
+
+<!-- MODAL NUEVA FACTURA -->
+<div class="modal-overlay" id="modal-factura">
+  <div class="modal">
+    <h3 id="modal-titulo">Nueva factura</h3>
+    <div class="form-row">
+      <div class="form-group">
+        <label>Empresa</label>
+        <select id="nf-empresa" onchange="cargarClientesPorEmpresa().then(()=>cargarRemitosParaFactura())">
+          <option value="a1000000-0000-0000-0000-000000000001">Hidromec</option>
+          <option value="a2000000-0000-0000-0000-000000000002">Placemem</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label>Tipo</label>
+        <select id="nf-tipo">
+          <option value="A">Factura A</option>
+          <option value="B">Factura B</option>
+          <option value="FCE">FCE</option>
+          <option value="NC">Nota de crédito</option>
+          <option value="ND">Nota de débito</option>
+        </select>
+      </div>
+    </div>
+    <div class="form-row">
+      <div class="form-group">
+        <label>Cliente</label>
+        <select id="nf-cliente"></select>
+      </div>
+      <div class="form-group">
+        <label>Número de factura</label>
+        <input type="text" id="nf-numero" placeholder="00002-00000001">
+      </div>
+    </div>
+    <div class="form-row">
+      <div class="form-group">
+        <label>Fecha emisión</label>
+        <input type="date" id="nf-fecha-emision">
+      </div>
+      <div class="form-group">
+        <label>Fecha cobro estimada</label>
+        <input type="date" id="nf-fecha-cobro">
+      </div>
+    </div>
+    <div class="form-row">
+      <div class="form-group">
+        <label>Monto neto</label>
+        <input type="number" id="nf-neto" placeholder="0.00" oninput="calcularTotal()">
+      </div>
+      <div class="form-group">
+        <label>IVA</label>
+        <input type="number" id="nf-iva" placeholder="0.00" oninput="calcularTotal()">
+      </div>
+    </div>
+    <div class="form-row">
+      <div class="form-group">
+        <label>Total</label>
+        <input type="number" id="nf-total" placeholder="0.00" style="font-weight:600;color:var(--green)">
+      </div>
+      <div class="form-group">
+        <label>Estado</label>
+        <select id="nf-estado">
+          <option value="pendiente">Pendiente</option>
+          <option value="cobrada">Cobrada</option>
+          <option value="anulada">Anulada</option>
+        </select>
+      </div>
+    </div>
+    <div class="form-row full">
+      <div class="form-group">
+        <label>Remitos asociados</label>
+        <div id="nf-remitos-lista" style="display:flex;flex-wrap:wrap;gap:6px;min-height:32px;padding:8px;background:var(--bg3);border:1px solid var(--border);border-radius:8px;margin-bottom:6px"></div>
+        <div style="display:flex;gap:8px">
+          <select id="nf-remito-sel" style="flex:1;padding:8px;background:var(--bg3);border:1px solid var(--border);border-radius:8px;color:var(--text);font-size:13px;font-family:'DM Sans',sans-serif;outline:none">
+            <option value="">Seleccionar remito...</option>
+          </select>
+          <button type="button" class="btn btn-ghost btn-sm" onclick="cargarRemitosParaFactura()" title="Actualizar lista">🔄</button>
+          <button type="button" class="btn btn-ghost btn-sm" onclick="agregarRemitoAFactura()">+ Agregar</button>
+        </div>
+      </div>
+    </div>
+    <div class="form-row full">
+      <div class="form-group">
+        <label>Observaciones</label>
+        <textarea id="nf-obs" placeholder="Opcional..."></textarea>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" onclick="cerrarModal('modal-factura')">Cancelar</button>
+      <button class="btn btn-primary" onclick="guardarFactura()">Guardar factura</button>
+    </div>
+  </div>
+</div>
+
+<!-- MODAL COBRO CON RETENCIONES -->
+<div class="modal-overlay" id="modal-cobro">
+  <div class="modal" style="max-width:620px">
+    <h3>Registrar cobro</h3>
+    <p id="cobro-factura-info" style="font-size:13px;color:var(--muted);margin-bottom:20px"></p>
+
+    <div class="form-row">
+      <div class="form-group">
+        <label>Fecha de cobro</label>
+        <input type="date" id="nc-fecha">
+      </div>
+      <div class="form-group">
+        <label>Monto total factura</label>
+        <input type="number" id="nc-total-factura" readonly style="color:var(--muted)">
+      </div>
+    </div>
+    <div class="form-row">
+      <div class="form-group">
+        <label>Método de pago</label>
+        <select id="nc-metodo">
+          <option value="transferencia">Transferencia</option>
+          <option value="cheque">Cheque</option>
+          <option value="efectivo">Efectivo</option>
+          <option value="otro">Otro</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label>N° cheque (opcional)</label>
+        <input type="text" id="nc-cheque" placeholder="Solo si es cheque">
+      </div>
+    </div>
+
+    <!-- RETENCIONES -->
+    <div style="background:var(--bg3);border-radius:10px;padding:16px;margin:16px 0">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">
+        <div style="font-size:12px;font-weight:500;color:var(--muted);text-transform:uppercase;letter-spacing:0.8px">
+          Retenciones recibidas en este pago
+        </div>
+        <div style="font-size:12px;color:var(--muted)">
+          Base (neto s/IVA): <strong id="ret-base-label" style="color:var(--text);font-family:'DM Mono',monospace">$0</strong>
+        </div>
+      </div>
+      <!-- Headers -->
+      <div style="display:grid;grid-template-columns:1.4fr 0.8fr 1.2fr;gap:6px;margin-bottom:4px">
+        <div style="font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:0.6px">Tipo</div>
+        <div style="font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:0.6px">% (manual)</div>
+        <div style="font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:0.6px">Monto $</div>
+      </div>
+      <!-- IVA -->
+      <div style="display:grid;grid-template-columns:1.4fr 0.8fr 1.2fr;gap:6px;margin-bottom:6px;align-items:center">
+        <div style="font-size:13px;color:var(--muted)">Ret. IVA</div>
+        <input type="number" id="pct-iva" placeholder="0.00" step="0.01" min="0" max="100" oninput="pctAMonto('iva')" style="padding:7px 10px;background:var(--bg2);border:1px solid var(--border);border-radius:7px;color:var(--text);font-size:13px;font-family:'DM Sans',sans-serif;outline:none">
+        <input type="number" id="ret-iva" placeholder="0.00" oninput="calcularNetoPercibido()" style="padding:7px 10px;background:var(--bg2);border:1px solid var(--border);border-radius:7px;color:var(--text);font-size:13px;font-family:'DM Sans',sans-serif;outline:none">
+      </div>
+      <!-- Ganancias -->
+      <div style="display:grid;grid-template-columns:1.4fr 0.8fr 1.2fr;gap:6px;margin-bottom:6px;align-items:center">
+        <div style="font-size:13px;color:var(--muted)">Ret. Ganancias</div>
+        <input type="number" id="pct-ganancias" placeholder="0.00" step="0.01" min="0" max="100" oninput="pctAMonto('ganancias')" style="padding:7px 10px;background:var(--bg2);border:1px solid var(--border);border-radius:7px;color:var(--text);font-size:13px;font-family:'DM Sans',sans-serif;outline:none">
+        <input type="number" id="ret-ganancias" placeholder="0.00" oninput="calcularNetoPercibido()" style="padding:7px 10px;background:var(--bg2);border:1px solid var(--border);border-radius:7px;color:var(--text);font-size:13px;font-family:'DM Sans',sans-serif;outline:none">
+      </div>
+      <!-- IIBB -->
+      <div style="display:grid;grid-template-columns:1.4fr 0.8fr 1.2fr;gap:6px;margin-bottom:6px;align-items:center">
+        <div style="font-size:13px;color:var(--muted)">Ret. IIBB</div>
+        <input type="number" id="pct-iibb" placeholder="0.00" step="0.01" min="0" max="100" oninput="pctAMonto('iibb')" style="padding:7px 10px;background:var(--bg2);border:1px solid var(--border);border-radius:7px;color:var(--text);font-size:13px;font-family:'DM Sans',sans-serif;outline:none">
+        <input type="number" id="ret-iibb" placeholder="0.00" oninput="calcularNetoPercibido()" style="padding:7px 10px;background:var(--bg2);border:1px solid var(--border);border-radius:7px;color:var(--text);font-size:13px;font-family:'DM Sans',sans-serif;outline:none">
+      </div>
+      <!-- SUSS -->
+      <div style="display:grid;grid-template-columns:1.4fr 0.8fr 1.2fr;gap:6px;margin-bottom:6px;align-items:center">
+        <div style="font-size:13px;color:var(--muted)">Ret. SUSS</div>
+        <input type="number" id="pct-suss" placeholder="0.00" step="0.01" min="0" max="100" oninput="pctAMonto('suss')" style="padding:7px 10px;background:var(--bg2);border:1px solid var(--border);border-radius:7px;color:var(--text);font-size:13px;font-family:'DM Sans',sans-serif;outline:none">
+        <input type="number" id="ret-suss" placeholder="0.00" oninput="calcularNetoPercibido()" style="padding:7px 10px;background:var(--bg2);border:1px solid var(--border);border-radius:7px;color:var(--text);font-size:13px;font-family:'DM Sans',sans-serif;outline:none">
+      </div>
+      <!-- Municipal -->
+      <div style="display:grid;grid-template-columns:1.4fr 0.8fr 1.2fr;gap:6px;margin-bottom:6px;align-items:center">
+        <div style="font-size:13px;color:var(--muted)">Tasa Municipal</div>
+        <input type="number" id="pct-municipal" placeholder="0.00" step="0.01" min="0" max="100" oninput="pctAMonto('municipal')" style="padding:7px 10px;background:var(--bg2);border:1px solid var(--border);border-radius:7px;color:var(--text);font-size:13px;font-family:'DM Sans',sans-serif;outline:none">
+        <input type="number" id="ret-municipal" placeholder="0.00" oninput="calcularNetoPercibido()" style="padding:7px 10px;background:var(--bg2);border:1px solid var(--border);border-radius:7px;color:var(--text);font-size:13px;font-family:'DM Sans',sans-serif;outline:none">
+      </div>
+      <!-- Otras -->
+      <div style="display:grid;grid-template-columns:1.4fr 0.8fr 1.2fr;gap:6px;margin-bottom:6px;align-items:center">
+        <div style="font-size:13px;color:var(--muted)">Otras</div>
+        <input type="number" id="pct-otras" placeholder="0.00" step="0.01" oninput="pctAMonto('otras')" style="padding:7px 10px;background:var(--bg2);border:1px solid var(--border);border-radius:7px;color:var(--text);font-size:13px;font-family:'DM Sans',sans-serif;outline:none">
+        <input type="number" id="ret-otras" placeholder="0.00" oninput="calcularNetoPercibido()" style="padding:7px 10px;background:var(--bg2);border:1px solid var(--border);border-radius:7px;color:var(--text);font-size:13px;font-family:'DM Sans',sans-serif;outline:none">
+      </div>
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-top:12px;padding-top:12px;border-top:1px solid var(--border)">
+        <div style="font-size:12px;color:var(--muted)">
+          Total retenciones: <strong id="total-ret" style="color:var(--orange)">$0</strong>
+        </div>
+        <div style="font-size:13px">
+          Neto a percibir: <strong id="neto-cobro" style="color:var(--green);font-family:'DM Mono',monospace">$0</strong>
+        </div>
+      </div>
+    </div>
+
+    <div class="form-row">
+      <div class="form-group">
+        <label>Monto cobrado (neto)</label>
+        <input type="number" id="nc-monto" placeholder="0.00" style="color:var(--green)">
+      </div>
+      <div class="form-group">
+        <label>Período retenciones</label>
+        <input type="month" id="nc-periodo-ret">
+      </div>
+    </div>
+    <div class="form-row full">
+      <div class="form-group">
+        <label>Observaciones</label>
+        <input type="text" id="nc-obs" placeholder="Opcional...">
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" onclick="cerrarModal('modal-cobro')">Cancelar</button>
+      <button class="btn btn-success" onclick="guardarCobro()">Registrar cobro + retenciones</button>
+    </div>
+  </div>
+</div>
+
+<!-- MODAL NUEVO REMITO -->
+<div class="modal-overlay" id="modal-remito">
+  <div class="modal">
+    <h3>Nuevo remito</h3>
+    <div class="form-row">
+      <div class="form-group">
+        <label>Empresa</label>
+        <select id="nr-empresa" onchange="cargarClientesRemito()">
+          <option value="a1000000-0000-0000-0000-000000000001">Hidromec</option>
+          <option value="a2000000-0000-0000-0000-000000000002">Placemem</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label>Cliente</label>
+        <select id="nr-cliente"></select>
+      </div>
+    </div>
+    <div class="form-row">
+      <div class="form-group">
+        <label>Número remito</label>
+        <input type="text" id="nr-numero" placeholder="R-0001">
+      </div>
+      <div class="form-group">
+        <label>Fecha</label>
+        <input type="date" id="nr-fecha">
+      </div>
+    </div>
+    <div class="form-row full">
+      <div class="form-group">
+        <label>Observaciones</label>
+        <textarea id="nr-obs" placeholder="Descripción del trabajo realizado..."></textarea>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" onclick="cerrarModal('modal-remito')">Cancelar</button>
+      <button class="btn btn-primary" onclick="guardarRemito()">Guardar remito</button>
+    </div>
+  </div>
+</div>
+
+<!-- MODAL IMPORT AFIP -->
+<div class="modal-overlay" id="modal-import">
+  <div class="modal">
+    <h3>Importar comprobantes AFIP</h3>
+    <p style="font-size:13px;color:var(--muted);margin-bottom:20px">Subí el Excel de comprobantes emitidos descargado desde AFIP. Se importan automáticamente.</p>
+    <div class="form-row">
+      <div class="form-group">
+        <label>Empresa</label>
+        <select id="imp-empresa">
+          <option value="a1000000-0000-0000-0000-000000000001">Hidromec</option>
+          <option value="a2000000-0000-0000-0000-000000000002">Placemem</option>
+        </select>
+      </div>
+    </div>
+    <div class="upload-zone" onclick="document.getElementById('imp-file').click()">
+      <svg width="32" height="32" fill="none" stroke="var(--muted)" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"/></svg>
+      <p>Arrastrá o hacé clic para subir</p>
+      <span>Excel (.xlsx) de AFIP — Mis Comprobantes Emitidos</span>
+      <input type="file" id="imp-file" accept=".xlsx" style="display:none" onchange="procesarExcel(this)">
+    </div>
+    <div id="imp-preview" style="margin-top:16px"></div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" onclick="cerrarModal('modal-import')">Cancelar</button>
+      <button class="btn btn-primary" id="btn-importar" style="display:none" onclick="confirmarImport()">Importar facturas</button>
+    </div>
+  </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+<script>
+
+let tabActual='facturas';
+let facturaEditId=null;
+let cobroFacturaId=null;
+let cobroEmpresaId=null;
+let importRows=[];
+
+async function init(){
+  const usuario = await ERP.initApp('facturas');
+  if(!usuario) return;
+  document.getElementById('f-mes').value=new Date().toISOString().substring(0,7);
+  document.getElementById('c-mes').value=new Date().toISOString().substring(0,7);
+  document.getElementById('nf-fecha-emision').value=hoy();
+  document.getElementById('nr-fecha').value=hoy();
+  await cargarClientesPorEmpresa();
+  await cargarClientesRemito();
+  await cargarFacturas();
+}
+
+// ============ TABS ============
+function cambiarTab(tab,btn){
+  tabActual=tab;
+  document.querySelectorAll('.tab').forEach(t=>t.classList.remove('active'));
+  btn.classList.add('active');
+  document.getElementById('filtros-facturas').style.display=tab==='facturas'?'flex':'none';
+  document.getElementById('filtros-remitos').style.display=tab==='remitos'?'flex':'none';
+  document.getElementById('filtros-cobros').style.display=tab==='cobros'?'flex':'none';
+  document.getElementById('btn-nuevo').textContent=tab==='remitos'?'+ Nuevo remito':tab==='cobros'?'+ Registrar cobro':'+ Nueva factura';
+  if(tab==='facturas') cargarFacturas();
+  else if(tab==='remitos') cargarRemitos();
+  else cargarCobros();
+}
+
+function abrirNuevo(){
+  if(tabActual==='remitos') abrirModalRemito();
+  else if(tabActual==='cobros') toast('Seleccioná una factura de la pestaña Facturas para registrar un cobro.', 'warn');
+  else abrirNuevaFactura();
+}
+
+// ============ FACTURAS ============
+async function cargarFacturas(){
+  document.getElementById('contenido').innerHTML='<div class="spinner-wrap"><div class="spinner"></div>Cargando...</div>';
+  const emp=document.getElementById('f-empresa').value;
+  const estado=document.getElementById('f-estado').value;
+  const tipo=document.getElementById('f-tipo').value;
+  const mes=document.getElementById('f-mes').value;
+  const buscar=document.getElementById('f-buscar').value.toLowerCase();
+
+  const filtros={};
+  if(emp) filtros.empresaId=emp;
+  if(estado) filtros.estado=estado;
+  if(mes){ filtros.fechaDesde=mes+'-01'; const fin=new Date(mes+'-01');fin.setMonth(fin.getMonth()+1);filtros.fechaHasta=fin.toISOString().split('T')[0]; }
+  const facData=await FacturasAPI.getFacturas(filtros);
+  let data=facData, error=null;
+  if(tipo) data=data.filter(r=>r.tipo===tipo);
+  let rows=(data||[]);
+  if(buscar) rows=rows.filter(r=>(r.clientes?.nombre||'').toLowerCase().includes(buscar)||(r.numero_factura||'').toLowerCase().includes(buscar));
+
+  // Actualizar estados vencidos automáticamente en la vista
+  const hoyStr=hoy();
+  rows=rows.map(r=>({...r,
+    estado_visual: r.estado!=='cobrada'&&r.estado!=='anulada'&&r.fecha_cobro_estimada&&r.fecha_cobro_estimada<hoyStr?'vencida':r.estado
+  }));
+
+  const esNC=r=>r.tipo==='NC';
+  const totalFac=rows.filter(r=>!esNC(r)&&r.estado!=='anulada').reduce((s,r)=>s+Number(r.monto_total||0),0);
+  const totalNC=rows.filter(r=>esNC(r)).reduce((s,r)=>s+Number(r.monto_total||0),0);
+  const neto=totalFac-totalNC;
+
+  document.getElementById('contenido').innerHTML=`
+    <div style="padding:12px 20px;display:flex;gap:20px;border-bottom:1px solid var(--border);flex-wrap:wrap">
+      <span style="font-size:12px;color:var(--muted)">${rows.length} registros</span>
+      <span style="font-size:12px;color:var(--muted)">Facturado: <strong style="color:var(--text)">${fmt(totalFac)}</strong></span>
+      ${totalNC>0?`<span style="font-size:12px;color:var(--muted)">NC: <strong style="color:var(--red)">-${fmt(totalNC)}</strong></span>`:''}
+      <span style="font-size:12px;color:var(--muted)">Neto: <strong style="color:var(--green)">${fmt(neto)}</strong></span>
+    </div>
+    <div style="overflow-x:auto">
+    <table>
+      <thead><tr>
+        <th>Empresa</th><th>Fecha</th><th>N° Factura</th><th>Tipo</th>
+        <th>Cliente</th><th>Total</th><th>Estado</th><th>Vence</th><th>Acciones</th>
+      </tr></thead>
+      <tbody>${rows.length?rows.map(r=>{
+        const venc=r.estado_visual==='vencida';
+        const dias=r.fecha_cobro_estimada?Math.floor((new Date()-new Date(r.fecha_cobro_estimada+'T12:00:00'))/86400000):0;
+        return `<tr class="${venc?'vencida-row':''}">
+          <td style="font-size:12px">${r.empresas?.nombre||'—'}</td>
+          <td class="mono">${fmtF(r.fecha_emision)}</td>
+          <td class="mono">${r.numero_factura||'—'}</td>
+          <td><span class="estado ${r.tipo==='NC'?'anulada':'pendiente'}" style="${r.tipo==='NC'?'background:rgba(239,68,68,0.1);color:var(--red)':'background:var(--bg3);color:var(--muted)'}">${r.tipo}</span></td>
+          <td>${r.clientes?.nombre||'—'}</td>
+          <td class="mono" style="color:${esNC(r)?'var(--red)':'var(--text)'}">${esNC(r)?'-':''}${fmt(r.monto_total)}</td>
+          <td><span class="estado ${r.estado_visual}">${r.estado_visual}</span></td>
+          <td>${r.fecha_cobro_estimada?`<span style="font-size:12px${venc?';color:var(--red)':''}">${fmtF(r.fecha_cobro_estimada)}${venc?` <span class="dias-badge">${dias}d</span>`:''}</span>`:'—'}</td>
+          <td>
+            <div style="display:flex;gap:6px">
+              ${r.estado!=='cobrada'&&r.estado!=='anulada'&&!esNC(r)?`<button class="btn btn-sm btn-success" onclick="abrirCobro('${r.id}','${r.empresa_id}','${r.numero_factura}','${r.monto_total}','${r.monto_neto||0}')">Cobrar</button>`:''}
+              <button class="btn btn-sm btn-ghost" onclick="editarFactura('${r.id}')">Editar</button>
+              ${r.estado!=='anulada'&&!esNC(r)?`<button class="btn btn-sm btn-danger" onclick="anularFactura('${r.id}','${r.numero_factura}')">Anular</button>`:''}
+            </div>
+          </td>
+        </tr>`;
+      }).join(''):'<tr><td colspan="9" style="text-align:center;padding:40px;color:var(--muted)">Sin facturas</td></tr>'}</tbody>
+    </table></div>`;
+}
+
+// ============ REMITOS ============
+async function cargarRemitos(){
+  document.getElementById('contenido').innerHTML='<div class="spinner-wrap"><div class="spinner"></div>Cargando...</div>';
+  const emp=document.getElementById('r-empresa').value;
+  const estado=document.getElementById('r-estado').value;
+  let remLegData=await RemitosAPI.getRemitosLegacy({});
+  if(emp) remLegData=remLegData.filter(r=>r.empresa_id===emp);
+  if(estado) remLegData=remLegData.filter(r=>r.estado===estado);
+  const data=remLegData;
+  const rows=data||[];
+  document.getElementById('contenido').innerHTML=`
+    <div style="overflow-x:auto"><table>
+      <thead><tr><th>Empresa</th><th>N° Remito</th><th>Fecha</th><th>Cliente</th><th>Proyecto</th><th>Total</th><th>Estado</th><th>Acciones</th></tr></thead>
+      <tbody>${rows.length?rows.map(r=>`<tr>
+        <td style="font-size:12px">${r.empresas?.nombre||'—'}</td>
+        <td class="mono">${r.numero_remito}</td>
+        <td class="mono">${fmtF(r.fecha)}</td>
+        <td>${r.clientes?.nombre||'—'}</td>
+        <td style="font-size:12px;color:var(--muted)">${r.proyectos?.nombre||'—'}</td>
+        <td class="mono">${fmt(r.total)}</td>
+        <td><span class="estado ${r.estado}">${r.estado}</span></td>
+        <td><div style="display:flex;gap:6px">
+          ${r.estado==='pendiente'?`<button class="btn btn-sm btn-primary" onclick="convertirAFactura('${r.id}','${r.cliente_id}','${r.empresa_id}','${r.total}')">→ Facturar</button>`:''}
+          <button class="btn btn-sm btn-danger" onclick="borrarRemito('${r.id}')">Borrar</button>
+        </div></td>
+      </tr>`).join(''):'<tr><td colspan="8" style="text-align:center;padding:40px;color:var(--muted)">Sin remitos</td></tr>'}</tbody>
+    </table></div>`;
+}
+
+// ============ COBROS ============
+async function cargarCobros(){
+  document.getElementById('contenido').innerHTML='<div class="spinner-wrap"><div class="spinner"></div>Cargando...</div>';
+  const emp=document.getElementById('c-empresa').value;
+  const mes=document.getElementById('c-mes').value;
+  let cobData=await FacturasAPI.getCobros({});
+  if(emp) cobData=cobData.filter(r=>r.empresa_id===emp);
+  if(mes){const mI=mes+'-01';const mF=new Date(mes+'-01');mF.setMonth(mF.getMonth()+1);const mFin=mF.toISOString().split('T')[0];cobData=cobData.filter(r=>r.fecha>=mI&&r.fecha<mFin);}
+  const data=cobData;
+  const rows=data||[];
+  const total=rows.reduce((s,r)=>s+Number(r.monto||0),0);
+  document.getElementById('contenido').innerHTML=`
+    <div style="padding:12px 20px;border-bottom:1px solid var(--border)">
+      <span style="font-size:12px;color:var(--muted)">Total cobrado: <strong style="color:var(--green)">${fmt(total)}</strong></span>
+    </div>
+    <div style="overflow-x:auto"><table>
+      <thead><tr><th>Empresa</th><th>Fecha</th><th>Factura</th><th>Cliente</th><th>Monto</th><th>Método</th><th>N° Cheque</th></tr></thead>
+      <tbody>${rows.length?rows.map(r=>`<tr>
+        <td style="font-size:12px">${r.empresas?.nombre||'—'}</td>
+        <td class="mono">${fmtF(r.fecha)}</td>
+        <td class="mono">${r.facturas_emitidas?.numero_factura||'—'}</td>
+        <td>${r.facturas_emitidas?.clientes?.nombre||'—'}</td>
+        <td class="mono" style="color:var(--green)">${fmt(r.monto)}</td>
+        <td>${r.metodo_pago||'—'}</td>
+        <td class="mono" style="color:var(--muted)">${r.numero_cheque||'—'}</td>
+      </tr>`).join(''):'<tr><td colspan="7" style="text-align:center;padding:40px;color:var(--muted)">Sin cobros</td></tr>'}</tbody>
+    </table></div>`;
+}
+
+// ============ NUEVA FACTURA ============
+async function cargarClientesPorEmpresa(){
+  const empId=document.getElementById('nf-empresa').value;
+  const data=await ClientesAPI.getClientesSelect(empId);
+  const sel=document.getElementById('nf-cliente');
+  sel.innerHTML=(data||[]).map(c=>`<option value="${c.id}">${c.nombre}</option>`).join('');
+}
+
+async function cargarClientesRemito(){
+  const empId=document.getElementById('nr-empresa').value;
+  const data=await ClientesAPI.getClientesSelect(empId);
+  const sel=document.getElementById('nr-cliente');
+  sel.innerHTML=(data||[]).map(c=>`<option value="${c.id}">${c.nombre}</option>`).join('');
+}
+
+function calcularTotal(){
+  const neto=parseFloat(document.getElementById('nf-neto').value)||0;
+  const iva=parseFloat(document.getElementById('nf-iva').value)||0;
+  document.getElementById('nf-total').value=(neto+iva).toFixed(2);
+}
+
+function abrirNuevaFactura(){
+  facturaEditId=null;
+  _remitosSeleccionados=[];
+  document.getElementById('modal-titulo').textContent='Nueva factura';
+  document.getElementById('nf-numero').value='';
+  document.getElementById('nf-neto').value='';
+  document.getElementById('nf-iva').value='';
+  document.getElementById('nf-total').value='';
+  document.getElementById('nf-obs').value='';
+  document.getElementById('nf-estado').value='pendiente';
+  document.getElementById('nf-fecha-emision').value=hoy();
+  renderRemitosSeleccionados();
+  cargarRemitosParaFactura();
+  document.getElementById('modal-factura').classList.add('show');
+}
+
+async function editarFactura(id){
+  const data=await FacturasAPI.getFacturaById(id);
+  if(!data) return;
+  facturaEditId=id;
+  document.getElementById('modal-titulo').textContent='Editar factura';
+  document.getElementById('nf-empresa').value=data.empresa_id;
+  await cargarClientesPorEmpresa();
+  document.getElementById('nf-cliente').value=data.cliente_id;
+  document.getElementById('nf-tipo').value=data.tipo;
+  document.getElementById('nf-numero').value=data.numero_factura;
+  document.getElementById('nf-fecha-emision').value=data.fecha_emision;
+  document.getElementById('nf-fecha-cobro').value=data.fecha_cobro_estimada||'';
+  document.getElementById('nf-neto').value=data.monto_neto;
+  document.getElementById('nf-iva').value=data.monto_iva;
+  document.getElementById('nf-total').value=data.monto_total;
+  document.getElementById('nf-estado').value=data.estado;
+  document.getElementById('nf-obs').value=data.observaciones||'';
+  _remitosSeleccionados=data.remitos_ids||[];
+  renderRemitosSeleccionados();
+  await cargarRemitosParaFactura();
+  document.getElementById('modal-factura').classList.add('show');
+}
+
+async function guardarFactura(){
+  const payload={
+    empresa_id:document.getElementById('nf-empresa').value,
+    cliente_id:document.getElementById('nf-cliente').value,
+    tipo:document.getElementById('nf-tipo').value,
+    numero_factura:document.getElementById('nf-numero').value,
+    fecha_emision:document.getElementById('nf-fecha-emision').value,
+    fecha_cobro_estimada:document.getElementById('nf-fecha-cobro').value||null,
+    monto_neto:parseFloat(document.getElementById('nf-neto').value)||0,
+    monto_iva:parseFloat(document.getElementById('nf-iva').value)||0,
+    monto_total:parseFloat(document.getElementById('nf-total').value)||0,
+    estado:document.getElementById('nf-estado').value,
+    observaciones:document.getElementById('nf-obs').value||null,
+    remitos_ids:_remitosSeleccionados,
+  };
+  if(!payload.numero_factura||!payload.monto_total){toast('Completá número y monto.', 'warn');return;}
+  let error,data;
+  if(facturaEditId){
+    try{ await FacturasAPI.actualizarFactura(facturaEditId,payload); }catch(e){error=e;}
+    data={id:facturaEditId};
+  } else {
+    try{ data=await FacturasAPI.crearFactura(payload); }catch(e){error=e;}
+  }
+  if(error){toast('Error: ', 'error');return;}
+  // Marcar remitos como facturados
+  const factId=data?.id||facturaEditId;
+  if(_remitosSeleccionados.length&&factId){
+    for(const rid of _remitosSeleccionados){
+      await RemitosAPI.vincularRemitoFactura(rid, factId);
+    }
+  }
+  cerrarModal('modal-factura');
+  _remitosSeleccionados=[];
+  cargarFacturas();
+}
+
+async function anularFactura(id,numero){
+  if(!(await confirmar(`¿Anular la factura ${numero}? Esta acción no se puede deshacer.`))) return;
+  await FacturasAPI.anularFactura(id);
+  cargarFacturas();
+}
+
+// ============ COBROS ============
+let cobroMontoNeto=0;
+
+function abrirCobro(factId,empId,numero,total,neto){
+  cobroFacturaId=factId;
+  cobroEmpresaId=empId;
+  const t=parseFloat(total)||0;
+  cobroMontoNeto=parseFloat(neto)||0;
+  document.getElementById('cobro-factura-info').textContent=`Factura ${numero} — Total: ${fmt(t)}`;
+  document.getElementById('nc-fecha').value=hoy();
+  document.getElementById('nc-total-factura').value=t;
+  document.getElementById('nc-monto').value=t;
+  document.getElementById('nc-cheque').value='';
+  document.getElementById('nc-obs').value='';
+  document.getElementById('nc-periodo-ret').value=new Date().toISOString().substring(0,7);
+  // Mostrar base neto s/IVA
+  const fmtN=v=>new Intl.NumberFormat('es-AR',{style:'currency',currency:'ARS',maximumFractionDigits:0}).format(v||0);
+  document.getElementById('ret-base-label').textContent=fmtN(cobroMontoNeto);
+  // Limpiar retenciones y porcentajes
+  ['ret-iva','ret-ganancias','ret-iibb','ret-suss','ret-municipal','ret-otras',
+   'pct-iva','pct-ganancias','pct-iibb','pct-suss','pct-municipal','pct-otras'].forEach(id=>{
+    document.getElementById(id).value='';
+  });
+  calcularNetoPercibido();
+  document.getElementById('modal-cobro').classList.add('show');
+}
+
+// Calcula monto desde porcentaje sobre base neto s/IVA
+function pctAMonto(tipo){
+  const pct=parseFloat(document.getElementById('pct-'+tipo).value)||0;
+  const monto=cobroMontoNeto>0?(cobroMontoNeto*pct/100):0;
+  document.getElementById('ret-'+tipo).value=monto>0?monto.toFixed(2):'';
+  calcularNetoPercibido();
+}
+
+function calcularNetoPercibido(){
+  const total=parseFloat(document.getElementById('nc-total-factura').value)||0;
+  const retIva=parseFloat(document.getElementById('ret-iva').value)||0;
+  const retGan=parseFloat(document.getElementById('ret-ganancias').value)||0;
+  const retIibb=parseFloat(document.getElementById('ret-iibb').value)||0;
+  const retSuss=parseFloat(document.getElementById('ret-suss').value)||0;
+  const retMuni=parseFloat(document.getElementById('ret-municipal').value)||0;
+  const retOtras=parseFloat(document.getElementById('ret-otras').value)||0;
+  const totalRet=retIva+retGan+retIibb+retSuss+retMuni+retOtras;
+  const neto=total-totalRet;
+  const fmt2=v=>new Intl.NumberFormat('es-AR',{style:'currency',currency:'ARS',maximumFractionDigits:0}).format(v||0);
+  document.getElementById('total-ret').textContent=fmt2(totalRet);
+  document.getElementById('neto-cobro').textContent=fmt2(neto);
+  document.getElementById('nc-monto').value=neto.toFixed(2);
+}
+
+async function guardarCobro(){
+  const monto=parseFloat(document.getElementById('nc-monto').value)||0;
+  if(!monto){toast('Ingresá un monto.', 'warn');return;}
+
+  // Guardar cobro
+  let error;
+  try{ await FacturasAPI.registrarCobro({
+    empresa_id:cobroEmpresaId,
+    factura_id:cobroFacturaId,
+    fecha:document.getElementById('nc-fecha').value,
+    monto,
+    metodo_pago:document.getElementById('nc-metodo').value,
+    numero_cheque:document.getElementById('nc-cheque').value||null,
+    observaciones:document.getElementById('nc-obs').value||null,
+  });
+  }catch(e){error=e;}
+  if(error){toast('Error al guardar cobro: ', 'error');return;}
+
+  // Marcar factura como cobrada
+  await FacturasAPI.marcarFacturaCobrada(cobroFacturaId);
+
+  // Guardar retenciones si hay alguna
+  const periodo=document.getElementById('nc-periodo-ret').value;
+  const fecha=document.getElementById('nc-fecha').value;
+  const retenciones=[
+    {tipo:'iva',      id:'ret-iva'},
+    {tipo:'ganancias',id:'ret-ganancias'},
+    {tipo:'iibb',     id:'ret-iibb'},
+    {tipo:'suss',     id:'ret-suss'},
+    {tipo:'municipal',id:'ret-municipal'},
+    {tipo:'otro',     id:'ret-otras'},
+  ];
+  const retsAGuardar=retenciones
+    .map(r=>({...r,monto:parseFloat(document.getElementById(r.id).value)||0}))
+    .filter(r=>r.monto>0)
+    .map(r=>({
+      empresa_id:cobroEmpresaId,
+      cliente_id:null,
+      tipo:r.tipo,
+      periodo,
+      fecha,
+      monto:r.monto,
+      nro_certificado:null,
+      observaciones:`Retención de factura ${document.getElementById('cobro-factura-info').textContent}`,
+    }));
+
+  if(retsAGuardar.length>0){
+    let errRet;
+    try{ await FacturasAPI.crearRetenciones(retsAGuardar); }catch(e){ errRet=e; }
+    if(errRet) console.warn('Error al guardar retenciones:',errRet.message);
+    else console.log(`${retsAGuardar.length} retenciones guardadas en módulo Impuestos`);
+  }
+
+  cerrarModal('modal-cobro');
+  cargarFacturas();
+  const msgRet=retsAGuardar.length>0?`
+✓ ${retsAGuardar.length} retención(es) guardada(s) en Impuestos`:'';
+  setTimeout(()=>toast(`✓ Cobro registrado${msgRet}`, 'success'),100);
+}
+
+// ============ REMITOS ============
+function abrirModalRemito(){
+  document.getElementById('modal-remito').classList.add('show');
+}
+
+async function guardarRemito(){
+  const payload={
+    empresa_id:document.getElementById('nr-empresa').value,
+    cliente_id:document.getElementById('nr-cliente').value,
+    numero_remito:document.getElementById('nr-numero').value,
+    fecha:document.getElementById('nr-fecha').value,
+    observaciones:document.getElementById('nr-obs').value||null,
+    estado:'pendiente',total:0,
+  };
+  if(!payload.numero_remito){toast('Ingresá número de remito.', 'warn');return;}
+  try{ await RemitosAPI.crearRemitoLegacy(payload); }catch(e){error=e;}
+  if(error){toast('Error: ', 'error');return;}
+  cerrarModal('modal-remito');
+  cargarRemitos();
+}
+
+async function borrarRemito(id){
+  if(!(await confirmar('¿Borrar este remito?'))) return;
+  await RemitosAPI.eliminarRemitoLegacy(id);
+  cargarRemitos();
+}
+
+async function convertirAFactura(remitoId,clienteId,empresaId,total){
+  facturaEditId=null;
+  _remitosSeleccionados=[remitoId];
+  document.getElementById('nf-empresa').value=empresaId;
+  await cargarClientesPorEmpresa();
+  document.getElementById('nf-cliente').value=clienteId;
+  document.getElementById('nf-total').value=total;
+  document.getElementById('nf-neto').value=total;
+  document.getElementById('nf-iva').value='';
+  document.getElementById('nf-numero').value='';
+  document.getElementById('nf-obs').value='';
+  document.getElementById('nf-estado').value='pendiente';
+  document.getElementById('nf-fecha-emision').value=hoy();
+  document.getElementById('modal-titulo').textContent='Nueva factura desde remito';
+  renderRemitosSeleccionados();
+  await cargarRemitosParaFactura();
+  document.getElementById('modal-factura').classList.add('show');
+}
+
+// ============ IMPORT AFIP ============
+function abrirImport(){ document.getElementById('modal-import').classList.add('show'); }
+
+function procesarExcel(input){
+  const file=input.files[0];
+  if(!file) return;
+  const reader=new FileReader();
+  reader.onload=e=>{
+    const wb=XLSX.read(e.target.result,{type:'array'});
+    const ws=wb.Sheets[wb.SheetNames[0]];
+    const json=XLSX.utils.sheet_to_json(ws,{header:1});
+    let hrIdx=0;
+    for(let i=0;i<Math.min(5,json.length);i++){
+      if(json[i][0]&&String(json[i][0]).toLowerCase().includes('fecha')){hrIdx=i;break;}
+    }
+    const rows=json.slice(hrIdx+1).filter(r=>r[0]&&r[27]);
+    importRows=rows.map(r=>{
+      const fecha=String(r[0]||'');
+      const fechaISO=fecha.includes('/')?fecha.split('/').reverse().join('-'):fecha;
+      const tipo=getTipo(String(r[1]||''));
+      const pv=parseInt(r[2])||0;
+      const nro=parseInt(r[3])||0;
+      const numero=`${String(pv).padStart(5,'0')}-${String(nro).padStart(8,'0')}`;
+      const neto=parseFloat(r[22])||0;
+      const iva=parseFloat(r[26])||0;
+      const total=parseFloat(r[27])||0;
+      const cliente=String(r[8]||'').trim().toUpperCase();
+      const cuit=String(r[7]||'').replace(/[^0-9]/g,'');
+      return {fecha:fechaISO,tipo,numero,cliente,cuit,neto,iva,total};
+    }).filter(r=>r.total>0);
+    document.getElementById('imp-preview').innerHTML=`
+      <p style="font-size:13px;color:var(--muted);margin-bottom:8px">${importRows.length} facturas encontradas</p>
+      <div style="overflow-x:auto;max-height:200px;overflow-y:auto"><table>
+        <thead><tr><th>Fecha</th><th>Tipo</th><th>N°</th><th>Cliente</th><th>Total</th></tr></thead>
+        <tbody>${importRows.slice(0,10).map(r=>`<tr><td class="mono">${r.fecha}</td><td>${r.tipo}</td><td class="mono">${r.numero}</td><td>${r.cliente}</td><td class="mono">${fmt(r.total)}</td></tr>`).join('')}
+        ${importRows.length>10?`<tr><td colspan="5" style="text-align:center;color:var(--muted);font-size:12px">...y ${importRows.length-10} más</td></tr>`:''}</tbody>
+      </table></div>`;
+    document.getElementById('btn-importar').style.display='block';
+  };
+  reader.readAsArrayBuffer(file);
+}
+
+function getTipo(t){
+  t=t.toUpperCase();
+  if(t.includes('CRÉDIT')||t.includes('CREDIT')||t.includes('CRÉDITO')) return 'NC';
+  if(t.includes('DÉBIT')||t.includes('DEBIT')||t.includes('DÉBITO')) return 'ND';
+  if(t.includes('FCE')||t.includes('ELECTR')) return 'FCE';
+  if(t.includes(' A')) return 'A';
+  if(t.includes(' B')) return 'B';
+  if(t.includes(' C')) return 'C';
+  return 'A';
+}
+
+async function confirmarImport(){
+  const empId=document.getElementById('imp-empresa').value;
+  const clientes=await ClientesAPI.getClientes({empresaId:empId,soloActivos:false});
+  let ok=0,skip=0;
+  for(const r of importRows){
+    // Buscar cliente por cuit o nombre
+    let cli=clientes.find(c=>c.cuit&&c.cuit===r.cuit);
+    if(!cli) cli=clientes.find(c=>c.nombre.includes(r.cliente)||r.cliente.includes(c.nombre));
+    if(!cli){
+      // Crear cliente nuevo
+      const newCli=await ClientesAPI.crearCliente({empresa_id:empId,nombre:r.cliente,cuit:r.cuit||null,activo:true});
+      cli=newCli;
+      if(newCli) clientes.push(newCli);
+    }
+    if(!cli){skip++;continue;}
+    // Verificar si ya existe la factura
+    const existeArr=await FacturasAPI.getFacturas({empresaId:empId}); const existe=existeArr.find(f=>f.numero_factura===r.numero)||null;
+    if(existe){skip++;continue;}
+    let errFac=null; try{ await FacturasAPI.crearFactura({
+      empresa_id:empId,cliente_id:cli.id,tipo:r.tipo,
+      numero_factura:r.numero,fecha_emision:r.fecha,
+      monto_neto:r.neto,monto_iva:r.iva,monto_total:r.total,
+      estado:'pendiente',
+    }); }catch(e){errFac=e;}
+    if(!errFac) ok++; else skip++;
+  }
+  cerrarModal('modal-import');
+  toast(`Importación completada:\n✓ ${ok} facturas importadas\n⊘ ${skip} omitidas (duplicadas o sin cliente)`, 'success');
+  cargarFacturas();
+}
+
+function cerrarModal(id){ document.getElementById(id).classList.remove('show'); }
+// ── REMITOS EN FACTURA ────────────────────────────────────────
+let _remitosSeleccionados=[];
+let _remitosDisponibles=[];
+
+async function cargarRemitosParaFactura(){
+  const empId=document.getElementById('nf-empresa').value;
+  const cliId=document.getElementById('nf-cliente').value;
+  // Buscar por empresa; si hay cliente también filtrar por cliente
+  const data=await RemitosAPI.getRemitosParaVincular(empId);
+  const filteredData = cliId ? data.filter(r=>r.cliente_id===cliId) : data;
+  _remitosDisponibles=filteredData||[];
+  const sel=document.getElementById('nf-remito-sel');
+  if(!sel) return;
+  sel.innerHTML='<option value="">Seleccionar remito...</option>'+
+    _remitosDisponibles
+      .filter(r=>!_remitosSeleccionados.includes(r.id))
+      .map(r=>`<option value="${r.id}" data-estado="${r.estado}">${r.numero_formateado||r.id.slice(0,8)} — ${fmtF(r.fecha)} ${r.estado==='facturado'?'(ya facturado)':''}</option>`)
+      .join('');
+}
+
+function agregarRemitoAFactura(){
+  const sel=document.getElementById('nf-remito-sel');
+  const id=sel.value;
+  if(!id||_remitosSeleccionados.includes(id)) return;
+  _remitosSeleccionados.push(id);
+  renderRemitosSeleccionados();
+  cargarRemitosParaFactura();
+}
+
+function quitarRemito(id){
+  _remitosSeleccionados=_remitosSeleccionados.filter(r=>r!==id);
+  renderRemitosSeleccionados();
+  cargarRemitosParaFactura();
+}
+
+function renderRemitosSeleccionados(){
+  const lista=document.getElementById('nf-remitos-lista');
+  if(!lista) return;
+  if(!_remitosSeleccionados.length){
+    lista.innerHTML='<span style="color:var(--muted);font-size:12px">Sin remitos asociados</span>';
+    return;
+  }
+  lista.innerHTML=_remitosSeleccionados.map(id=>{
+    const r=_remitosDisponibles.find(x=>x.id===id);
+    const label=r?r.numero_formateado||id.slice(0,8):id.slice(0,8);
+    return`<span style="display:inline-flex;align-items:center;gap:6px;background:rgba(59,130,246,0.15);border:1px solid rgba(59,130,246,0.3);color:var(--blue);padding:3px 10px;border-radius:20px;font-size:12px">
+      📋 ${label}
+      <button onclick="quitarRemito('${id}')" style="background:none;border:none;color:var(--muted);cursor:pointer;font-size:14px;line-height:1;padding:0">×</button>
+    </span>`;
+  }).join('');
+}
+
+// Recargar remitos cuando cambia el cliente
+document.addEventListener('DOMContentLoaded',()=>{
+  const cli=document.getElementById('nf-cliente');
+  if(cli) cli.addEventListener('change',()=>{
+    _remitosSeleccionados=[];
+    renderRemitosSeleccionados();
+    cargarRemitosParaFactura();
+  });
+});
+
+// Leer ?remito=id al cargar la página
+(async()=>{
+  const params=new URLSearchParams(window.location.search);
+  const remitoId=params.get('remito');
+  if(remitoId){
+    const r=await RemitosAPI.getRemitoSimple(remitoId);
+    if(r){
+      _remitosSeleccionados=[remitoId];
+      document.getElementById('nf-empresa').value=r.empresa_id;
+      await cargarClientesPorEmpresa();
+      document.getElementById('nf-cliente').value=r.cliente_id||'';
+      document.getElementById('nf-fecha-emision').value=hoy();
+      document.getElementById('nf-estado').value='pendiente';
+      document.getElementById('modal-titulo').textContent='Nueva factura desde remito';
+      renderRemitosSeleccionados();
+      await cargarRemitosParaFactura();
+      document.getElementById('modal-factura').classList.add('show');
+      // Limpiar la URL
+      window.history.replaceState({},'',window.location.pathname);
+    }
+  }
+})();
+
+// logout() → ahora en ERP.logout() (erp-sidebar.js)
+
+init();
+</script>
+</body>
+</html>
