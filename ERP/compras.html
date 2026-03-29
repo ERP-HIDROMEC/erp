@@ -10,7 +10,6 @@
 <script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 <script src="erp-utils.js"></script>
-<script src="erp-core.js"></script>
 <script src="erp-sidebar.js"></script>
 <script src="empresas.api.js"></script>
 <script src="egresos.api.js"></script>
@@ -710,7 +709,7 @@ function generarPDFOrdenMultiple(rows,nro,fecha,metodo,obs,operador,cheques){
 }
 
 async function init(){
-  const usuario = await ERP.initApp('compras');
+  const usuario = await ERP.initLayout('compras');
   if(!usuario) return;
   document.getElementById('f-mes').value=new Date().toISOString().substring(0,7);
   document.getElementById('ne-fecha').value=hoy();

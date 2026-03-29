@@ -8,7 +8,6 @@
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="erp-utils.js"></script>
-<script src="erp-core.js"></script>
 <script src="erp-sidebar.js"></script>
 <script src="empresas.api.js"></script>
 <script src="empleados.api.js"></script>
@@ -461,7 +460,7 @@ let empEditId=null;
 let cliEditId=null;
 
 async function init(){
-  const usuario = await ERP.initApp('empleados');
+  const usuario = await ERP.initLayout('empleados');
   if(!usuario) return;
   document.getElementById('ns-periodo').value=new Date().toISOString().substring(0,7);
   document.getElementById('ns-fecha-pago').value=hoy();

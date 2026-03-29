@@ -9,7 +9,6 @@
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js"></script>
 <script src="erp-utils.js"></script>
-<script src="erp-core.js"></script>
 <script src="erp-sidebar.js"></script>
 <script src="empresas.api.js"></script>
 <script src="empleados.api.js"></script>
@@ -496,7 +495,7 @@ let tabActual='docs-empresa';
 let eppItemIdx=1;
 
 async function init(){
-  const usuario = await ERP.initApp('syh');
+  const usuario = await ERP.initLayout('syh');
   if(!usuario) return;
   document.getElementById('se-fecha').value=hoy();
   document.getElementById('sc-fecha').value=hoy();

@@ -9,7 +9,6 @@
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 <script src="erp-utils.js"></script>
-<script src="erp-core.js"></script>
 <script src="erp-sidebar.js"></script>
 <script src="empresas.api.js"></script>
 <script src="clientes.api.js"></script>
@@ -218,7 +217,7 @@ let _convItems=[];   // items del presupuesto en conversión
 const LOGO_B64='LOGO_PLACEHOLDER';
 
 async function init(){
-  const usuario = await ERP.initApp('presupuestos');
+  const usuario = await ERP.initLayout('presupuestos');
   if(!usuario) return;
   await cargarDatosModal();
   await cargarPresupuestos();

@@ -8,7 +8,6 @@
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="erp-utils.js"></script>
-<script src="erp-core.js"></script>
 <script src="erp-sidebar.js"></script>
 <script src="empresas.api.js"></script>
 <script src="clientes.api.js"></script>
@@ -275,7 +274,7 @@ const MESES=['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','
 let tabActual='iva';
 
 async function init(){
-  const usuario = await ERP.initApp('impuestos');
+  const usuario = await ERP.initLayout('impuestos');
   if(!usuario) return;
   // Poblar años
   const anioSel=document.getElementById('f-anio');
