@@ -8,6 +8,7 @@
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="erp-utils.js"></script>
+<script src="erp-core.js"></script>
 <script src="erp-sidebar.js"></script>
 <script src="empresas.api.js"></script>
 <script src="clientes.api.js"></script>
@@ -224,7 +225,7 @@ let editId=null;
 let caiActual=null;
 
 async function init(){
-  const usuario = await ERP.initLayout('remitos');
+  const usuario = await ERP.initApp('remitos');
   if(!usuario) return;
   const {data:{session}}=await db.auth.getSession();
   if(!session){window.location.href='login.html';return;}

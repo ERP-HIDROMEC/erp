@@ -8,6 +8,7 @@
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="erp-utils.js"></script>
+<script src="erp-core.js"></script>
 <script src="erp-sidebar.js"></script>
 <script src="empresas.api.js"></script>
 <script src="facturas.api.js"></script>
@@ -154,7 +155,7 @@ let kpiData = [], vencData = [], mensData = [], cliData = [];
 
 // Auth check — una sola instancia
 async function init() {
-  const usuario = await ERP.initLayout('dashboard');
+  const usuario = await ERP.initApp('dashboard');
   if(!usuario) return;
   const hoy = new Date();
   document.getElementById('fecha-texto').textContent = hoy.toLocaleDateString('es-AR',{weekday:'long',day:'numeric',month:'long',year:'numeric'});

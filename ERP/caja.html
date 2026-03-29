@@ -9,6 +9,7 @@
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js"></script>
 <script src="erp-utils.js"></script>
+<script src="erp-core.js"></script>
 <script src="erp-sidebar.js"></script>
 <script src="empresas.api.js"></script>
 <script src="caja.api.js"></script>
@@ -325,7 +326,7 @@ let previewData=[];
 let tipoImport='';
 
 async function init(){
-  const usuario = await ERP.initLayout('caja');
+  const usuario = await ERP.initApp('caja');
   if(!usuario) return;
   document.getElementById('sel-mes').value=new Date().toISOString().substring(0,7);
   document.getElementById('nf-fecha').value=hoy();

@@ -8,6 +8,7 @@
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="erp-utils.js"></script>
+<script src="erp-core.js"></script>
 <script src="erp-sidebar.js"></script>
 <script src="empresas.api.js"></script>
 <script src="clientes.api.js"></script>
@@ -190,7 +191,7 @@ let contratoEditId=null;
 let itemEditId=null;
 
 async function init(){
-  const usuario = await ERP.initLayout('contratos');
+  const usuario = await ERP.initApp('contratos');
   if(!usuario) return;
   await cargarClientesModal();
   await cargarContratos();
@@ -392,8 +393,8 @@ async function cargarPrecios(){
 
   if(!contratoSelId){
     // Mostrar todos los contratos para seleccionar
-    const emp2=document.getElementById('f-empresa').value;
-    let ctActData=await ContratosAPI.getContratosSelect(emp||null);
+    const emp=document.getElementById('f-empresa').value;
+    let ctActData=await ContratosAPI.getContratosSelect(emp2||null);
     if(emp) ctActData=ctActData.filter(r=>r.empresa_id===emp);
     const contratos=ctActData;
     document.getElementById('kpis').innerHTML='';

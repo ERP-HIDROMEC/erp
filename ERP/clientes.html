@@ -8,6 +8,7 @@
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="erp-utils.js"></script>
+<script src="erp-core.js"></script>
 <script src="erp-sidebar.js"></script>
 <script src="empresas.api.js"></script>
 <script src="clientes.api.js"></script>
@@ -230,7 +231,7 @@ let clienteSelId = null;
 let clienteEditId = null;
 
 async function init(){
-  const usuario = await ERP.initLayout('clientes');
+  const usuario = await ERP.initApp('clientes');
   if(!usuario) return;
   cargarClientes();
 }
