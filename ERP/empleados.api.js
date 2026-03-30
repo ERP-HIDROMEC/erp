@@ -144,7 +144,7 @@ const EmpleadosAPI = (() => {
     return data || [];
   }
 
-  async function subirDocumentoEmpleado(path, file, bucket = 'empleados-docs') {
+  async function subirDocumentoEmpleado(path, file, bucket = 'syh-docs') {
     const { error } = await db.storage.from(bucket).upload(path, file, { contentType: file.type, upsert: false });
     if (error) throw error;
     const { data } = db.storage.from(bucket).getPublicUrl(path);
@@ -156,7 +156,7 @@ const EmpleadosAPI = (() => {
     if (error) throw error;
   }
 
-  async function eliminarDocumentoEmpleado(id, storagePath, bucket = 'empleados-docs') {
+  async function eliminarDocumentoEmpleado(id, storagePath, bucket = 'syh-docs') {
     if (storagePath) {
       await db.storage.from(bucket).remove([storagePath]);
     }
@@ -183,9 +183,9 @@ const EmpleadosAPI = (() => {
   async function registrarAusencia(payload, file, storagePath) {
     let archivoUrl = null;
     if (file && storagePath) {
-      const { error: ue } = await db.storage.from('empleados-docs').upload(storagePath, file, { contentType: file.type, upsert: false });
+      const { error: ue } = await db.storage.from('syh-docs').upload(storagePath, file, { contentType: file.type, upsert: false });
       if (!ue) {
-        const { data: ud } = db.storage.from('empleados-docs').getPublicUrl(storagePath);
+        const { data: ud } = db.storage.from('syh-docs').getPublicUrl(storagePath);
         archivoUrl = ud?.publicUrl || null;
       }
     }

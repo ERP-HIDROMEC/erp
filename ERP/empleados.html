@@ -8,6 +8,7 @@
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="erp-utils.js"></script>
+<script src="storage.utils.js"></script>
 <script src="erp-sidebar.js"></script>
 <script src="empresas.api.js"></script>
 <script src="empleados.api.js"></script>
@@ -1015,17 +1016,17 @@ async function guardarDocumento(){
 
   let archivoUrl=null,archivoPatch=null;
   if(file){
-    const ext=file.name.split('.').pop();
-    const path=`documentos/${docCategoria}/${empId}_${Date.now()}.${ext}`;
     document.getElementById('nd-upload-progress').style.display='block';
     document.getElementById('nd-progress-bar').style.width='40%';
     document.getElementById('nd-progress-text').textContent='Subiendo archivo...';
-    const {error:uploadError}=await db.storage.from('empleados-docs').upload(path,file,{contentType:file.type,upsert:false});
-    if(uploadError){document.getElementById('nd-upload-progress').style.display='none';toast('Error al subir archivo: '+(uploadError.message||uploadError.error||JSON.stringify(uploadError)), 'error');console.error('Upload error:',uploadError);return;}
-    document.getElementById('nd-progress-bar').style.width='90%';
-    const {data:urlData}=db.storage.from('empleados-docs').getPublicUrl(path);
-    archivoUrl=urlData?.publicUrl||null;
-    archivoPatch=path;
+    try{
+      const arch=await StorageUtils.upload(file,`empleados/documentos/${docCategoria}`);
+      archivoUrl=arch.url; archivoPatch=arch.path;
+    }catch(ue){
+      document.getElementById('nd-upload-progress').style.display='none';
+      toast('Error al subir: '+(ue.message||JSON.stringify(ue)),'error');
+      console.error('upload error:',ue); return;
+    }
     document.getElementById('nd-progress-bar').style.width='100%';
   }
 
@@ -1047,7 +1048,7 @@ async function guardarDocumento(){
 
 async function borrarDocumento(id,path){
   if(!(await confirmar('Borrar este documento?'))) return;
-  if(path) await db.storage.from('empleados-docs').remove([path]);
+  if(path) await db.storage.from('syh-docs').remove([path]);
   await EmpleadosAPI.eliminarDocumentoEmpleado(id,null);
   recargar();
 }
@@ -1237,14 +1238,15 @@ async function guardarAusencia(){
   const fileInput=document.getElementById('na-archivo');
   const file=fileInput?.files[0];
   if(file){
-    const ext=file.name.split('.').pop();
-    const path=`ausencias/${empId2}/${empId}_${Date.now()}.${ext}`;
     document.getElementById('na-upload-progress').style.display='block';
     document.getElementById('na-progress-bar').style.width='50%';
-    const {error:ue}=await db.storage.from('empleados-docs').upload(path,file,{contentType:file.type,upsert:false});
-    if(!ue){
-      const {data:ud}=db.storage.from('empleados-docs').getPublicUrl(path);
-      certUrl=ud?.publicUrl||null;certPath=path;
+    try{
+      const arch=await StorageUtils.upload(file,'empleados/ausencias');
+      certUrl=arch.url; certPath=arch.path;
+    }catch(ue){
+      document.getElementById('na-upload-progress').style.display='none';
+      toast('Error al subir: '+(ue.message||JSON.stringify(ue)),'error');
+      console.error('upload error:',ue); return;
     }
     document.getElementById('na-progress-bar').style.width='100%';
     document.getElementById('na-upload-progress').style.display='none';
