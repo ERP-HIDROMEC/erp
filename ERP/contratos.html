@@ -15,7 +15,7 @@
 <script src="remitos.api.js"></script>
 <style>
   .layout{display:grid;grid-template-columns:1fr 1fr;gap:20px;}
-  tr:last-child tr:hover tr.selected .estado.activo{background:rgba(16,185,129,0.15);color:var(--green);}
+  tr:hover tr.selected .estado.activo{background:rgba(16,185,129,0.15);color:var(--green);}
   .estado.vencido{background:rgba(239,68,68,0.15);color:var(--red);}
   .estado.cancelado{background:rgba(122,128,153,0.15);color:var(--muted);}
   .form-row.three{grid-template-columns:1fr 1fr 1fr;}
@@ -28,7 +28,7 @@
   .kpi-card.blue::before{background:var(--blue);}
   .kpi-card.green::before{background:var(--green);}
   .kpi-card.orange::before{background:var(--orange);}
-  .kpi-.kpi-value{font-size:20px;font-weight:600;font-family:'DM Mono',monospace;}
+  .kpi-value{font-size:20px;font-weight:600;font-family:'DM Mono',monospace;}
   .historial-badge{display:inline-block;padding:2px 8px;border-radius:4px;font-size:10px;background:rgba(139,92,246,0.1);color:var(--purple);}
   @media(max-width:1024px){.layout{grid-template-columns:1fr;}}
   @media(max-width:768px){.main{margin-left:0;padding:16px;}.kpi-row{grid-template-columns:1fr 1fr;}.form-row,.form-row.three{grid-template-columns:1fr;}}

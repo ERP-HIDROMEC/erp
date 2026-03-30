@@ -14,7 +14,7 @@
 <script src="clientes.api.js"></script>
 <script src="proyectos.api.js"></script>
 <style>
-  tr:last-child tr:hover .tag{display:inline-block;padding:3px 10px;border-radius:20px;font-size:11px;font-weight:500;}
+  tr:hover .tag{display:inline-block;padding:3px 10px;border-radius:20px;font-size:11px;font-weight:500;}
   .tag.activo{background:rgba(16,185,129,0.15);color:var(--green);}
   .tag.inactivo{background:rgba(122,128,153,0.15);color:var(--muted);}
   .tag.convenio{background:rgba(59,130,246,0.15);color:var(--blue);}
@@ -30,7 +30,7 @@
   .kpi-card.green::before{background:var(--green);}
   .kpi-card.orange::before{background:var(--orange);}
   .kpi-card.purple::before{background:var(--purple);}
-  .kpi-.kpi-value{font-size:20px;font-weight:600;font-family:'DM Mono',monospace;}
+  .kpi-value{font-size:20px;font-weight:600;font-family:'DM Mono',monospace;}
   @media(max-width:768px){.main{margin-left:0;padding:16px;}.kpi-grid{grid-template-columns:repeat(2,1fr);}.form-row,.form-row.three{grid-template-columns:1fr;}}
 </style>
 </head>
@@ -1021,7 +1021,7 @@ async function guardarDocumento(){
     document.getElementById('nd-progress-bar').style.width='40%';
     document.getElementById('nd-progress-text').textContent='Subiendo archivo...';
     const {error:uploadError}=await db.storage.from('empleados-docs').upload(path,file,{contentType:file.type,upsert:false});
-    if(uploadError){document.getElementById('nd-upload-progress').style.display='none';toast('Error al subir: ', 'error');return;}
+    if(uploadError){document.getElementById('nd-upload-progress').style.display='none';toast('Error al subir archivo: '+(uploadError.message||uploadError.error||JSON.stringify(uploadError)), 'error');console.error('Upload error:',uploadError);return;}
     document.getElementById('nd-progress-bar').style.width='90%';
     const {data:urlData}=db.storage.from('empleados-docs').getPublicUrl(path);
     archivoUrl=urlData?.publicUrl||null;
@@ -1458,7 +1458,7 @@ async function procesarXLS(input) {
 
   // Construir filas para preview
   _importRows = [];
-  const fmt = v => new Intl.NumberFormat('es-AR', { style: 'currency', currency: 'ARS', maximumFractionDigits: 0 }).format(v || 0);
+  const fmtLocal = v => new Intl.NumberFormat('es-AR', { style: 'currency', currency: 'ARS', maximumFractionDigits: 0 }).format(v || 0);
 
   let noMatch = 0;
   const tbody = document.getElementById('import-tabla-body');
@@ -1509,9 +1509,9 @@ async function procesarXLS(input) {
     tr.innerHTML = `
       <td style="padding:7px 8px;font-size:12px;border-bottom:1px solid var(--border)">${emp.nombre}</td>
       <td style="padding:7px 8px;font-size:12px;border-bottom:1px solid var(--border)">${emp.tipoLiq || parsed.tipoLiq}</td>
-      <td style="padding:7px 8px;font-family:'DM Mono',monospace;font-size:12px;border-bottom:1px solid var(--border)">${fmt(bruto)}</td>
-      <td style="padding:7px 8px;font-family:'DM Mono',monospace;font-size:12px;color:var(--red);border-bottom:1px solid var(--border)">-${fmt(aportes)}</td>
-      <td style="padding:7px 8px;font-family:'DM Mono',monospace;font-size:12px;color:var(--green);border-bottom:1px solid var(--border)">${fmt(neto)}</td>
+      <td style="padding:7px 8px;font-family:'DM Mono',monospace;font-size:12px;border-bottom:1px solid var(--border)">${fmtLocal(bruto)}</td>
+      <td style="padding:7px 8px;font-family:'DM Mono',monospace;font-size:12px;color:var(--red);border-bottom:1px solid var(--border)">-${fmtLocal(aportes)}</td>
+      <td style="padding:7px 8px;font-family:'DM Mono',monospace;font-size:12px;color:var(--green);border-bottom:1px solid var(--border)">${fmtLocal(neto)}</td>
       <td style="padding:7px 8px;font-size:12px;border-bottom:1px solid var(--border)">
         ${matched 
           ? '<span style="color:var(--green)">✓ '+empBD.nombre+'</span>'
@@ -1527,8 +1527,8 @@ async function procesarXLS(input) {
     `<strong>Período:</strong> ${parsed.periodo} &nbsp;|&nbsp; 
      <strong>Tipo:</strong> ${parsed.tipoLiq} &nbsp;|&nbsp;
      <strong>Empleados:</strong> ${parsed.empleados.length} &nbsp;|&nbsp;
-     <strong>Total bruto:</strong> <span style="color:var(--green)">${fmt(totalBruto)}</span> &nbsp;|&nbsp;
-     <strong>Total neto:</strong> <span style="color:var(--green)">${fmt(totalNeto)}</span>`;
+     <strong>Total bruto:</strong> <span style="color:var(--green)">${fmtLocal(totalBruto)}</span> &nbsp;|&nbsp;
+     <strong>Total neto:</strong> <span style="color:var(--green)">${fmtLocal(totalNeto)}</span>`;
 
   document.getElementById('import-no-match-warn').innerHTML = noMatch > 0
     ? `⚠ ${noMatch} empleado(s) no encontrados en la BD — se importarán igual sin empleado_id asignado. Podés asignarlos manualmente después.`
