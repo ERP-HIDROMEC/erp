@@ -144,11 +144,8 @@ const EmpleadosAPI = (() => {
     return data || [];
   }
 
-  async function subirDocumentoEmpleado(path, file, bucket = 'syh-docs') {
-    const { error } = await db.storage.from(bucket).upload(path, file, { contentType: file.type, upsert: false });
-    if (error) throw error;
-    const { data } = db.storage.from(bucket).getPublicUrl(path);
-    return data?.publicUrl || null;
+  async function subirDocumentoEmpleado(file, carpeta = 'empleados/documentos') {
+    return await StorageUtils.upload(file, carpeta);
   }
 
   async function registrarDocumentoEmpleado(payload) {
@@ -180,16 +177,9 @@ const EmpleadosAPI = (() => {
     return data || [];
   }
 
-  async function registrarAusencia(payload, file, storagePath) {
-    let archivoUrl = null;
-    if (file && storagePath) {
-      const { error: ue } = await db.storage.from('syh-docs').upload(storagePath, file, { contentType: file.type, upsert: false });
-      if (!ue) {
-        const { data: ud } = db.storage.from('syh-docs').getPublicUrl(storagePath);
-        archivoUrl = ud?.publicUrl || null;
-      }
-    }
-    const { error } = await db.from('empleados_ausencias').insert({ ...payload, archivo_url: archivoUrl });
+  async function registrarAusencia(payload) {
+    // El HTML maneja el upload via StorageUtils y pasa certificado_url en payload
+    const { error } = await db.from('empleados_ausencias').insert(payload);
     if (error) throw error;
   }
 
