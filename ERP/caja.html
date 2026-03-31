@@ -225,7 +225,7 @@
 
 <!-- MODAL ORDEN DE PAGO -->
 <div class="modal-overlay" id="modal-orden">
-  <div class="modal" style="max-width:460px">
+  <div class="modal" style="max-width:560px">
     <h3>💳 Confirmar orden de pago</h3>
     <div class="form-row">
       <div class="form-group">
@@ -233,23 +233,25 @@
         <input type="date" id="op-fecha">
       </div>
       <div class="form-group">
-        <label>Método de pago</label>
-        <select id="op-metodo">
-          <option value="transferencia">Transferencia</option>
-          <option value="cheque">Cheque</option>
-          <option value="efectivo">Efectivo</option>
-          <option value="otro">Otro</option>
-        </select>
-      </div>
-    </div>
-    <div class="form-row full">
-      <div class="form-group">
         <label>Observaciones (opcional)</label>
-        <textarea id="op-obs" placeholder="N° transferencia, banco, referencia..."></textarea>
+        <input type="text" id="op-obs" placeholder="Referencia, banco, etc.">
       </div>
     </div>
-    <div style="background:rgba(59,130,246,0.08);border:1px solid rgba(59,130,246,0.2);border-radius:8px;padding:12px;font-size:12px;color:var(--muted);margin-bottom:8px">
-      📄 Se generará automáticamente una <strong style="color:var(--blue)">Orden de Pago en PDF</strong> con el mismo formato del remito.
+
+    <!-- Líneas de pago dinámicas -->
+    <div style="margin-bottom:8px">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
+        <label style="font-size:13px;font-weight:600">Forma de pago</label>
+        <button class="btn btn-sm btn-ghost" onclick="agregarLineaPago()">+ Agregar línea</button>
+      </div>
+      <div id="op-pagos-container"></div>
+      <div style="text-align:right;font-size:13px;margin-top:6px;color:var(--muted)">
+        Total cargado: <strong id="op-total-pagos" style="font-family:'DM Mono',monospace;color:var(--text)">$ 0</strong>
+      </div>
+    </div>
+
+    <div style="background:rgba(59,130,246,0.08);border:1px solid rgba(59,130,246,0.2);border-radius:8px;padding:10px 12px;font-size:12px;color:var(--muted);margin-bottom:8px">
+      📄 Se generará automáticamente una <strong style="color:var(--blue)">Orden de Pago en PDF</strong>.
     </div>
     <div class="modal-footer">
       <button class="btn btn-ghost" onclick="cerrarModal('modal-orden')">Cancelar</button>
@@ -848,6 +850,7 @@ async function guardarMovimiento(){
   if(!desc||!monto){toast('Completá descripción y monto.', 'warn');return;}
   const empId=document.getElementById('nm-empresa').value;
   const cuenta=document.getElementById('nm-cuenta').value;
+  let error=null;
   try{ await CajaAPI.registrarMovimiento({
     empresa_id:empId,tipo:document.getElementById('nm-tipo').value,
     origen:cuenta,categoria:document.getElementById('nm-categoria').value,
@@ -955,35 +958,179 @@ async function cargarOrdenes(){
 
 function abrirOrdenPago(id){
   ordenId=id;
+  lineasPago=[];
   document.getElementById('op-fecha').value=new Date().toISOString().split('T')[0];
-  document.getElementById('op-metodo').value='transferencia';
   document.getElementById('op-obs').value='';
+  renderLineasPago();
+  agregarLineaPago(); // empezar con 1 línea
   document.getElementById('modal-orden').classList.add('show');
+}
+
+// ── Motor de líneas de pago ──────────────────────────────────────────────
+let lineasPago=[];
+
+function agregarLineaPago(){
+  lineasPago.push({id:Date.now(),tipo:'transferencia',numero:'',fecha:'',monto:0,banco:'',referencia:''});
+  renderLineasPago();
+}
+
+function eliminarLineaPago(id){
+  lineasPago=lineasPago.filter(p=>p.id!==id);
+  renderLineasPago();
+}
+
+function actualizarLineaPago(id,campo,valor){
+  const p=lineasPago.find(p=>p.id===id);
+  if(p){ p[campo]=campo==='monto'?Number(valor)||0:valor; }
+  actualizarTotalPagos();
+}
+
+function actualizarTotalPagos(){
+  const t=lineasPago.reduce((s,p)=>s+Number(p.monto||0),0);
+  const el=document.getElementById('op-total-pagos');
+  if(el) el.textContent=fmt(t);
+}
+
+function renderLineasPago(){
+  const cont=document.getElementById('op-pagos-container');
+  if(!cont) return;
+  if(!lineasPago.length){
+    cont.innerHTML='<div style="text-align:center;padding:12px;color:var(--muted);font-size:13px">Sin líneas de pago. Usá "+ Agregar línea".</div>';
+    actualizarTotalPagos(); return;
+  }
+  cont.innerHTML=lineasPago.map(p=>`
+    <div style="border:1px solid var(--border);border-radius:8px;padding:10px;margin-bottom:8px;background:var(--bg2)">
+      <div style="display:grid;grid-template-columns:130px 1fr 1fr auto;gap:8px;align-items:end">
+        <div>
+          <label style="font-size:11px;color:var(--muted)">Tipo</label>
+          <select style="width:100%;padding:5px 8px;font-size:12px;background:var(--bg3);border:1px solid var(--border);border-radius:6px;color:var(--text)"
+            onchange="actualizarLineaPago(${p.id},'tipo',this.value);renderLineasPago()">
+            <option value="transferencia" ${p.tipo==='transferencia'?'selected':''}>Transferencia</option>
+            <option value="cheque" ${p.tipo==='cheque'?'selected':''}>Cheque</option>
+            <option value="efectivo" ${p.tipo==='efectivo'?'selected':''}>Efectivo</option>
+          </select>
+        </div>
+        <div>
+          <label style="font-size:11px;color:var(--muted)">${p.tipo==='cheque'?'N° cheque':'Referencia / N°'}</label>
+          <input type="text" value="${p.numero||''}" placeholder="${p.tipo==='cheque'?'Número de cheque':'Nro. transferencia'}"
+            style="width:100%;padding:5px 8px;font-size:12px;background:var(--bg3);border:1px solid var(--border);border-radius:6px;color:var(--text)"
+            oninput="actualizarLineaPago(${p.id},'numero',this.value)">
+        </div>
+        <div>
+          <label style="font-size:11px;color:var(--muted)">Monto</label>
+          <input type="number" value="${p.monto||''}" placeholder="0"
+            style="width:100%;padding:5px 8px;font-size:12px;background:var(--bg3);border:1px solid var(--border);border-radius:6px;color:var(--text);font-family:'DM Mono',monospace"
+            oninput="actualizarLineaPago(${p.id},'monto',this.value)">
+        </div>
+        <div>
+          <button onclick="eliminarLineaPago(${p.id})" style="padding:5px 10px;font-size:12px;background:rgba(239,68,68,0.1);border:1px solid rgba(239,68,68,0.3);border-radius:6px;color:var(--red);cursor:pointer">✕</button>
+        </div>
+      </div>
+      ${p.tipo==='cheque'?`
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:8px">
+        <div>
+          <label style="font-size:11px;color:var(--muted)">Banco</label>
+          <input type="text" value="${p.banco||''}" placeholder="Nombre del banco"
+            style="width:100%;padding:5px 8px;font-size:12px;background:var(--bg3);border:1px solid var(--border);border-radius:6px;color:var(--text)"
+            oninput="actualizarLineaPago(${p.id},'banco',this.value)">
+        </div>
+        <div>
+          <label style="font-size:11px;color:var(--muted)">Fecha de cobro</label>
+          <input type="date" value="${p.fecha||''}"
+            style="width:100%;padding:5px 8px;font-size:12px;background:var(--bg3);border:1px solid var(--border);border-radius:6px;color:var(--text)"
+            oninput="actualizarLineaPago(${p.id},'fecha',this.value)">
+        </div>
+      </div>`:p.tipo==='transferencia'?`
+      <div style="margin-top:8px">
+        <label style="font-size:11px;color:var(--muted)">Banco / Entidad</label>
+        <input type="text" value="${p.banco||''}" placeholder="Banco emisor"
+          style="width:100%;padding:5px 8px;font-size:12px;background:var(--bg3);border:1px solid var(--border);border-radius:6px;color:var(--text)"
+          oninput="actualizarLineaPago(${p.id},'banco',this.value)">
+      </div>`:''}
+    </div>
+  `).join('');
+  actualizarTotalPagos();
 }
 
 async function confirmarOrdenPago(){
   const fecha=document.getElementById('op-fecha').value;
-  const metodo=document.getElementById('op-metodo').value;
   const obs=document.getElementById('op-obs').value;
-  if(!fecha){toast('Ingresá la fecha de pago.', 'warn');return;}
+  if(!fecha){toast('Ingresá la fecha de pago.','warn');return;}
+  if(!lineasPago.length){toast('Agregá al menos una línea de pago.','warn');return;}
+
+  // Validaciones por tipo de pago
+  for(const p of lineasPago){
+    if(!p.monto||Number(p.monto)<=0){toast('Todos los pagos deben tener un monto mayor a cero.','warn');return;}
+    if(p.tipo==='cheque'&&!p.numero){toast('El cheque requiere número.','warn');return;}
+    if(p.tipo==='cheque'&&!p.banco){toast('El cheque requiere banco.','warn');return;}
+    if(p.tipo==='transferencia'&&!p.numero){toast('La transferencia requiere número/referencia.','warn');return;}
+  }
+
+  const totalPagos=lineasPago.reduce((s,p)=>s+Number(p.monto||0),0);
+  const metodoPrincipal=lineasPago[0]?.tipo||'transferencia';
 
   const empId2=document.getElementById('sel-empresa')?.value||'';
   const count2=await EgresosAPI.contarEgresosConOP(empId2);
-  const nroOrden='OP-'+String((count||0)+1).padStart(4,'0')+'-'+new Date().getFullYear();
+  const nroOrden='OP-'+String((count2||0)+1).padStart(4,'0')+'-'+new Date().getFullYear();
 
   const u=await getUsuario();
-  let egreso=null,errOp=null; try{ await EgresosAPI.pagarEgreso(egresoId,{
+
+  // 1. Cargar egreso antes de confirmar (necesario para validar monto y para PDF)
+  let egreso=null;
+  try{ egreso=await EgresosAPI.getEgresoById(ordenId); }catch(e){ console.warn('Error cargando egreso:',e); }
+
+  // 2. Validar que el total coincida con el monto del egreso
+  if(egreso){
+    const egresoMonto=Number(egreso.monto||0);
+    if(Math.abs(totalPagos-egresoMonto)>1){
+      toast(`El total cargado (${fmt(totalPagos)}) no coincide con el egreso (${fmt(egresoMonto)})`, 'warn');
+      return;
+    }
+  }
+
+  // 3. Pagar egreso + registrar movimiento en caja (operación atómica)
+  const payloadEgreso={
     pagado:true,
     fecha_pago_real:fecha,
-    metodo_pago:metodo,
+    metodo_pago:metodoPrincipal,
     orden_pago_nro:nroOrden,
     orden_pago_at:new Date().toISOString(),
     observaciones:obs||null,
-  }); }catch(e){error=e;}
-  if(error){toast('Error: '+error.message,'error');return;}
+  };
+  const movimientoCaja={
+    empresa_id:egreso?.empresa_id||empId2,
+    tipo:'egreso',
+    origen:'banco',
+    categoria:'pago_proveedor',
+    descripcion:`Pago ${nroOrden} - ${egreso?.descripcion||'Egreso'}${egreso?.proveedores?.nombre?' — '+egreso.proveedores.nombre:''}`,
+    monto:totalPagos,
+    fecha:fecha,
+  };
+
+  let errOp=null;
+  try{
+    await CajaAPI.pagarEgresoConMovimiento(ordenId,payloadEgreso,movimientoCaja);
+  }catch(e){errOp=e;}
+  if(errOp){toast('Error al confirmar pago: '+errOp.message,'error');return;}
+
+  // 4. Guardar líneas de pago en egresos_pagos_detalle
+  for(const p of lineasPago){
+    try{
+      await db.from('egresos_pagos_detalle').insert({
+        egreso_id:ordenId,
+        tipo_pago:p.tipo,
+        numero:p.numero||null,
+        fecha:p.tipo==='cheque'?p.fecha||null:fecha,
+        monto:Number(p.monto)||0,
+        banco:p.banco||null,
+        referencia:p.referencia||null,
+      });
+    }catch(ep){ console.warn('Error guardando línea de pago:',ep); }
+  }
+
   cerrarModal('modal-orden');
   actualizarBadgeOrdenes();
-  generarPDFOrden(egreso,nroOrden,fecha,metodo,u?.email||'');
+  generarPDFOrden(egreso,nroOrden,fecha,metodoPrincipal,u?.email||'');
   cargarOrdenes();
 }
 
