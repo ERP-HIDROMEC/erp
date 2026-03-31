@@ -181,9 +181,8 @@ const EmpleadosAPI = (() => {
   }
 
   async function registrarAusencia(payload) {
-    // El upload del certificado se hace en el frontend antes de llamar esta función.
-    // payload puede incluir: certificado_url, certificado_path (si existen en la tabla)
-    // o ninguno de los dos si no hay archivo — nunca enviamos campos undefined.
+    // Upload del certificado se hace en el frontend antes de llamar esta función.
+    // payload ya viene limpio — solo campos que existen en empleados_ausencias.
     const { error } = await db.from('empleados_ausencias').insert(payload);
     if (error) throw error;
   }

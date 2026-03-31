@@ -1233,27 +1233,28 @@ async function guardarAusencia(){
   if(!empId||!inicio){toast('Empleado y fecha de inicio son obligatorios.', 'warn');return;}
   const empId2=document.getElementById('na-empresa').value;
 
-  // Upload del certificado — usa bucket syh-docs (bucket centralizado del sistema)
+  // Upload certificado — bucket syh-docs (existe y tiene policies)
   let certUrl=null;
   const fileInput=document.getElementById('na-archivo');
   const file=fileInput?.files[0];
   if(file){
+    const ext=file.name.split('.').pop();
+    const path=`ausencias/${empId2}/${empId}_${Date.now()}.${ext}`;
     document.getElementById('na-upload-progress').style.display='block';
-    document.getElementById('na-progress-bar').style.width='40%';
-    try{
-      const uploadResult=await StorageUtils.upload(file,`ausencias/${empId2}`);
-      certUrl=uploadResult?.url||null;
-      document.getElementById('na-progress-bar').style.width='100%';
-    }catch(ue){
+    document.getElementById('na-progress-bar').style.width='50%';
+    const {error:ue}=await db.storage.from('syh-docs').upload(path,file,{contentType:file.type,upsert:false});
+    if(ue){
       document.getElementById('na-upload-progress').style.display='none';
-      toast('Error al subir el certificado: '+(ue?.message||String(ue)),'error');
+      toast('Error al subir certificado: '+ue.message,'error');
       return;
     }
+    const {data:ud}=db.storage.from('syh-docs').getPublicUrl(path);
+    certUrl=ud?.publicUrl||null;
+    document.getElementById('na-progress-bar').style.width='100%';
     document.getElementById('na-upload-progress').style.display='none';
   }
 
-  // Armar payload — SOLO campos que existen en empleados_ausencias
-  // No incluir certificado_path (columna inexistente) ni campos undefined
+  // Payload limpio — sin certificado_path (columna inexistente en empleados_ausencias)
   const payload={
     empresa_id:empId2,
     empleado_id:empId,
@@ -1263,7 +1264,6 @@ async function guardarAusencia(){
     fecha_fin:document.getElementById('na-fin').value||null,
     observaciones:document.getElementById('na-obs').value||null,
   };
-  // Solo agregar certificado_url si hubo upload exitoso
   if(certUrl) payload.certificado_url=certUrl;
 
   let error;
