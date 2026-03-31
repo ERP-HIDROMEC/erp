@@ -144,7 +144,7 @@ const EmpleadosAPI = (() => {
     return data || [];
   }
 
-  async function subirDocumentoEmpleado(path, file, bucket = 'empleados-docs') {
+  async function subirDocumentoEmpleado(path, file, bucket = 'syh-docs') {
     const { error } = await db.storage.from(bucket).upload(path, file, { contentType: file.type, upsert: false });
     if (error) throw error;
     const { data } = db.storage.from(bucket).getPublicUrl(path);
@@ -156,7 +156,7 @@ const EmpleadosAPI = (() => {
     if (error) throw error;
   }
 
-  async function eliminarDocumentoEmpleado(id, storagePath, bucket = 'empleados-docs') {
+  async function eliminarDocumentoEmpleado(id, storagePath, bucket = 'syh-docs') {
     if (storagePath) {
       await db.storage.from(bucket).remove([storagePath]);
     }
@@ -181,17 +181,10 @@ const EmpleadosAPI = (() => {
   }
 
   async function registrarAusencia(payload) {
-    // db usa la sesión autenticada de erp-utils.js (RLS respetado automáticamente).
-    // El upload del certificado ya se hizo en el frontend antes de llamar esta función.
-    // payload solo contiene columnas que existen en empleados_ausencias.
-    // Limpiar undefined/null opcionales antes del insert.
-    const clean = Object.fromEntries(
-      Object.entries(payload).filter(([, v]) => v !== undefined && v !== null || ['empresa_id','empleado_id','tipo','estado','fecha_inicio'].includes([, v][0]))
-    );
-    // Preservar siempre los campos obligatorios aunque sean null
-    const insert = { ...payload };
-    Object.keys(insert).forEach(k => { if (insert[k] === undefined) delete insert[k]; });
-    const { error } = await db.from('empleados_ausencias').insert(insert);
+    // Upload ya hecho en el frontend. payload solo tiene columnas existentes.
+    // Limpiar undefined antes del insert.
+    Object.keys(payload).forEach(k => { if (payload[k] === undefined) delete payload[k]; });
+    const { error } = await db.from('empleados_ausencias').insert(payload);
     if (error) throw error;
   }
 
