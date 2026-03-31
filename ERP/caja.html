@@ -91,6 +91,7 @@
     <button class="tab" onclick="cambiarTab('cheques',this)">Cheques</button>
     <button class="tab" onclick="cambiarTab('flujo',this)">Flujo proyectado</button>
     <button class="tab" onclick="cambiarTab('ordenes',this)">💳 Órdenes de pago <span id="badge-ordenes" style="display:none;background:var(--red);color:#fff;border-radius:20px;padding:1px 7px;font-size:11px;margin-left:4px"></span></button>
+    <button class="tab" onclick="cambiarTab('historial-op',this)">📋 Historial pagos</button>
     <button class="tab" onclick="cambiarTab('fci',this)">📈 FCI</button>
     <button class="tab" onclick="cambiarTab('importar',this)">↑ Importar banco</button>
   </div>
@@ -347,6 +348,7 @@ function cambiarTab(tab,btn){
   else if(tab==='cheques') cargarCheques();
   else if(tab==='flujo') cargarFlujo();
   else if(tab==='ordenes') cargarOrdenes();
+  else if(tab==='historial-op') cargarHistorialOP();
   else if(tab==='fci') cargarFCI();
   else mostrarImportar();
 }
@@ -956,6 +958,58 @@ async function cargarOrdenes(){
     </table></div>`;
 }
 
+async function cargarHistorialOP(){
+  let container=document.querySelector('.panel');
+  if(!container) return;
+  container.innerHTML='<div style="display:flex;align-items:center;justify-content:center;padding:40px;color:var(--muted)"><div style="width:16px;height:16px;border:2px solid var(--border);border-top-color:var(--blue);border-radius:50%;animation:spin 0.8s linear infinite;margin-right:10px"></div>Cargando...</div>';
+
+  const empId=document.getElementById('sel-empresa')?.value||'';
+  const {data,error}=await db.from('egresos')
+    .select('*,proveedores(nombre,cuit),empresas(nombre,cuit)')
+    .eq('pagado',true)
+    .not('orden_pago_nro','is',null)
+    .order('orden_pago_at',{ascending:false})
+    .limit(100);
+  if(error){container.innerHTML='<div style="padding:40px;text-align:center;color:var(--red)">Error cargando historial</div>';return;}
+  const rows=data||[];
+
+  container.innerHTML=`
+    <div style="padding:16px 20px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between">
+      <div><span style="font-size:13px;color:var(--muted)">${rows.length} órdenes de pago emitidas</span></div>
+    </div>
+    <div style="overflow-x:auto"><table>
+      <thead><tr><th>N° Orden</th><th>Fecha pago</th><th>Empresa</th><th>Proveedor</th><th>Descripción</th><th>Método</th><th>Monto</th><th>Acción</th></tr></thead>
+      <tbody>${rows.length?rows.map(r=>`<tr>
+        <td class="mono" style="font-weight:600;color:var(--blue)">${r.orden_pago_nro||'—'}</td>
+        <td class="mono">${r.fecha_pago_real?fmtF(r.fecha_pago_real):'—'}</td>
+        <td style="font-size:12px">${r.empresas?.nombre||'—'}</td>
+        <td><div style="font-size:13px">${r.proveedores?.nombre||'Sin proveedor'}</div>
+          ${r.proveedores?.cuit?`<div style="font-size:11px;color:var(--muted)">${r.proveedores.cuit}</div>`:''}</td>
+        <td style="font-size:12px;color:var(--muted);max-width:160px">${r.descripcion||''}</td>
+        <td style="font-size:12px">${r.metodo_pago||'—'}</td>
+        <td class="mono" style="font-weight:600">${fmt(r.monto)}</td>
+        <td><button class="btn btn-sm btn-ghost" onclick="descargarOrdenPago('${r.id}')">⬇ PDF</button></td>
+      </tr>`).join(''):'<tr><td colspan="8" style="text-align:center;padding:40px;color:var(--muted)">Sin órdenes de pago emitidas</td></tr>'}</tbody>
+    </table></div>`;
+}
+
+async function descargarOrdenPago(egresoId){
+  // Cargar egreso con joins + líneas de pago
+  const {data:eg}=await db.from('egresos')
+    .select('*,proveedores(nombre,cuit),empresas(nombre,cuit)')
+    .eq('id',egresoId).single();
+  if(!eg){toast('No se pudo cargar el egreso','error');return;}
+
+  const {data:lineas}=await db.from('egresos_pagos_detalle')
+    .select('*')
+    .eq('egreso_id',egresoId)
+    .order('created_at');
+
+  const u=await getUsuario();
+  generarPDFOrden(eg,eg.orden_pago_nro||'OP-???',eg.fecha_pago_real||new Date().toISOString().split('T')[0],
+    eg.metodo_pago||'—',u?.email||'',(lineas||[]));
+}
+
 function abrirOrdenPago(id){
   ordenId=id;
   lineasPago=[];
@@ -1075,9 +1129,14 @@ async function confirmarOrdenPago(){
 
   const u=await getUsuario();
 
-  // 1. Cargar egreso antes de confirmar (necesario para validar monto y para PDF)
+  // 1. Cargar egreso con joins completos (proveedor + empresa para PDF)
   let egreso=null;
-  try{ egreso=await EgresosAPI.getEgresoById(ordenId); }catch(e){ console.warn('Error cargando egreso:',e); }
+  try{
+    const {data:_eg,error:_ege}=await db.from('egresos')
+      .select('*,proveedores(nombre,cuit),empresas(nombre,cuit)')
+      .eq('id',ordenId).single();
+    if(!_ege) egreso=_eg;
+  }catch(e){ console.warn('Error cargando egreso:',e); }
 
   // 2. Validar que el total coincida con el monto del egreso
   if(egreso){
@@ -1130,11 +1189,11 @@ async function confirmarOrdenPago(){
 
   cerrarModal('modal-orden');
   actualizarBadgeOrdenes();
-  generarPDFOrden(egreso,nroOrden,fecha,metodoPrincipal,u?.email||'');
+  generarPDFOrden(egreso,nroOrden,fecha,metodoPrincipal,u?.email||'',[...lineasPago]);
   cargarOrdenes();
 }
 
-function generarPDFOrden(eg,nro,fecha,metodo,operador){
+function generarPDFOrden(eg,nro,fecha,metodo,operador,pagos=[]){
   const {jsPDF}=window.jspdf;
   const doc=new jsPDF({format:'a4',unit:'mm'});
 
@@ -1245,35 +1304,54 @@ function generarPDFOrden(eg,nro,fecha,metodo,operador){
   doc.text('DETALLE DEL PAGO',midX,yD+6,{align:'center'});
   doc.line(L+1,yD+8,R-1,yD+8);
 
-  // Headers columnas
+  // Headers tabla de pagos
   doc.setFontSize(8);doc.setFont('helvetica','bold');doc.setTextColor(80,80,80);
-  doc.text('CONCEPTO',L+8,yD+15);
-  doc.text('TIPO',midX-10,yD+15);
-  doc.text('PROYECTO',midX+30,yD+15);
+  doc.text('N°',L+5,yD+15);
+  doc.text('TIPO',L+18,yD+15);
+  doc.text('NÚMERO / REF',L+50,yD+15);
+  doc.text('BANCO',midX+10,yD+15);
+  doc.text('FECHA COBRO',midX+50,yD+15);
   doc.text('MONTO',R-10,yD+15,{align:'right'});
   doc.setDrawColor(200,200,200);
   doc.line(L+1,yD+17,R-1,yD+17);
 
-  // Fila del egreso
-  doc.setFillColor(252,252,252);doc.rect(L+1,yD+18,W-2,10,'F');
-  doc.setFont('helvetica','normal');doc.setFontSize(9);doc.setTextColor(0,0,0);
-  const desc=String(eg.descripcion||'');
-  const descLines=doc.splitTextToSize(desc,80);
-  doc.text(descLines,L+8,yD+25);
-  doc.text(eg.tipo||'—',midX-10,yD+25);
-  doc.text('General',midX+30,yD+25);
-  doc.setFont('helvetica','bold');
-  doc.text(fmtM(eg.monto),R-10,yD+25,{align:'right'});
+  // Filas de pagos
+  let yRow=yD+18;
+  const pagosRender=pagos.length?pagos:[{tipo:metodo,numero:'',banco:'',fecha:'',monto:eg?.monto||0}];
+  pagosRender.forEach((p,i)=>{
+    const bg=i%2===0?[252,252,252]:[248,248,255];
+    doc.setFillColor(...bg);doc.rect(L+1,yRow,W-2,10,'F');
+    doc.setFont('helvetica','normal');doc.setFontSize(9);doc.setTextColor(0,0,0);
+    doc.text(String(i+1),L+5,yRow+7);
+    const tipoLabel=p.tipo==='cheque'?'Cheque':p.tipo==='transferencia'?'Transf.':'Efectivo';
+    doc.text(tipoLabel,L+18,yRow+7);
+    doc.text(String(p.numero||'—').substring(0,20),L+50,yRow+7);
+    doc.text(String(p.banco||'—').substring(0,18),midX+10,yRow+7);
+    const fechaCobro=p.fecha?new Date(p.fecha+'T12:00:00').toLocaleDateString('es-AR'):'—';
+    doc.text(fechaCobro,midX+50,yRow+7);
+    doc.setFont('helvetica','bold');
+    doc.text(fmtM(p.monto),R-10,yRow+7,{align:'right'});
+    yRow+=10;
+  });
+
+  // Concepto del egreso
+  yRow+=4;
+  doc.setFontSize(8);doc.setFont('helvetica','bold');doc.setTextColor(80,80,80);
+  doc.text('CONCEPTO:',L+5,yRow+6);
+  doc.setFont('helvetica','normal');doc.setTextColor(0,0,0);
+  const desc=String(eg?.descripcion||'');
+  const descLines=doc.splitTextToSize(desc,150);
+  doc.text(descLines,L+36,yRow+6);
+  yRow+=10;
 
   // Si hay observaciones
-  let yObs=yD+32;
-  if(eg.observaciones){
+  if(eg?.observaciones){
     doc.setFont('helvetica','italic');doc.setFontSize(8);doc.setTextColor(80,80,80);
-    doc.text('Obs: '+eg.observaciones,L+8,yObs);
-    yObs+=8;
+    doc.text('Obs: '+eg.observaciones,L+5,yRow+6);
+    yRow+=8;
   }
 
-  // ── TOTAL DESTACADO (fondo oscuro igual al monto total del remito sería el pie)
+  // ── TOTAL DESTACADO
   const yTotal=yD+155;
   doc.setFillColor(30,36,54);
   doc.rect(L+1,yTotal,W-2,16,'F');
