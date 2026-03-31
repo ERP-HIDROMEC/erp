@@ -1000,14 +1000,18 @@ async function descargarOrdenPago(egresoId){
     .eq('id',egresoId).single();
   if(!eg){toast('No se pudo cargar el egreso','error');return;}
 
-  const {data:lineas}=await db.from('egresos_pagos_detalle')
-    .select('*')
-    .eq('egreso_id',egresoId)
-    .order('created_at');
+  let lineas=[];
+  try{
+    const {data:_l,error:_le}=await db.from('egresos_pagos_detalle')
+      .select('*')
+      .eq('egreso_id',egresoId)
+      .order('created_at');
+    if(!_le&&_l) lineas=_l;
+  }catch(e){ console.warn('egresos_pagos_detalle no disponible:',e); }
 
   const u=await getUsuario();
   generarPDFOrden(eg,eg.orden_pago_nro||'OP-???',eg.fecha_pago_real||new Date().toISOString().split('T')[0],
-    eg.metodo_pago||'—',u?.email||'',(lineas||[]));
+    eg.metodo_pago||'—',u?.email||'',lineas);
 }
 
 function abrirOrdenPago(id){
@@ -1189,11 +1193,29 @@ async function confirmarOrdenPago(){
 
   cerrarModal('modal-orden');
   actualizarBadgeOrdenes();
-  generarPDFOrden(egreso,nroOrden,fecha,metodoPrincipal,u?.email||'',[...lineasPago]);
+  // Generar PDF — el guard interno avisa si eg es null o jsPDF no cargó
+  try{
+    generarPDFOrden(egreso,nroOrden,fecha,metodoPrincipal,u?.email||'',[...lineasPago]);
+  }catch(ePDF){
+    console.error('Error generando PDF:',ePDF);
+    toast('Pago confirmado. Error al generar PDF: '+ePDF.message,'warn');
+  }
   cargarOrdenes();
 }
 
 function generarPDFOrden(eg,nro,fecha,metodo,operador,pagos=[]){
+  // Guard: jsPDF debe estar cargado
+  if(!window.jspdf||!window.jspdf.jsPDF){
+    toast('Error: librería PDF no cargada. Recargá la página.','error');
+    console.error('jsPDF not loaded - window.jspdf:',window.jspdf);
+    return;
+  }
+  // Guard: eg puede ser null si el egreso no se cargó
+  if(!eg){
+    toast('Error: no se pudieron cargar los datos del egreso.','error');
+    console.error('generarPDFOrden: eg is null');
+    return;
+  }
   const {jsPDF}=window.jspdf;
   const doc=new jsPDF({format:'a4',unit:'mm'});
 
@@ -1240,7 +1262,7 @@ function generarPDFOrden(eg,nro,fecha,metodo,operador,pagos=[]){
 
   // Datos empresa derecha
   doc.setFontSize(7.5);doc.setTextColor(60,60,60);
-  doc.text('C.U.I.T.: '+eg.empresas?.cuit||'30-71163249-9',R-5,T+16,{align:'right'});
+  doc.text('C.U.I.T.: '+(eg.empresas?.cuit||'30-71163249-9'),R-5,T+16,{align:'right'});
   doc.setFontSize(8);doc.setFont('helvetica','bold');doc.setTextColor(0,0,0);
   doc.text(eg.empresas?.nombre||'Hidromec S.R.L.',R-5,T+38,{align:'right'});
   doc.setFontSize(9);doc.setFont('helvetica','bold');doc.setTextColor(100,100,100);
