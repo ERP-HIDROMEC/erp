@@ -22,8 +22,8 @@
   .kpi-card.green::before{background:var(--green);}
   .kpi-card.orange::before{background:var(--orange);}
   .kpi-card.red::before{background:var(--red);}
-  .kpi-value{font-size:20px;font-weight:600;font-family:'DM Mono',monospace;}
-  tr:hover .estado.borrador{background:rgba(122,128,153,0.15);color:var(--muted);}
+  .kpi-.kpi-value{font-size:20px;font-weight:600;font-family:'DM Mono',monospace;}
+  tr:last-child tr:hover .estado.borrador{background:rgba(122,128,153,0.15);color:var(--muted);}
   .estado.emitido{background:rgba(59,130,246,0.15);color:var(--blue);}
   .estado.enviado{background:rgba(245,158,11,0.15);color:var(--orange);}
   .estado.aceptado{background:rgba(16,185,129,0.15);color:var(--green);}
@@ -32,7 +32,7 @@
   .estado.rechazado{background:rgba(239,68,68,0.15);color:var(--red);}
   .alerta-cai{background:rgba(239,68,68,0.1);border:1px solid rgba(239,68,68,0.3);border-radius:8px;padding:10px 16px;margin-bottom:16px;font-size:13px;color:var(--red);display:none;}
   .form-row.three{grid-template-columns:1fr 1fr 1fr;}
-  .items-table input{padding:6px 8px;font-size:13px;}
+  .items-.items-table .items-table .items-table input{padding:6px 8px;font-size:13px;}
   .cai-info{background:rgba(16,185,129,0.08);border:1px solid rgba(16,185,129,0.2);border-radius:8px;padding:10px 16px;margin-bottom:16px;font-size:12px;}
   @media(max-width:768px){.main{margin-left:0;padding:16px;}.kpi-grid{grid-template-columns:repeat(2,1fr);}.form-row,.form-row.three{grid-template-columns:1fr;}}
 </style>
@@ -144,10 +144,14 @@
       Descripción del trabajo
     </div>
     <table class="items-table">
-      <thead><tr><th style="width:120px">Cantidad</th><th>Descripción</th><th style="width:30px"></th></tr></thead>
+      <thead><tr><th style="width:90px">Cantidad</th><th>Descripción</th><th style="width:110px">Precio unit.</th><th style="width:110px">Subtotal</th><th style="width:30px"></th></tr></thead>
       <tbody id="items-body"></tbody>
     </table>
-    <button class="btn btn-ghost" style="margin-top:8px;font-size:12px;padding:6px 14px" onclick="agregarItem()">+ Agregar renglón</button>
+    <div id="msg-items-contrato" style="display:none;margin-top:8px;padding:8px 12px;background:rgba(16,185,129,0.08);border:1px solid rgba(16,185,129,0.2);border-radius:6px;font-size:12px;color:var(--green)"></div>
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-top:8px">
+      <button class="btn btn-ghost" style="font-size:12px;padding:6px 14px" onclick="agregarItem()">+ Agregar renglón</button>
+      <div style="font-size:13px;color:var(--muted)">Total: <strong id="remito-total" style="font-family:'DM Mono',monospace;color:var(--text)">$ 0</strong></div>
+    </div>
 
     <!-- Valorización interna -->
     <div style="margin:16px 0 8px;font-size:12px;font-weight:500;color:var(--muted);text-transform:uppercase;letter-spacing:0.8px">
@@ -463,19 +467,34 @@ function limpiarItems(){
 
 function agregarItem(){ agregarItemRow(); }
 
-function agregarItemRow(cant='',desc=''){
+function agregarItemRow(cant='',desc='',precio=0,readonly=false){
   const tbody=document.getElementById('items-body');
   const tr=document.createElement('tr');
+  const subtotal=(parseFloat(cant)||0)*(parseFloat(precio)||0);
   tr.innerHTML=`
-    <td><input type="text" placeholder="Ej: 8 HS" value="${cant}" style="width:100%"></td>
-    <td><input type="text" placeholder="Descripción del trabajo" value="${desc}" style="width:100%"></td>
-    <td><button onclick="this.closest('tr').remove()" style="background:none;border:none;color:var(--muted);cursor:pointer;font-size:16px">×</button></td>`;
+    <td><input type="number" min="0" placeholder="0" value="${cant||''}" style="width:100%" oninput="recalcularTotales()"></td>
+    <td><input type="text" placeholder="Descripción del trabajo" value="${desc||''}" style="width:100%"></td>
+    <td><input type="number" min="0" placeholder="0.00" value="${precio||''}" ${readonly?'readonly style="width:100%;background:var(--bg2);color:var(--muted)"':'style="width:100%"'} data-precio oninput="recalcularTotales()"></td>
+    <td style="font-family:'DM Mono',monospace;font-size:12px;color:var(--muted);text-align:right;padding-right:8px" data-subtotal>${subtotal>0?fmt(subtotal):'—'}</td>
+    <td><button onclick="this.closest('tr').remove();recalcularTotales()" style="background:none;border:none;color:var(--muted);cursor:pointer;font-size:16px">×</button></td>`;
   tbody.appendChild(tr);
+  recalcularTotales();
 }
 
 function toggleContrato(){
   const tipo=document.getElementById('nr-tipo').value;
   document.getElementById('grupo-contrato').style.display=tipo==='contrato'?'flex':'none';
+  const msgEl=document.getElementById('msg-items-contrato');
+  if(tipo!=='contrato'){
+    // Al cambiar a no-contrato: limpiar items de contrato
+    if(msgEl) msgEl.style.display='none';
+    // Solo limpiar si había items de contrato (tienen precio bloqueado)
+    const hayPrecioBloqueado=[...document.getElementById('items-body').querySelectorAll('[data-precio][readonly]')].length>0;
+    if(hayPrecioBloqueado){
+      document.getElementById('items-body').innerHTML='';
+      for(let i=0;i<3;i++) agregarItemRow();
+    }
+  }
   if(tipo==='contrato') cargarContratos();
 }
 
@@ -495,13 +514,45 @@ async function cargarContratos(){
 
 async function cargarItemsContrato(){
   const contratoId=document.getElementById('nr-contrato').value;
-  if(!contratoId) return;
+  const msgEl=document.getElementById('msg-items-contrato');
+  if(!contratoId){
+    if(msgEl) msgEl.style.display='none';
+    return;
+  }
   const data=await ContratosAPI.getItemsContrato(contratoId);
   const tbody=document.getElementById('items-body');
   tbody.innerHTML='';
   (data||[]).forEach(item=>{
-    agregarItemRow(item.unidad||'',item.descripcion);
+    agregarItemRow(
+      item.cantidad_base||'',
+      item.descripcion,
+      item.precio_unitario||0,
+      true // readonly: precio bloqueado desde contrato
+    );
   });
+  // Agregar 2 renglones vacíos editables para items manuales
+  agregarItemRow('','',0,false);
+  agregarItemRow('','',0,false);
+  // Mensaje de éxito
+  if(msgEl&&data&&data.length){
+    msgEl.textContent=`✓ Se cargaron ${data.length} ítems del contrato. Podés agregar renglones adicionales abajo.`;
+    msgEl.style.display='block';
+  }
+  recalcularTotales();
+}
+
+function recalcularTotales(){
+  let total=0;
+  document.getElementById('items-body').querySelectorAll('tr').forEach(tr=>{
+    const cant=parseFloat(tr.querySelector('input[type="number"]')?.value)||0;
+    const precio=parseFloat(tr.querySelector('[data-precio]')?.value)||0;
+    const subtotal=cant*precio;
+    total+=subtotal;
+    const cell=tr.querySelector('[data-subtotal]');
+    if(cell) cell.textContent=subtotal>0?fmt(subtotal):'—';
+  });
+  const el=document.getElementById('remito-total');
+  if(el) el.textContent=fmt(total);
 }
 
 function abrirNuevo(){
@@ -510,6 +561,8 @@ function abrirNuevo(){
   document.getElementById('nr-tipo').value='servicio';
   document.getElementById('nr-oc').value='';
   document.getElementById('nr-sector').value='';
+  const msgEl=document.getElementById('msg-items-contrato');
+  if(msgEl) msgEl.style.display='none';
   toggleContrato();
   cargarDatosModal();
   document.getElementById('modal-remito').classList.add('show');
@@ -528,19 +581,52 @@ async function editarRemito(id){
   await cargarDatosModal();
   document.getElementById('nr-cliente').value=r.cliente_id||'';
   toggleContrato();
-  // Cargar items
+  // Cargar items con precio_unitario
   const items=await RemitosAPI.getItemsRemito(id);
   const tbody=document.getElementById('items-body');
   tbody.innerHTML='';
-  (items||[]).forEach(it=>agregarItemRow(it.cantidad||'',it.descripcion));
+  const esContrato=r.tipo==='contrato';
+  (items||[]).forEach(it=>agregarItemRow(
+    it.cantidad_num!=null?it.cantidad_num:(it.cantidad||''),
+    it.descripcion,
+    it.precio_unitario||0,
+    esContrato&&(it.precio_unitario||0)>0 // readonly si tiene precio de contrato
+  ));
   if(!items||items.length<3) for(let i=(items||[]).length;i<3;i++) agregarItemRow();
+  // Cargar contrato si corresponde
+  if(r.contrato_id){
+    await new Promise(r=>setTimeout(r,100));
+    const sel=document.getElementById('nr-contrato');
+    if(sel) sel.value=r.contrato_id;
+  }
+  const msgEl=document.getElementById('msg-items-contrato');
+  if(msgEl) msgEl.style.display='none';
+  recalcularTotales();
   document.getElementById('modal-remito').classList.add('show');
 }
 
 async function guardarRemito(estado){
   const empId=document.getElementById('nr-empresa').value;
   const clienteId=document.getElementById('nr-cliente').value||null;
-  if(!clienteId&&estado==='emitido'){toast('Seleccioná un cliente para emitir.', 'warn');return;}
+  const tipoRemito=document.getElementById('nr-tipo').value;
+  const contratoIdSel=document.getElementById('nr-contrato').value||null;
+
+  // Validaciones críticas (Fases 4)
+  if(!clienteId){toast('Seleccioná un cliente.','warn');return;}
+  if(tipoRemito==='contrato'&&!contratoIdSel){toast('Seleccioná un contrato.','warn');return;}
+
+  // Validar items: al menos 1 con descripción
+  const filasVal=document.getElementById('items-body').querySelectorAll('tr');
+  let itemsValidos=0;
+  for(const fila of filasVal){
+    const desc=fila.querySelectorAll('input')[1]?.value?.trim();
+    const cant=parseFloat(fila.querySelectorAll('input')[0]?.value)||0;
+    if(desc){
+      itemsValidos++;
+      if(cant<=0&&tipoRemito==='contrato'){toast('Todos los ítems del contrato deben tener cantidad mayor a cero.','warn');return;}
+    }
+  }
+  if(itemsValidos===0){toast('Agregá al menos un ítem con descripción.','warn');return;}
 
   // Obtener CAI si se emite
   let numero=null, cai=null, caiVto=null, puntoVenta='0001', talonarioId=null;
@@ -557,7 +643,8 @@ async function guardarRemito(estado){
 
   const payload={
     empresa_id:empId, cliente_id:clienteId,
-    tipo:document.getElementById('nr-tipo').value,
+    tipo:tipoRemito,
+    contrato_id:tipoRemito==='contrato'?contratoIdSel:null,
     fecha:document.getElementById('nr-fecha').value,
     orden_compra:document.getElementById('nr-oc').value||null,
     sector:document.getElementById('nr-sector').value||null,
@@ -594,22 +681,32 @@ async function guardarRemito(estado){
     }
   }
 
-  // Guardar items
+  // Guardar items — leyendo precio_unitario y calculando subtotales
   const filas=document.getElementById('items-body').querySelectorAll('tr');
   const itemsData=[];
+  let totalValorizado=0;
   filas.forEach((fila,i)=>{
     const inputs=fila.querySelectorAll('input');
-    const cant=inputs[0]?.value?.trim();
+    const cantRaw=inputs[0]?.value?.trim();
     const desc=inputs[1]?.value?.trim();
-    if(desc) itemsData.push({
-      orden:i+1,
-      cantidad:cant||null,
-      descripcion:desc,
-      cantidad_num:parseFloat(cant)||null,
-      precio_unitario:0,
-      subtotal:0,
-    });
+    const precioRaw=fila.querySelector('[data-precio]')?.value||'0';
+    if(desc){
+      const cantNum=parseFloat(cantRaw)||null;
+      const precio=parseFloat(precioRaw)||0;
+      const subtotal=(cantNum||0)*precio;
+      totalValorizado+=subtotal;
+      itemsData.push({
+        orden:i+1,
+        cantidad:cantRaw||null,
+        descripcion:desc,
+        cantidad_num:cantNum,
+        precio_unitario:precio,
+        subtotal,
+      });
+    }
   });
+  // Actualizar total_valorizado en el payload
+  payload.total_valorizado=totalValorizado||null;
   if(itemsData.length){
     let errItems;
     try{ await RemitosAPI.reemplazarItemsRemito(remitoId, empId, payload, itemsData); }catch(e){errItems=e;}
@@ -636,6 +733,22 @@ async function anularRemito(id){
 
 function irAFacturar(id){
   window.location.href=`facturas.html?remito=${id}`;
+}
+
+// ─── Fase 6: Facturar múltiples remitos desde la tabla ───────────────
+async function facturarRemitosSeleccionados(){
+  const checks=[...document.querySelectorAll('.check-remito:checked')];
+  if(!checks.length){toast('Seleccioná al menos un remito para facturar.','warn');return;}
+  const ids=checks.map(c=>c.dataset.id);
+  // Validar que todos sean del mismo cliente
+  const remitos=await Promise.all(ids.map(id=>RemitosAPI.getRemitoSimple(id)));
+  const clientes=[...new Set(remitos.map(r=>r.cliente_id))];
+  if(clientes.length>1){
+    toast('Solo podés facturar remitos del mismo cliente en una operación.','warn');
+    return;
+  }
+  // Redirigir a facturas con los IDs
+  window.location.href='facturas.html?remitos='+ids.join(',');
 }
 
 async function generarPDF(id){
