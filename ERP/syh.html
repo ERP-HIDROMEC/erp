@@ -9,11 +9,10 @@
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js"></script>
 <script src="erp-utils.js"></script>
-<script src="storage.utils.js"></script>
 <script src="erp-sidebar.js"></script>
 <script src="empresas.api.js"></script>
 <script src="empleados.api.js"></script>
-<script src="syh.api.js"></script>
+<script src="syh_api.js"></script>
 <style>
   .kpi-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:14px;margin-bottom:20px;}
   .kpi-card{background:var(--bg2);border:1px solid var(--border);border-radius:12px;padding:18px 20px;position:relative;overflow:hidden;}
@@ -22,8 +21,8 @@
   .kpi-card.green::before{background:var(--green);}
   .kpi-card.orange::before{background:var(--orange);}
   .kpi-card.red::before{background:var(--red);}
-  .kpi-value{font-size:20px;font-weight:600;font-family:'DM Mono',monospace;}
-  tr:hover .estado.borrador{background:rgba(122,128,153,0.15);color:var(--muted);}
+  .kpi-.kpi-value{font-size:20px;font-weight:600;font-family:'DM Mono',monospace;}
+  tr:last-child tr:hover .estado.borrador{background:rgba(122,128,153,0.15);color:var(--muted);}
   .estado.emitido{background:rgba(59,130,246,0.15);color:var(--blue);}
   .estado.enviado{background:rgba(245,158,11,0.15);color:var(--orange);}
   .estado.aceptado{background:rgba(16,185,129,0.15);color:var(--green);}
@@ -32,7 +31,7 @@
   .estado.rechazado{background:rgba(239,68,68,0.15);color:var(--red);}
   .alerta-cai{background:rgba(239,68,68,0.1);border:1px solid rgba(239,68,68,0.3);border-radius:8px;padding:10px 16px;margin-bottom:16px;font-size:13px;color:var(--red);display:none;}
   .form-row.three{grid-template-columns:1fr 1fr 1fr;}
-  .items-table input{padding:6px 8px;font-size:13px;}
+  .items-.items-table .items-table .items-table input{padding:6px 8px;font-size:13px;}
   .cai-info{background:rgba(16,185,129,0.08);border:1px solid rgba(16,185,129,0.2);border-radius:8px;padding:10px 16px;margin-bottom:16px;font-size:12px;}
   @media(max-width:768px){.main{margin-left:0;padding:16px;}.kpi-grid{grid-template-columns:repeat(2,1fr);}.form-row,.form-row.three{grid-template-columns:1fr;}}
 </style>
@@ -610,32 +609,28 @@ async function cargarDocEmpresa(){
 async function guardarDocEmpresa(){
   const empId=document.getElementById('sde-empresa').value;
   const file=document.getElementById('sde-archivo').files[0];
-  let archivoUrl=null,archivoPatch=null;
+  // Upload lo hace SyhAPI.registrarDocumentoEmpresa internamente con _subirArchivo(syh-docs)
+  const storagePath=file
+    ?`syh/empresa/${empId}_${Date.now()}_${file.name.replace(/[^a-zA-Z0-9._-]/g,'_')}`
+    :null;
   if(file){
     document.getElementById('sde-progress').style.display='block';
     document.getElementById('sde-bar').style.width='50%';
-    try{
-      const arch=await StorageUtils.upload(file,'syh/documentos');
-      archivoUrl=arch.url; archivoPatch=arch.path;
-    }catch(ue){
-      document.getElementById('sde-progress').style.display='none';
-      toast('Error al subir archivo: '+(ue.message||JSON.stringify(ue)),'error');
-      console.error('upload error:',ue); return;
-    }
-    document.getElementById('sde-bar').style.width='100%';
-    document.getElementById('sde-progress').style.display='none';
   }
-  let error;
-  try{ await SyhAPI.registrarDocumentoEmpresa({
-    empresa_id:empId,tipo:document.getElementById('sde-tipo').value,
+
+  const payloadDE={
+    empresa_id:empId,
+    tipo:document.getElementById('sde-tipo').value,
     descripcion:document.getElementById('sde-desc').value||null,
     cliente_obra:document.getElementById('sde-cliente').value||null,
     fecha_documento:document.getElementById('sde-fecha').value||null,
     fecha_vencimiento:document.getElementById('sde-vencimiento').value||null,
-    archivo_url:archivoUrl,archivo_path:archivoPatch,
-  });
-  }catch(e){error=e;}
-  if(error){toast('Error: '+(error.message||JSON.stringify(error)),'error');return;}
+  };
+
+  let error;
+  try{ await SyhAPI.registrarDocumentoEmpresa(payloadDE,file,storagePath); }catch(e){error=e;}
+  if(file){ document.getElementById('sde-bar').style.width='100%'; document.getElementById('sde-progress').style.display='none'; }
+  if(error){toast('Error: ', 'error');return;}
   cerrarModal('modal-doc-empresa');
   document.getElementById('sde-archivo').value='';
   cargarDocEmpresa();
@@ -724,27 +719,24 @@ async function guardarCapacitacion(){
 
   const asistentes=[...document.querySelectorAll('input[name="sc-asistente"]:checked')].map(c=>c.value);
 
-  let archivoUrl=null,archivoPatch=null;
-  const file=document.getElementById('sc-archivo').files[0];
-  if(file){
-    try{
-      const arch=await StorageUtils.upload(file,'syh/capacitaciones');
-      archivoUrl=arch.url; archivoPatch=arch.path;
-    }catch(ue){
-      toast('Error al subir archivo: '+(ue.message||JSON.stringify(ue)),'error');
-      console.error('upload error:',ue); return;
-    }
-  }
+  // Upload lo hace SyhAPI.registrarCapacitacion internamente con _subirArchivo(syh-docs)
+  const fileEl=document.getElementById('sc-archivo');
+  const file=fileEl?.files[0]||null;
+  const storagePath=file
+    ?`syh/capacitaciones/${empId}_${Date.now()}_${file.name.replace(/[^a-zA-Z0-9._-]/g,'_')}`
+    :null;
 
-  let cap=null,error=null; try{ cap=await SyhAPI.registrarCapacitacion({
+  const payloadCap={
     empresa_id:empId,tipo,
     descripcion:document.getElementById('sc-desc').value||null,
     dictada_por:document.getElementById('sc-dictante').value||null,
     fecha,
     duracion_horas:parseFloat(document.getElementById('sc-duracion').value)||null,
     fecha_vencimiento:document.getElementById('sc-vencimiento').value||null,
-    archivo_url:archivoUrl,archivo_path:archivoPatch,
-  },asistentes); }catch(e){error=e;}
+  };
+
+  let cap=null,error=null;
+  try{ cap=await SyhAPI.registrarCapacitacion(payloadCap,asistentes,file,storagePath); }catch(e){error=e;}
   if(error){toast('Error: '+error.message,'error');return;}
 
   cerrarModal('modal-capacitacion');
@@ -1079,13 +1071,10 @@ async function guardarIncidente(){
   let archivoUrl=null,archivoPatch=null;
   const file=document.getElementById('si-archivo').files[0];
   if(file){
-    try{
-      const arch=await StorageUtils.upload(file,'syh/incidentes');
-      archivoUrl=arch.url; archivoPatch=arch.path;
-    }catch(ue){
-      toast('Error al subir archivo: '+(ue.message||JSON.stringify(ue)),'error');
-      console.error('upload error:',ue); return;
-    }
+    const ext=file.name.split('.').pop();
+    const path=`syh/incidentes/${empId}_${Date.now()}.${ext}`;
+    const {error:ue}=await db.storage.from('syh-docs').upload(path,file,{contentType:file.type,upsert:false});
+    if(!ue){const {data:ud}=db.storage.from('syh-docs').getPublicUrl(path);archivoUrl=ud?.publicUrl||null;archivoPatch=path;}
   }
 
   let error;
@@ -1100,7 +1089,7 @@ async function guardarIncidente(){
     archivo_url:archivoUrl,archivo_path:archivoPatch,
   });
   }catch(e){error=e;}
-  if(error){toast('Error: '+(error.message||JSON.stringify(error)),'error');return;}
+  if(error){toast('Error: ', 'error');return;}
   cerrarModal('modal-incidente');
   document.getElementById('si-archivo').value='';
   cargarIncidentes();
@@ -1434,7 +1423,7 @@ async function editarVencimientoPortal(id){
   if(!nuevaFecha) return;
   if(!/^\d{4}-\d{2}-\d{2}$/.test(nuevaFecha)){toast('Formato invalido. Usa YYYY-MM-DD', 'warn');return;}
   try{ await SyhAPI.renovarDocumentoPortal(id,nuevaFecha); }catch(e){error=e;}
-  if(error){toast('Error: '+(error.message||JSON.stringify(error)),'error');return;}
+  if(error){toast('Error: ', 'error');return;}
   cargarPortales();
 }
 
