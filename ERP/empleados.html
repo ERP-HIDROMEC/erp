@@ -1233,10 +1233,30 @@ async function guardarAusencia(){
   if(!empId||!inicio){toast('Empleado y fecha de inicio son obligatorios.', 'warn');return;}
   const empId2=document.getElementById('na-empresa').value;
 
-  // Payload — solo columnas que EXISTEN en empleados_ausencias
-  // certificado_url y certificado_path NO están en la tabla todavía
-  // Para agregar soporte de certificados: ejecutar en Supabase SQL:
-  //   ALTER TABLE empleados_ausencias ADD COLUMN certificado_url TEXT;
+  const fileInput=document.getElementById('na-archivo');
+  const file=fileInput?.files[0];
+
+  // 1. Upload certificado a syh-docs (bucket existente)
+  // db es la instancia autenticada de erp-utils.js — RLS se respeta automáticamente
+  let certPath=null, certUrl=null;
+  if(file){
+    document.getElementById('na-upload-progress').style.display='block';
+    document.getElementById('na-progress-bar').style.width='30%';
+    const ext=file.name.split('.').pop();
+    const path=`ausencias/${empId2}/${empId}_${Date.now()}.${ext}`;
+    const {error:ue}=await db.storage.from('syh-docs').upload(path,file,{contentType:file.type,upsert:false});
+    if(ue){
+      document.getElementById('na-upload-progress').style.display='none';
+      toast('Error al subir certificado: '+ue.message,'error');
+      return;
+    }
+    certPath=path;
+    const {data:ud}=db.storage.from('syh-docs').getPublicUrl(path);
+    certUrl=ud?.publicUrl||null;
+    document.getElementById('na-progress-bar').style.width='70%';
+  }
+
+  // 2. Armar payload con solo los campos que existen en empleados_ausencias
   const payload={
     empresa_id:empId2,
     empleado_id:empId,
@@ -1246,12 +1266,17 @@ async function guardarAusencia(){
     fecha_fin:document.getElementById('na-fin').value||null,
     observaciones:document.getElementById('na-obs').value||null,
   };
+  // certificado_url y certificado_path existen en la tabla — agregar solo si hay archivo
+  if(certPath) payload.certificado_path=certPath;
+  if(certUrl)  payload.certificado_url=certUrl;
 
+  // 3. Insert en empleados_ausencias (usa sesión autenticada → RLS OK)
   let error;
   try{ await EmpleadosAPI.registrarAusencia(payload); }catch(e){error=e;}
-  if(error){toast('Error: '+(error?.message||String(error)), 'error');return;}
 
-  const fileInput=document.getElementById('na-archivo');
+  if(file) document.getElementById('na-upload-progress').style.display='none';
+  if(error){toast('Error al registrar ausencia: '+(error?.message||String(error)),'error');return;}
+
   if(fileInput) fileInput.value='';
   cerrarModal('modal-ausencia');
   cargarAusencias();

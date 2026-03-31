@@ -181,10 +181,17 @@ const EmpleadosAPI = (() => {
   }
 
   async function registrarAusencia(payload) {
-    // Insertar solo los campos que existen en la tabla.
-    // Para habilitar certificados, ejecutar primero en Supabase:
-    //   ALTER TABLE empleados_ausencias ADD COLUMN certificado_url TEXT;
-    const { error } = await db.from('empleados_ausencias').insert(payload);
+    // db usa la sesión autenticada de erp-utils.js (RLS respetado automáticamente).
+    // El upload del certificado ya se hizo en el frontend antes de llamar esta función.
+    // payload solo contiene columnas que existen en empleados_ausencias.
+    // Limpiar undefined/null opcionales antes del insert.
+    const clean = Object.fromEntries(
+      Object.entries(payload).filter(([, v]) => v !== undefined && v !== null || ['empresa_id','empleado_id','tipo','estado','fecha_inicio'].includes([, v][0]))
+    );
+    // Preservar siempre los campos obligatorios aunque sean null
+    const insert = { ...payload };
+    Object.keys(insert).forEach(k => { if (insert[k] === undefined) delete insert[k]; });
+    const { error } = await db.from('empleados_ausencias').insert(insert);
     if (error) throw error;
   }
 
