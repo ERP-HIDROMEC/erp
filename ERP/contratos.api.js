@@ -23,12 +23,13 @@ const ContratosAPI = (() => {
 
   async function getContratosSelect(empresaId) {
     // Lista liviana para dropdowns — solo contratos activos
-    let q = db.from('contratos')
+    // SIEMPRE filtrar por empresa_id — sistema multiempresa
+    if (!empresaId) return [];
+    const { data, error } = await db.from('contratos')
       .select('id,numero_contrato,descripcion,cliente_id,clientes(nombre)')
+      .eq('empresa_id', empresaId)
       .eq('estado', 'activo')
       .order('numero_contrato');
-    if (empresaId) q = q.eq('empresa_id', empresaId);
-    const { data, error } = await q;
     if (error) throw error;
     return data || [];
   }
@@ -68,7 +69,18 @@ const ContratosAPI = (() => {
 
   // ── Items de contrato ────────────────────────────────────────
 
-  async function getItemsContrato(contratoId) {
+  async function getItemsContrato(contratoId, empresaId = null) {
+    // Si se pasa empresaId, verificar primero que el contrato pertenezca a esa empresa
+    if (empresaId) {
+      const { data: contrato, error: eCont } = await db.from('contratos')
+        .select('empresa_id')
+        .eq('id', contratoId)
+        .single();
+      if (eCont || !contrato) throw new Error('Contrato no encontrado');
+      if (contrato.empresa_id !== empresaId) {
+        throw new Error(`Acceso denegado: el contrato no pertenece a la empresa seleccionada`);
+      }
+    }
     const { data, error } = await db.from('contrato_items')
       .select('*')
       .eq('contrato_id', contratoId)

@@ -502,24 +502,40 @@ async function cargarContratos(){
   const tipo=document.getElementById('nr-tipo').value;
   if(tipo!=='contrato') return;
   const empId=document.getElementById('nr-empresa').value;
+  if(!empId){
+    document.getElementById('nr-contrato').innerHTML='<option value="">Seleccioná empresa</option>';
+    return;
+  }
   const clienteId=document.getElementById('nr-cliente').value;
-  // Traer todos los contratos activos de la empresa, filtrar por cliente si hay uno seleccionado
+  // getContratosSelect ya incluye cliente_id en el select (forzado por empresa)
   let contratosData=await ContratosAPI.getContratosSelect(empId);
+  // Filtrar por cliente si hay uno seleccionado
   if(clienteId) contratosData=contratosData.filter(r=>r.cliente_id===clienteId);
-  const data=contratosData;
-  document.getElementById('nr-contrato').innerHTML=(data||[]).length
-    ? (data||[]).map(c=>`<option value="${c.id}">${c.numero_contrato}${c.clientes?.nombre?' — '+c.clientes.nombre:''}</option>`).join('')
-    : '<option value="">Sin contratos activos</option>';
+  document.getElementById('nr-contrato').innerHTML=(contratosData||[]).length
+    ? (contratosData||[]).map(cont=>`<option value="${cont.id}">${cont.numero_contrato}${cont.clientes?.nombre?' — '+cont.clientes.nombre:''}</option>`).join('')
+    : '<option value="">Sin contratos activos para este cliente</option>';
+  // Limpiar items al recargar lista de contratos
+  const msgEl=document.getElementById('msg-items-contrato');
+  if(msgEl) msgEl.style.display='none';
 }
 
 async function cargarItemsContrato(){
   const contratoId=document.getElementById('nr-contrato').value;
+  const empId=document.getElementById('nr-empresa').value;
   const msgEl=document.getElementById('msg-items-contrato');
   if(!contratoId){
     if(msgEl) msgEl.style.display='none';
     return;
   }
-  const data=await ContratosAPI.getItemsContrato(contratoId);
+  // Pasar empresaId para validación en API — Fase 4+6
+  let data;
+  try{
+    data=await ContratosAPI.getItemsContrato(contratoId, empId);
+  }catch(e){
+    toast('Error de seguridad: '+e.message,'error');
+    console.error('getItemsContrato rechazado:',e);
+    return;
+  }
   const tbody=document.getElementById('items-body');
   tbody.innerHTML='';
   (data||[]).forEach(item=>{
@@ -544,8 +560,10 @@ async function cargarItemsContrato(){
 function recalcularTotales(){
   let total=0;
   document.getElementById('items-body').querySelectorAll('tr').forEach(tr=>{
-    const cant=parseFloat(tr.querySelector('input[type="number"]')?.value)||0;
-    const precio=parseFloat(tr.querySelector('[data-precio]')?.value)||0;
+    // inputs[0]=cantidad, inputs[1]=descripción(text), inputs[2]=precio_unitario
+    const inputs=tr.querySelectorAll('input');
+    const cant=parseFloat(inputs[0]?.value)||0;
+    const precio=parseFloat(inputs[2]?.value)||0;
     const subtotal=cant*precio;
     total+=subtotal;
     const cell=tr.querySelector('[data-subtotal]');
@@ -610,6 +628,17 @@ async function guardarRemito(estado){
   const clienteId=document.getElementById('nr-cliente').value||null;
   const tipoRemito=document.getElementById('nr-tipo').value;
   const contratoIdSel=document.getElementById('nr-contrato').value||null;
+
+  // Validación de seguridad multiempresa (Fase 6)
+  // Verificar que el contrato seleccionado pertenezca a la empresa activa
+  if(tipoRemito==='contrato'&&contratoIdSel){
+    try{
+      await ContratosAPI.getItemsContrato(contratoIdSel, empId);
+    }catch(e){
+      toast('Error de seguridad: el contrato no pertenece a esta empresa.','error');
+      return;
+    }
+  }
 
   // Validaciones críticas (Fases 4)
   if(!clienteId){toast('Seleccioná un cliente.','warn');return;}
