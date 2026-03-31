@@ -181,8 +181,9 @@ const EmpleadosAPI = (() => {
   }
 
   async function registrarAusencia(payload) {
-    // Upload del certificado se hace en el frontend antes de llamar esta función.
-    // payload ya viene limpio — solo campos que existen en empleados_ausencias.
+    // Insertar solo los campos que existen en la tabla.
+    // Para habilitar certificados, ejecutar primero en Supabase:
+    //   ALTER TABLE empleados_ausencias ADD COLUMN certificado_url TEXT;
     const { error } = await db.from('empleados_ausencias').insert(payload);
     if (error) throw error;
   }

@@ -1233,28 +1233,10 @@ async function guardarAusencia(){
   if(!empId||!inicio){toast('Empleado y fecha de inicio son obligatorios.', 'warn');return;}
   const empId2=document.getElementById('na-empresa').value;
 
-  // Upload certificado — bucket syh-docs (existe y tiene policies)
-  let certUrl=null;
-  const fileInput=document.getElementById('na-archivo');
-  const file=fileInput?.files[0];
-  if(file){
-    const ext=file.name.split('.').pop();
-    const path=`ausencias/${empId2}/${empId}_${Date.now()}.${ext}`;
-    document.getElementById('na-upload-progress').style.display='block';
-    document.getElementById('na-progress-bar').style.width='50%';
-    const {error:ue}=await db.storage.from('syh-docs').upload(path,file,{contentType:file.type,upsert:false});
-    if(ue){
-      document.getElementById('na-upload-progress').style.display='none';
-      toast('Error al subir certificado: '+ue.message,'error');
-      return;
-    }
-    const {data:ud}=db.storage.from('syh-docs').getPublicUrl(path);
-    certUrl=ud?.publicUrl||null;
-    document.getElementById('na-progress-bar').style.width='100%';
-    document.getElementById('na-upload-progress').style.display='none';
-  }
-
-  // Payload limpio — sin certificado_path (columna inexistente en empleados_ausencias)
+  // Payload — solo columnas que EXISTEN en empleados_ausencias
+  // certificado_url y certificado_path NO están en la tabla todavía
+  // Para agregar soporte de certificados: ejecutar en Supabase SQL:
+  //   ALTER TABLE empleados_ausencias ADD COLUMN certificado_url TEXT;
   const payload={
     empresa_id:empId2,
     empleado_id:empId,
@@ -1264,14 +1246,16 @@ async function guardarAusencia(){
     fecha_fin:document.getElementById('na-fin').value||null,
     observaciones:document.getElementById('na-obs').value||null,
   };
-  if(certUrl) payload.certificado_url=certUrl;
 
   let error;
   try{ await EmpleadosAPI.registrarAusencia(payload); }catch(e){error=e;}
   if(error){toast('Error: '+(error?.message||String(error)), 'error');return;}
+
+  const fileInput=document.getElementById('na-archivo');
   if(fileInput) fileInput.value='';
   cerrarModal('modal-ausencia');
   cargarAusencias();
+  toast('Ausencia registrada correctamente.','ok');
 }
 
 async function cambiarEstadoAusencia(id,estado){
