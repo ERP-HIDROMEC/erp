@@ -609,28 +609,36 @@ async function cargarDocEmpresa(){
 async function guardarDocEmpresa(){
   const empId=document.getElementById('sde-empresa').value;
   const file=document.getElementById('sde-archivo').files[0];
-  // Upload lo hace SyhAPI.registrarDocumentoEmpresa internamente con _subirArchivo(syh-docs)
-  const storagePath=file
-    ?`syh/empresa/${empId}_${Date.now()}_${file.name.replace(/[^a-zA-Z0-9._-]/g,'_')}`
-    :null;
+  let archivoUrl=null,archivoPatch=null;
   if(file){
+    const ext=file.name.split('.').pop();
+    const path=`syh/empresa/${empId}_${Date.now()}.${ext}`;
     document.getElementById('sde-progress').style.display='block';
     document.getElementById('sde-bar').style.width='50%';
+    const {error:ue}=await db.storage.from('syh-docs').upload(path,file,{contentType:file.type,upsert:false});
+    if(ue){
+      document.getElementById('sde-progress').style.display='none';
+      toast('Error al subir archivo: '+ue.message,'error');return;
+    }
+    const {data:ud}=db.storage.from('syh-docs').getPublicUrl(path);
+    archivoUrl=ud?.publicUrl||null;archivoPatch=path;
+    document.getElementById('sde-bar').style.width='100%';
+    document.getElementById('sde-progress').style.display='none';
   }
-
+  // Payload con archivo_url/archivo_path solo si hubo upload
   const payloadDE={
-    empresa_id:empId,
-    tipo:document.getElementById('sde-tipo').value,
+    empresa_id:empId,tipo:document.getElementById('sde-tipo').value,
     descripcion:document.getElementById('sde-desc').value||null,
     cliente_obra:document.getElementById('sde-cliente').value||null,
     fecha_documento:document.getElementById('sde-fecha').value||null,
     fecha_vencimiento:document.getElementById('sde-vencimiento').value||null,
   };
+  if(archivoPatch) payloadDE.archivo_path=archivoPatch;
+  if(archivoUrl)   payloadDE.archivo_url=archivoUrl;
 
   let error;
-  try{ await SyhAPI.registrarDocumentoEmpresa(payloadDE,file,storagePath); }catch(e){error=e;}
-  if(file){ document.getElementById('sde-bar').style.width='100%'; document.getElementById('sde-progress').style.display='none'; }
-  if(error){toast('Error: ', 'error');return;}
+  try{ await SyhAPI.registrarDocumentoEmpresa(payloadDE); }catch(e){error=e;}
+  if(error){toast('Error: '+(error?.message||String(error)),'error');return;}
   cerrarModal('modal-doc-empresa');
   document.getElementById('sde-archivo').value='';
   cargarDocEmpresa();
@@ -719,12 +727,16 @@ async function guardarCapacitacion(){
 
   const asistentes=[...document.querySelectorAll('input[name="sc-asistente"]:checked')].map(c=>c.value);
 
-  // Upload lo hace SyhAPI.registrarCapacitacion internamente con _subirArchivo(syh-docs)
-  const fileEl=document.getElementById('sc-archivo');
-  const file=fileEl?.files[0]||null;
-  const storagePath=file
-    ?`syh/capacitaciones/${empId}_${Date.now()}_${file.name.replace(/[^a-zA-Z0-9._-]/g,'_')}`
-    :null;
+  let archivoUrl=null,archivoPatch=null;
+  const file=document.getElementById('sc-archivo').files[0];
+  if(file){
+    const ext=file.name.split('.').pop();
+    const path=`syh/capacitaciones/${empId}_${Date.now()}.${ext}`;
+    const {error:ue}=await db.storage.from('syh-docs').upload(path,file,{contentType:file.type,upsert:false});
+    if(ue){toast('Error al subir archivo: '+ue.message,'error');return;}
+    const {data:ud}=db.storage.from('syh-docs').getPublicUrl(path);
+    archivoUrl=ud?.publicUrl||null;archivoPatch=path;
+  }
 
   const payloadCap={
     empresa_id:empId,tipo,
@@ -734,9 +746,11 @@ async function guardarCapacitacion(){
     duracion_horas:parseFloat(document.getElementById('sc-duracion').value)||null,
     fecha_vencimiento:document.getElementById('sc-vencimiento').value||null,
   };
+  if(archivoPatch) payloadCap.archivo_path=archivoPatch;
+  if(archivoUrl)   payloadCap.archivo_url=archivoUrl;
 
   let cap=null,error=null;
-  try{ cap=await SyhAPI.registrarCapacitacion(payloadCap,asistentes,file,storagePath); }catch(e){error=e;}
+  try{ cap=await SyhAPI.registrarCapacitacion(payloadCap,asistentes); }catch(e){error=e;}
   if(error){toast('Error: '+error.message,'error');return;}
 
   cerrarModal('modal-capacitacion');
@@ -1074,11 +1088,12 @@ async function guardarIncidente(){
     const ext=file.name.split('.').pop();
     const path=`syh/incidentes/${empId}_${Date.now()}.${ext}`;
     const {error:ue}=await db.storage.from('syh-docs').upload(path,file,{contentType:file.type,upsert:false});
-    if(!ue){const {data:ud}=db.storage.from('syh-docs').getPublicUrl(path);archivoUrl=ud?.publicUrl||null;archivoPatch=path;}
+    if(ue){toast('Error al subir archivo: '+ue.message,'error');return;}
+    const {data:ud}=db.storage.from('syh-docs').getPublicUrl(path);
+    archivoUrl=ud?.publicUrl||null;archivoPatch=path;
   }
 
-  let error;
-  try{ await SyhAPI.registrarIncidente({
+  const payloadInc={
     empresa_id:empId,empleado_id:empleadoId||null,
     tipo:document.getElementById('si-tipo').value,
     fecha:fecha,lugar:document.getElementById('si-lugar').value||null,
@@ -1086,10 +1101,13 @@ async function guardarIncidente(){
     dias_perdidos:parseInt(document.getElementById('si-dias').value)||0,
     requirio_art:document.getElementById('si-art').value,
     medidas_correctivas:document.getElementById('si-correctivas').value||null,
-    archivo_url:archivoUrl,archivo_path:archivoPatch,
-  });
-  }catch(e){error=e;}
-  if(error){toast('Error: ', 'error');return;}
+  };
+  if(archivoPatch) payloadInc.archivo_path=archivoPatch;
+  if(archivoUrl)   payloadInc.archivo_url=archivoUrl;
+
+  let error;
+  try{ await SyhAPI.registrarIncidente(payloadInc); }catch(e){error=e;}
+  if(error){toast('Error: '+(error?.message||String(error)),'error');return;}
   cerrarModal('modal-incidente');
   document.getElementById('si-archivo').value='';
   cargarIncidentes();

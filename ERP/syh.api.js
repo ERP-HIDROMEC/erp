@@ -8,16 +8,23 @@
 
 const SyhAPI = (() => {
 
+  const BUCKET = 'syh-docs';
+
   // ── Helper: subir archivo a storage ─────────────────────────
-  // Upload delegado a StorageUtils (storage.utils.js)
-  // Se mantiene _subirArchivo por compatibilidad con llamadas directas al API
-  async function _subirArchivo(file, carpeta) {
-    const arch = await StorageUtils.upload(file, carpeta);
-    return arch.url;
+  async function _subirArchivo(path, file) {
+    const { error } = await db.storage.from(BUCKET).upload(path, file, {
+      contentType: file.type,
+      upsert: false,
+    });
+    if (error) throw error;
+    const { data } = db.storage.from(BUCKET).getPublicUrl(path);
+    return data?.publicUrl || null;
   }
 
-  // Eliminar archivo: usar StorageUtils.remove(path) desde el HTML
-  // o llamar db.storage.from('syh-docs').remove([path]) directamente
+  async function _eliminarArchivo(path) {
+    if (!path) return;
+    await db.storage.from(BUCKET).remove([path]);
+  }
 
   // ── Documentos empresa (syh_documentos) ─────────────────────
 
@@ -47,13 +54,15 @@ const SyhAPI = (() => {
   }
 
   async function registrarDocumentoEmpresa(payload) {
-    // archivo_url y archivo_path ya vienen en payload (subidos por StorageUtils en el HTML)
-    const { error } = await db.from('syh_documentos').insert(payload);
+    // El upload ya se hizo en el frontend. payload incluye archivo_url y archivo_path si hay archivo.
+    // Filtrar null para no romper columnas con NOT NULL constraint.
+    const clean = Object.fromEntries(Object.entries(payload).filter(([,v]) => v != null));
+    const { error } = await db.from('syh_documentos').insert(clean);
     if (error) throw error;
   }
 
   async function eliminarDocumentoEmpresa(id, storagePath) {
-    await StorageUtils.remove(storagePath);
+    await _eliminarArchivo(storagePath);
     const { error } = await db.from('syh_documentos').delete().eq('id', id);
     if (error) throw error;
   }
@@ -92,8 +101,9 @@ const SyhAPI = (() => {
   }
 
   async function registrarCapacitacion(payload, asistentesIds) {
-    // archivo_url y archivo_path ya vienen en payload (subidos por StorageUtils en el HTML)
-    const { data: cap, error } = await db.from('syh_capacitaciones').insert(payload).select().single();
+    // El upload ya se hizo en el frontend. payload incluye archivo_url y archivo_path si hay archivo.
+    const clean = Object.fromEntries(Object.entries(payload).filter(([,v]) => v != null));
+    const { data: cap, error } = await db.from('syh_capacitaciones').insert(clean).select().single();
     if (error) throw error;
 
     if (asistentesIds && asistentesIds.length) {
@@ -106,7 +116,7 @@ const SyhAPI = (() => {
   }
 
   async function eliminarCapacitacion(id, storagePath) {
-    await StorageUtils.remove(storagePath);
+    await _eliminarArchivo(storagePath);
     await db.from('syh_capacitacion_asistentes').delete().eq('capacitacion_id', id);
     const { error } = await db.from('syh_capacitaciones').delete().eq('id', id);
     if (error) throw error;
@@ -176,13 +186,14 @@ const SyhAPI = (() => {
   }
 
   async function registrarIncidente(payload) {
-    // archivo_url y archivo_path ya vienen en payload (subidos por StorageUtils en el HTML)
-    const { error } = await db.from('syh_incidentes').insert(payload);
+    // El upload ya se hizo en el frontend. payload incluye archivo_url y archivo_path si hay archivo.
+    const clean = Object.fromEntries(Object.entries(payload).filter(([,v]) => v != null));
+    const { error } = await db.from('syh_incidentes').insert(clean);
     if (error) throw error;
   }
 
   async function eliminarIncidente(id, storagePath) {
-    await StorageUtils.remove(storagePath);
+    await _eliminarArchivo(storagePath);
     const { error } = await db.from('syh_incidentes').delete().eq('id', id);
     if (error) throw error;
   }
