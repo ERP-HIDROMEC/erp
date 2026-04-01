@@ -226,6 +226,7 @@
 let tabActual='todos';
 let editId=null;
 let caiActual=null;
+let ordenAsc=false; // false = más nuevo primero
 
 async function init(){
   const usuario = await ERP.initLayout('remitos');
@@ -290,11 +291,14 @@ async function cargarRemitos(){
   if(emp) filtros.empresaId=emp;
   if(tipo) filtros.tipo=tipo;
   if(estado) filtros.estado=estado;
-  if(tabActual==='historico') filtros.migrado=true;
-  if(tabActual==='todos') filtros.migrado=false;
   const remData=await RemitosAPI.getRemitos(filtros);
   let rows=remData||[];
+  // Filtrar por migrado en memoria (la API no lo filtra)
+  if(tabActual==='historico') rows=rows.filter(r=>r.migrado);
+  if(tabActual==='todos') rows=rows.filter(r=>!r.migrado);
   if(mes){const mI=mes+'-01';const mF=new Date(mes+'-01');mF.setMonth(mF.getMonth()+1);const mFin=mF.toISOString().split('T')[0];rows=rows.filter(r=>r.fecha>=mI&&r.fecha<mFin);}
+  // Ordenar por número según estado
+  rows.sort((a,b)=>ordenAsc?(a.numero||0)-(b.numero||0):(b.numero||0)-(a.numero||0));
   // Enriquecer con número de factura
   const conFact=rows.filter(r=>r.factura_id);
   if(conFact.length){
@@ -317,7 +321,7 @@ async function cargarRemitos(){
   document.getElementById('contenido').innerHTML=`
     <div style="overflow-x:auto"><table>
       <thead><tr>
-        <th>N° Remito</th><th>Fecha</th><th>Tipo</th><th>Cliente</th>
+        <th style="cursor:pointer;user-select:none" onclick="ordenAsc=!ordenAsc;cargarRemitos()">N° Remito ${ordenAsc?'↑':'↓'}</th><th>Fecha</th><th>Tipo</th><th>Cliente</th>
         <th>OC</th><th>Factura</th><th>Valorizado</th><th>Estado</th><th>Acciones</th>
       </tr></thead>
       <tbody>${rows.length?rows.map(r=>`<tr>
@@ -925,7 +929,11 @@ async function generarPDF(id){
     // Columnas items — headers
     doc.setFontSize(8); doc.setFont('helvetica','bold'); doc.setTextColor(80,80,80);
     doc.text('CANT.', L+10, yD+14, {align:'center'});
-    doc.text('DESCRIPCIÓN', midX, yD+14, {align:'center'});
+    doc.text('DESCRIPCIÓN', r.tipo==='contrato'?midX:midX-15, yD+14, {align:'center'});
+    if(r.tipo!=='contrato'){
+      doc.text('PRECIO UNIT.', R-30, yD+14, {align:'center'});
+      doc.text('SUBTOTAL', R-8, yD+14, {align:'center'});
+    }
     doc.setDrawColor(200,200,200);
     doc.line(L+1, yD+16, R-1, yD+16);
 
@@ -933,10 +941,11 @@ async function generarPDF(id){
     doc.setTextColor(0,0,0); doc.setFont('helvetica','normal'); doc.setFontSize(9);
     let iy=yD+23;
     const maxY=yD+155;
+    const descWidth=r.tipo==='contrato'?162:130;
     (items||[]).forEach((item,idx)=>{
       if(iy>maxY) return;
       const desc=String(item.descripcion||'');
-      const lines=doc.splitTextToSize(desc, 152);
+      const lines=doc.splitTextToSize(desc, descWidth);
       const rowH=Math.max(7, lines.length*5);
       // Fondo alternado suave
       if(idx%2===0){ doc.setFillColor(252,252,252); doc.rect(L+1,iy-5,W-2,rowH,'F'); }
