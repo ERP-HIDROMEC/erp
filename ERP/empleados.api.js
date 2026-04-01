@@ -127,7 +127,7 @@ const EmpleadosAPI = (() => {
     const { data, error } = await db.from('empleados_documentos')
       .select('tipo,descripcion,fecha_vencimiento,empleados(nombre),empresas(nombre)')
       .lte('fecha_vencimiento', limStr)
-      .not('fecha_vencimiento', 'is', null);
+      .neq('fecha_vencimiento', null);
     if (error) throw error;
     return data || [];
   }
@@ -180,16 +180,12 @@ const EmpleadosAPI = (() => {
     return data || [];
   }
 
-  async function registrarAusencia(payload, file, storagePath) {
-    let archivoUrl = null;
-    if (file && storagePath) {
-      const { error: ue } = await db.storage.from('empleados-docs').upload(storagePath, file, { contentType: file.type, upsert: false });
-      if (!ue) {
-        const { data: ud } = db.storage.from('empleados-docs').getPublicUrl(storagePath);
-        archivoUrl = ud?.publicUrl || null;
-      }
-    }
-    const { error } = await db.from('empleados_ausencias').insert({ ...payload, archivo_url: archivoUrl });
+  async function registrarAusencia(payload) {
+    // Filtrar null/undefined — no enviar campos que no existen en la tabla
+    const clean = Object.fromEntries(
+      Object.entries(payload).filter(([, v]) => v !== null && v !== undefined)
+    );
+    const { error } = await db.from('empleados_ausencias').insert(clean);
     if (error) throw error;
   }
 
