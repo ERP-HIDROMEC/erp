@@ -1299,6 +1299,7 @@ async function confirmarImportAFIP(){
     const esUSD=r.moneda==='USD';
     const descMoneda=esUSD?` [USD ${r.total.toFixed(2)} x TC ${r.tipoCambio}]`:'';
 
+    let insertOk=true;
     try{ await EgresosAPI.crearEgreso({
       empresa_id:empId,
       proveedor_id:prov?.id||null,
@@ -1309,8 +1310,8 @@ async function confirmarImportAFIP(){
       numero_factura:r.numero,
       pagado:false,
       observaciones:esUSD?`Factura en USD. Monto: U$S ${r.total.toFixed(2)} | TC: ${r.tipoCambio}`:null,
-    }); }catch(e){skip++;} 
-    if(!error){ok++;numerosExistentes.add(r.numero);}
+    }); }catch(e){insertOk=false;skip++;}
+    if(insertOk){ok++;numerosExistentes.add(r.numero);}
   }
 
   const txtUSD=importRowsCompras.filter(r=>r.moneda==='USD').length;
