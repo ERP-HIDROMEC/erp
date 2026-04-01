@@ -127,7 +127,7 @@ const EmpleadosAPI = (() => {
     const { data, error } = await db.from('empleados_documentos')
       .select('tipo,descripcion,fecha_vencimiento,empleados(nombre),empresas(nombre)')
       .lte('fecha_vencimiento', limStr)
-      .neq('fecha_vencimiento', null);
+      .not('fecha_vencimiento', 'is', null);
     if (error) throw error;
     return data || [];
   }
@@ -181,10 +181,10 @@ const EmpleadosAPI = (() => {
   }
 
   async function registrarAusencia(payload) {
-    // Filtrar null/undefined — no enviar campos que no existen en la tabla
-    const clean = Object.fromEntries(
-      Object.entries(payload).filter(([, v]) => v !== null && v !== undefined)
-    );
+    // Whitelist estricta: solo columnas que existen en empleados_ausencias
+    const COLS = ['empresa_id','empleado_id','tipo','estado','fecha_inicio','fecha_fin','observaciones'];
+    const clean = {};
+    COLS.forEach(k => { if (payload[k] != null) clean[k] = payload[k]; });
     const { error } = await db.from('empleados_ausencias').insert(clean);
     if (error) throw error;
   }
