@@ -144,7 +144,7 @@
       Descripción del trabajo
     </div>
     <table class="items-table">
-      <thead><tr><th style="width:90px">Cantidad</th><th>Descripción</th><th style="width:110px">Precio unit.</th><th style="width:110px">Subtotal</th><th style="width:30px"></th></tr></thead>
+      <thead><tr id="items-thead"><th style="width:90px">Cantidad</th><th>Descripción</th><th style="width:110px">Precio unit.</th><th style="width:110px">Subtotal</th><th style="width:30px"></th></tr></thead>
       <tbody id="items-body"></tbody>
     </table>
     <div id="msg-items-contrato" style="display:none;margin-top:8px;padding:8px 12px;background:rgba(16,185,129,0.08);border:1px solid rgba(16,185,129,0.2);border-radius:6px;font-size:12px;color:var(--green)"></div>
@@ -227,6 +227,7 @@ let tabActual='todos';
 let editId=null;
 let caiActual=null;
 let ordenAsc=false; // false = más nuevo primero
+let _itemsContratoCache=[]; // cache de items del contrato activo
 
 async function init(){
   const usuario = await ERP.initLayout('remitos');
@@ -471,16 +472,54 @@ function limpiarItems(){
 
 function agregarItem(){ agregarItemRow(); }
 
-function agregarItemRow(cant='',desc='',precio=0,readonly=false){
+function _buildSelectOpciones(selectedId=''){
+  if(!_itemsContratoCache.length) return '';
+  return '<option value="">— Elegir ítem —</option>'+
+    _itemsContratoCache.map(it=>`<option value="${it.id}" ${it.id===selectedId?'selected':''} data-desc="${(it.descripcion||'').replace(/"/g,'&quot;')}" data-precio="${it.precio_unitario||0}">${it.descripcion}</option>`).join('');
+}
+
+function onItemContratoChange(sel){
+  const tr=sel.closest('tr');
+  const opt=sel.options[sel.selectedIndex];
+  const desc=opt?.dataset?.desc||'';
+  const precio=parseFloat(opt?.dataset?.precio||0);
+  tr.querySelector('[data-desc-hidden]').value=desc;
+  tr.querySelector('[data-precio]').value=precio||'';
+  recalcularTotales();
+}
+
+function agregarItemRow(cant='',desc='',precio=0,readonly=false,contratoItemId=''){
   const tbody=document.getElementById('items-body');
   const tr=document.createElement('tr');
   const subtotal=(parseFloat(cant)||0)*(parseFloat(precio)||0);
-  tr.innerHTML=`
-    <td><input type="number" min="0" placeholder="0" value="${cant||''}" style="width:100%" oninput="recalcularTotales()"></td>
-    <td><input type="text" placeholder="Descripción del trabajo" value="${desc||''}" style="width:100%"></td>
-    <td><input type="number" min="0" placeholder="0.00" value="${precio||''}" ${readonly?'readonly style="width:100%;background:var(--bg2);color:var(--muted)"':'style="width:100%"'} data-precio oninput="recalcularTotales()"></td>
-    <td style="font-family:'DM Mono',monospace;font-size:12px;color:var(--muted);text-align:right;padding-right:8px" data-subtotal>${subtotal>0?fmt(subtotal):'—'}</td>
-    <td><button onclick="this.closest('tr').remove();recalcularTotales()" style="background:none;border:none;color:var(--muted);cursor:pointer;font-size:16px">×</button></td>`;
+  const esContrato=document.getElementById('nr-tipo').value==='contrato';
+
+  if(esContrato){
+    // Modo contrato: dropdown para elegir ítem + cantidad
+    const opciones=_buildSelectOpciones(contratoItemId);
+    tr.innerHTML=`
+      <td><input type="number" min="0" placeholder="0" value="${cant||''}" style="width:100%" oninput="recalcularTotales()"></td>
+      <td>
+        <select style="width:100%;margin-bottom:4px" onchange="onItemContratoChange(this)">${opciones}</select>
+        <input type="hidden" data-desc-hidden value="${desc||''}">
+      </td>
+      <td><input type="number" min="0" placeholder="0.00" value="${precio||''}" readonly style="width:100%;background:var(--bg2);color:var(--muted)" data-precio oninput="recalcularTotales()"></td>
+      <td style="font-family:'DM Mono',monospace;font-size:12px;color:var(--muted);text-align:right;padding-right:8px" data-subtotal>${subtotal>0?fmt(subtotal):'—'}</td>
+      <td><button onclick="this.closest('tr').remove();recalcularTotales()" style="background:none;border:none;color:var(--muted);cursor:pointer;font-size:16px">×</button></td>`;
+    // Si hay desc preseleccionada (edición), marcar el select
+    if(desc && contratoItemId){
+      const selEl=tr.querySelector('select');
+      if(selEl) selEl.value=contratoItemId;
+    }
+  } else {
+    // Modo normal: input de texto libre
+    tr.innerHTML=`
+      <td><input type="number" min="0" placeholder="0" value="${cant||''}" style="width:100%" oninput="recalcularTotales()"></td>
+      <td><input type="text" placeholder="Descripción del trabajo" value="${desc||''}" style="width:100%"></td>
+      <td><input type="number" min="0" placeholder="0.00" value="${precio||''}" ${readonly?'readonly style="width:100%;background:var(--bg2);color:var(--muted)"':'style="width:100%"'} data-precio oninput="recalcularTotales()"></td>
+      <td style="font-family:'DM Mono',monospace;font-size:12px;color:var(--muted);text-align:right;padding-right:8px" data-subtotal>${subtotal>0?fmt(subtotal):'—'}</td>
+      <td><button onclick="this.closest('tr').remove();recalcularTotales()" style="background:none;border:none;color:var(--muted);cursor:pointer;font-size:16px">×</button></td>`;
+  }
   tbody.appendChild(tr);
   recalcularTotales();
 }
@@ -490,9 +529,9 @@ function toggleContrato(){
   document.getElementById('grupo-contrato').style.display=tipo==='contrato'?'flex':'none';
   const msgEl=document.getElementById('msg-items-contrato');
   if(tipo!=='contrato'){
-    // Al cambiar a no-contrato: limpiar items de contrato
+    // Al cambiar a no-contrato: limpiar cache e items
+    _itemsContratoCache=[];
     if(msgEl) msgEl.style.display='none';
-    // Solo limpiar si había items de contrato (tienen precio bloqueado)
     const hayPrecioBloqueado=[...document.getElementById('items-body').querySelectorAll('[data-precio][readonly]')].length>0;
     if(hayPrecioBloqueado){
       document.getElementById('items-body').innerHTML='';
@@ -528,10 +567,11 @@ async function cargarItemsContrato(){
   const empId=document.getElementById('nr-empresa').value;
   const msgEl=document.getElementById('msg-items-contrato');
   if(!contratoId){
+    _itemsContratoCache=[];
     if(msgEl) msgEl.style.display='none';
+    limpiarItems();
     return;
   }
-  // Pasar empresaId para validación en API — Fase 4+6
   let data;
   try{
     data=await ContratosAPI.getItemsContrato(contratoId, empId);
@@ -540,22 +580,14 @@ async function cargarItemsContrato(){
     console.error('getItemsContrato rechazado:',e);
     return;
   }
+  // Guardar cache para los dropdowns de cada fila
+  _itemsContratoCache=data||[];
+  // Limpiar y poner 3 filas vacías con dropdown
   const tbody=document.getElementById('items-body');
   tbody.innerHTML='';
-  (data||[]).forEach(item=>{
-    agregarItemRow(
-      item.cantidad_base||'',
-      item.descripcion,
-      item.precio_unitario||0,
-      true // readonly: precio bloqueado desde contrato
-    );
-  });
-  // Agregar 2 renglones vacíos editables para items manuales
-  agregarItemRow('','',0,false);
-  agregarItemRow('','',0,false);
-  // Mensaje de éxito
-  if(msgEl&&data&&data.length){
-    msgEl.textContent=`✓ Se cargaron ${data.length} ítems del contrato. Podés agregar renglones adicionales abajo.`;
+  for(let i=0;i<3;i++) agregarItemRow();
+  if(msgEl&&_itemsContratoCache.length){
+    msgEl.textContent=`✓ ${_itemsContratoCache.length} ítems disponibles. Seleccioná uno por renglón y completá la cantidad.`;
     msgEl.style.display='block';
   }
   recalcularTotales();
@@ -579,6 +611,7 @@ function recalcularTotales(){
 
 function abrirNuevo(){
   editId=null;
+  _itemsContratoCache=[];
   document.getElementById('rem-titulo').textContent='Nuevo remito';
   document.getElementById('nr-tipo').value='servicio';
   document.getElementById('nr-oc').value='';
@@ -603,26 +636,49 @@ async function editarRemito(id){
   await cargarDatosModal();
   document.getElementById('nr-cliente').value=r.cliente_id||'';
   toggleContrato();
-  // Cargar items con precio_unitario
+  // Cargar items guardados
   const items=await RemitosAPI.getItemsRemito(id);
   const tbody=document.getElementById('items-body');
   tbody.innerHTML='';
-  const esContrato=r.tipo==='contrato';
-  (items||[]).forEach(it=>agregarItemRow(
-    it.cantidad_num!=null?it.cantidad_num:(it.cantidad||''),
-    it.descripcion,
-    it.precio_unitario||0,
-    esContrato&&(it.precio_unitario||0)>0 // readonly si tiene precio de contrato
-  ));
-  if(!items||items.length<3) for(let i=(items||[]).length;i<3;i++) agregarItemRow();
-  // Cargar contrato si corresponde
-  if(r.contrato_id){
-    await new Promise(r=>setTimeout(r,100));
+  if(r.tipo==='contrato' && r.contrato_id){
+    // Setear contrato en el select
     const sel=document.getElementById('nr-contrato');
+    await cargarContratos();
     if(sel) sel.value=r.contrato_id;
+    // Cargar cache de items del contrato
+    try{
+      const empId2=document.getElementById('nr-empresa').value;
+      const ci=await ContratosAPI.getItemsContrato(r.contrato_id,empId2);
+      _itemsContratoCache=ci||[];
+    }catch(e){_itemsContratoCache=[];}
+    // Renderizar filas con dropdown preseleccionado
+    (items||[]).forEach(it=>{
+      const match=_itemsContratoCache.find(ci=>ci.descripcion===it.descripcion)||null;
+      agregarItemRow(
+        it.cantidad_num!=null?it.cantidad_num:(it.cantidad||''),
+        it.descripcion,
+        it.precio_unitario||0,
+        false,
+        match?.id||''
+      );
+    });
+    if(!items||items.length<3) for(let i=(items||[]).length;i<3;i++) agregarItemRow();
+    const msgEl=document.getElementById('msg-items-contrato');
+    if(msgEl&&_itemsContratoCache.length){
+      msgEl.textContent=`✓ ${_itemsContratoCache.length} ítems disponibles.`;
+      msgEl.style.display='block';
+    }
+  } else {
+    (items||[]).forEach(it=>agregarItemRow(
+      it.cantidad_num!=null?it.cantidad_num:(it.cantidad||''),
+      it.descripcion,
+      it.precio_unitario||0,
+      false
+    ));
+    if(!items||items.length<3) for(let i=(items||[]).length;i<3;i++) agregarItemRow();
+    const msgEl=document.getElementById('msg-items-contrato');
+    if(msgEl) msgEl.style.display='none';
   }
-  const msgEl=document.getElementById('msg-items-contrato');
-  if(msgEl) msgEl.style.display='none';
   recalcularTotales();
   document.getElementById('modal-remito').classList.add('show');
 }
@@ -652,11 +708,13 @@ async function guardarRemito(estado){
   const filasVal=document.getElementById('items-body').querySelectorAll('tr');
   let itemsValidos=0;
   for(const fila of filasVal){
-    const desc=fila.querySelectorAll('input')[1]?.value?.trim();
+    // En modo contrato la desc viene del hidden; en modo normal del input text
+    const descEl=fila.querySelector('[data-desc-hidden]')||fila.querySelectorAll('input')[1];
+    const desc=(descEl?.value||'').trim();
     const cant=parseFloat(fila.querySelectorAll('input')[0]?.value)||0;
     if(desc){
       itemsValidos++;
-      if(cant<=0&&tipoRemito==='contrato'){toast('Todos los ítems del contrato deben tener cantidad mayor a cero.','warn');return;}
+      if(cant<=0&&tipoRemito==='contrato'){toast('Todos los ítems seleccionados deben tener cantidad mayor a cero.','warn');return;}
     }
   }
   if(itemsValidos===0){toast('Agregá al menos un ítem con descripción.','warn');return;}
@@ -721,7 +779,9 @@ async function guardarRemito(estado){
   filas.forEach((fila,i)=>{
     const inputs=fila.querySelectorAll('input');
     const cantRaw=inputs[0]?.value?.trim();
-    const desc=inputs[1]?.value?.trim();
+    // En modo contrato desc viene del [data-desc-hidden]; en modo normal del input[1]
+    const hiddenDesc=fila.querySelector('[data-desc-hidden]');
+    const desc=hiddenDesc?(hiddenDesc.value||'').trim():(inputs[1]?.value||'').trim();
     const precioRaw=fila.querySelector('[data-precio]')?.value||'0';
     if(desc){
       const cantNum=parseFloat(cantRaw)||null;
