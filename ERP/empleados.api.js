@@ -144,7 +144,7 @@ const EmpleadosAPI = (() => {
     return data || [];
   }
 
-  async function subirDocumentoEmpleado(path, file, bucket = 'syh-docs') {
+  async function subirDocumentoEmpleado(path, file, bucket = 'empleados-docs') {
     const { error } = await db.storage.from(bucket).upload(path, file, { contentType: file.type, upsert: false });
     if (error) throw error;
     const { data } = db.storage.from(bucket).getPublicUrl(path);
@@ -156,7 +156,7 @@ const EmpleadosAPI = (() => {
     if (error) throw error;
   }
 
-  async function eliminarDocumentoEmpleado(id, storagePath, bucket = 'syh-docs') {
+  async function eliminarDocumentoEmpleado(id, storagePath, bucket = 'empleados-docs') {
     if (storagePath) {
       await db.storage.from(bucket).remove([storagePath]);
     }
@@ -181,10 +181,11 @@ const EmpleadosAPI = (() => {
   }
 
   async function registrarAusencia(payload) {
-    // Upload ya hecho en el frontend. payload solo tiene columnas existentes.
-    // Limpiar undefined antes del insert.
-    Object.keys(payload).forEach(k => { if (payload[k] === undefined) delete payload[k]; });
-    const { error } = await db.from('empleados_ausencias').insert(payload);
+    // Eliminar campos null/undefined antes del insert para no romper columnas inexistentes
+    const clean = Object.fromEntries(
+      Object.entries(payload).filter(([, v]) => v !== null && v !== undefined)
+    );
+    const { error } = await db.from('empleados_ausencias').insert(clean);
     if (error) throw error;
   }
 
