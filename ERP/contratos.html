@@ -232,15 +232,15 @@ async function cargarContratos(){
   let certificadoMap={};   // contrato_id → monto certificado
 
   if(todosIds.length){
-    // Remitos vinculados directamente al contrato
-    const rems=contratoSelId ? await ContratosAPI.getRemitosDeContrato(contratoSelId) : [];
+    // Remitos vinculados a cualquiera de los contratos del listado
+    const { data: rems } = await db.from('remitos_v2')
+      .select('contrato_id,total_valorizado')
+      .in('contrato_id', todosIds)
+      .neq('estado','anulado');
     (rems||[]).forEach(r=>{
       if(r.contrato_id)
         certificadoMap[r.contrato_id]=(certificadoMap[r.contrato_id]||0)+Number(r.total_valorizado||0);
     });
-
-    // Facturas emitidas: requiere correr migracion_nuevas_tablas.sql primero
-    // (agrega contrato_id a facturas_emitidas)
   }
 
   // ── KPIs globales ─────────────────────────────────────────
