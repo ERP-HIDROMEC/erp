@@ -181,7 +181,7 @@ const EmpleadosAPI = (() => {
   }
 
   async function registrarAusencia(payload) {
-    // Eliminar campos null/undefined antes del insert para no romper columnas inexistentes
+    // Filtrar null/undefined — no enviar campos que no existen en la tabla
     const clean = Object.fromEntries(
       Object.entries(payload).filter(([, v]) => v !== null && v !== undefined)
     );
