@@ -598,10 +598,10 @@ async function cargarItemsContrato(){
 function recalcularTotales(){
   let total=0;
   document.getElementById('items-body').querySelectorAll('tr').forEach(tr=>{
-    // inputs[0]=cantidad, inputs[1]=descripción(text), inputs[2]=precio_unitario
-    const inputs=tr.querySelectorAll('input');
-    const cant=parseFloat(inputs[0]?.value)||0;
-    const precio=parseFloat(inputs[2]?.value)||0;
+    const cantInput=tr.querySelector('input[type="number"]');
+    const precioInput=tr.querySelector('[data-precio]');
+    const cant=parseFloat(cantInput?.value)||0;
+    const precio=parseFloat(precioInput?.value)||0;
     const subtotal=cant*precio;
     total+=subtotal;
     const cell=tr.querySelector('[data-subtotal]');
@@ -710,10 +710,11 @@ async function guardarRemito(estado){
   const filasVal=document.getElementById('items-body').querySelectorAll('tr');
   let itemsValidos=0;
   for(const fila of filasVal){
-    // En modo contrato la desc viene del hidden; en modo normal del input text
-    const descEl=fila.querySelector('[data-desc-hidden]')||fila.querySelectorAll('input')[1];
-    const desc=(descEl?.value||'').trim();
-    const cant=parseFloat(fila.querySelectorAll('input')[0]?.value)||0;
+    const hiddenDesc=fila.querySelector('[data-desc-hidden]');
+    const textDesc=fila.querySelector('input[type="text"]');
+    const desc=hiddenDesc?(hiddenDesc.value||'').trim():(textDesc?.value||'').trim();
+    const cantInput=fila.querySelector('input[type="number"]');
+    const cant=parseFloat(cantInput?.value)||0;
     if(desc){
       itemsValidos++;
       if(cant<=0&&tipoRemito==='contrato'){toast('Todos los ítems seleccionados deben tener cantidad mayor a cero.','warn');return;}
@@ -779,11 +780,12 @@ async function guardarRemito(estado){
   const itemsData=[];
   let totalValorizado=0;
   filas.forEach((fila,i)=>{
-    const inputs=fila.querySelectorAll('input');
-    const cantRaw=inputs[0]?.value?.trim();
-    // En modo contrato desc viene del [data-desc-hidden]; en modo normal del input[1]
+    const cantInput=fila.querySelector('input[type="number"]');
+    const cantRaw=cantInput?.value?.trim();
+    // En modo contrato desc viene del [data-desc-hidden]; en modo normal del input type=text
     const hiddenDesc=fila.querySelector('[data-desc-hidden]');
-    const desc=hiddenDesc?(hiddenDesc.value||'').trim():(inputs[1]?.value||'').trim();
+    const textDesc=fila.querySelector('input[type="text"]');
+    const desc=hiddenDesc?(hiddenDesc.value||'').trim():(textDesc?.value||'').trim();
     const precioRaw=fila.querySelector('[data-precio]')?.value||'0';
     if(desc){
       const cantNum=parseFloat(cantRaw)||null;
@@ -802,15 +804,13 @@ async function guardarRemito(estado){
   });
   // Actualizar total_valorizado en el payload
   payload.total_valorizado=totalValorizado||null;
+  // Actualizar total en la tabla (siempre, para nuevo y edición)
+  try{ await RemitosAPI.actualizarRemito(remitoId,{total_valorizado:totalValorizado||null}); }catch(e){ console.warn('total_valorizado no actualizado:',e); }
   if(itemsData.length){
-    let errItems;
-    try{ await RemitosAPI.reemplazarItemsRemito(remitoId, empId, payload, itemsData); }catch(e){errItems=e;}
-    if(errItems){
-      // Fallback: insert directo si la RPC falla
-      try{ await RemitosAPI.insertarItemsDirecto(remitoId, itemsData); }catch(e2){
-        console.error('Error guardando items:', e2);
-        toast('Items no guardados: '+(e2?.message||String(e2)), 'warn');
-      }
+    // Usar siempre insert directo (la RPC guardar_remito_con_items falla)
+    try{ await RemitosAPI.insertarItemsDirecto(remitoId, itemsData); }catch(e){
+      console.error('Error guardando items:', e);
+      toast('Items no guardados: '+(e?.message||String(e)), 'warn');
     }
   }
 
