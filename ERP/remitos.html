@@ -480,11 +480,13 @@ function _buildSelectOpciones(selectedId=''){
 
 function onItemContratoChange(sel){
   const tr=sel.closest('tr');
-  const opt=sel.options[sel.selectedIndex];
-  const desc=opt?.dataset?.desc||'';
-  const precio=parseFloat(opt?.dataset?.precio||0);
+  const itemId=sel.value;
+  const item=_itemsContratoCache.find(it=>it.id===itemId)||null;
+  const desc=item?.descripcion||'';
+  const precio=item?.precio_unitario||0;
   tr.querySelector('[data-desc-hidden]').value=desc;
-  tr.querySelector('[data-precio]').value=precio||'';
+  const precioInput=tr.querySelector('[data-precio]');
+  if(precioInput) precioInput.value=precio||'';
   recalcularTotales();
 }
 
