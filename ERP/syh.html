@@ -616,24 +616,28 @@ async function guardarDocEmpresa(){
     document.getElementById('sde-progress').style.display='block';
     document.getElementById('sde-bar').style.width='50%';
     const {error:ue}=await db.storage.from('syh-docs').upload(path,file,{contentType:file.type,upsert:false});
-    if(!ue){
-      const {data:ud}=db.storage.from('syh-docs').getPublicUrl(path);
-      archivoUrl=ud?.publicUrl||null;archivoPatch=path;
+    if(ue){
+      document.getElementById('sde-progress').style.display='none';
+      toast('Error al subir archivo: '+ue.message,'error');return;
     }
+    const {data:ud}=db.storage.from('syh-docs').getPublicUrl(path);
+    archivoUrl=ud?.publicUrl||null;archivoPatch=path;
     document.getElementById('sde-bar').style.width='100%';
     document.getElementById('sde-progress').style.display='none';
   }
-  let error;
-  try{ await SyhAPI.registrarDocumentoEmpresa({
-    empresa_id:empId,tipo:document.getElementById('sde-tipo').value,
+  const payloadDE={
+    empresa_id:empId,
+    tipo:document.getElementById('sde-tipo').value,
     descripcion:document.getElementById('sde-desc').value||null,
     cliente_obra:document.getElementById('sde-cliente').value||null,
     fecha_documento:document.getElementById('sde-fecha').value||null,
     fecha_vencimiento:document.getElementById('sde-vencimiento').value||null,
-    archivo_url:archivoUrl,archivo_path:archivoPatch,
-  });
-  }catch(e){error=e;}
-  if(error){toast('Error: ', 'error');return;}
+  };
+  if(archivoPatch) payloadDE.archivo_path=archivoPatch;
+  if(archivoUrl)   payloadDE.archivo_url=archivoUrl;
+  let error;
+  try{ await SyhAPI.registrarDocumentoEmpresa(payloadDE); }catch(e){error=e;}
+  if(error){toast('Error: '+(error?.message||JSON.stringify(error)),'error');return;}
   cerrarModal('modal-doc-empresa');
   document.getElementById('sde-archivo').value='';
   cargarDocEmpresa();
@@ -728,18 +732,22 @@ async function guardarCapacitacion(){
     const ext=file.name.split('.').pop();
     const path=`syh/capacitaciones/${empId}_${Date.now()}.${ext}`;
     const {error:ue}=await db.storage.from('syh-docs').upload(path,file,{contentType:file.type,upsert:false});
-    if(!ue){const {data:ud}=db.storage.from('syh-docs').getPublicUrl(path);archivoUrl=ud?.publicUrl||null;archivoPatch=path;}
+    if(ue){toast('Error al subir archivo: '+ue.message,'error');return;}
+    const {data:ud}=db.storage.from('syh-docs').getPublicUrl(path);
+    archivoUrl=ud?.publicUrl||null;archivoPatch=path;
   }
-
-  let cap=null,error=null; try{ cap=await SyhAPI.registrarCapacitacion({
+  const payloadCap={
     empresa_id:empId,tipo,
     descripcion:document.getElementById('sc-desc').value||null,
     dictada_por:document.getElementById('sc-dictante').value||null,
     fecha,
     duracion_horas:parseFloat(document.getElementById('sc-duracion').value)||null,
     fecha_vencimiento:document.getElementById('sc-vencimiento').value||null,
-    archivo_url:archivoUrl,archivo_path:archivoPatch,
-  },asistentes); }catch(e){error=e;}
+  };
+  if(archivoPatch) payloadCap.archivo_path=archivoPatch;
+  if(archivoUrl)   payloadCap.archivo_url=archivoUrl;
+  let cap=null,error=null;
+  try{ cap=await SyhAPI.registrarCapacitacion(payloadCap,asistentes); }catch(e){error=e;}
   if(error){toast('Error: '+error.message,'error');return;}
 
   cerrarModal('modal-capacitacion');
@@ -1077,11 +1085,11 @@ async function guardarIncidente(){
     const ext=file.name.split('.').pop();
     const path=`syh/incidentes/${empId}_${Date.now()}.${ext}`;
     const {error:ue}=await db.storage.from('syh-docs').upload(path,file,{contentType:file.type,upsert:false});
-    if(!ue){const {data:ud}=db.storage.from('syh-docs').getPublicUrl(path);archivoUrl=ud?.publicUrl||null;archivoPatch=path;}
+    if(ue){toast('Error al subir archivo: '+ue.message,'error');return;}
+    const {data:ud}=db.storage.from('syh-docs').getPublicUrl(path);
+    archivoUrl=ud?.publicUrl||null;archivoPatch=path;
   }
-
-  let error;
-  try{ await SyhAPI.registrarIncidente({
+  const payloadInc={
     empresa_id:empId,empleado_id:empleadoId||null,
     tipo:document.getElementById('si-tipo').value,
     fecha:fecha,lugar:document.getElementById('si-lugar').value||null,
@@ -1089,10 +1097,12 @@ async function guardarIncidente(){
     dias_perdidos:parseInt(document.getElementById('si-dias').value)||0,
     requirio_art:document.getElementById('si-art').value,
     medidas_correctivas:document.getElementById('si-correctivas').value||null,
-    archivo_url:archivoUrl,archivo_path:archivoPatch,
-  });
-  }catch(e){error=e;}
-  if(error){toast('Error: ', 'error');return;}
+  };
+  if(archivoPatch) payloadInc.archivo_path=archivoPatch;
+  if(archivoUrl)   payloadInc.archivo_url=archivoUrl;
+  let error;
+  try{ await SyhAPI.registrarIncidente(payloadInc); }catch(e){error=e;}
+  if(error){toast('Error: '+(error?.message||JSON.stringify(error)),'error');return;}
   cerrarModal('modal-incidente');
   document.getElementById('si-archivo').value='';
   cargarIncidentes();
@@ -1107,10 +1117,8 @@ async function borrarIncidente(id,path){
 
 // ── VENCIMIENTOS UNIFICADOS ───────────────────────────────────
 async function cargarVencimientos(){
-  // Verificar sesión activa antes de hacer queries con RLS
   const {data:{session}}=await db.auth.getSession();
-  if(!session){document.getElementById('contenido').innerHTML='<div style="padding:40px;text-align:center;color:var(--muted)">Iniciá sesión para ver vencimientos.</div>';return;}
-
+  if(!session){document.getElementById('contenido').innerHTML='<div style="padding:40px;text-align:center;color:var(--muted)">Sesión no disponible.</div>';return;}
   document.getElementById('kpis').innerHTML='';
   document.getElementById('contenido').innerHTML='<div class="spinner-wrap"><div class="spinner"></div>Calculando...</div>';
   const emp=document.getElementById('f-empresa').value;
@@ -1123,14 +1131,11 @@ async function cargarVencimientos(){
     EmpleadosAPI.getDocsProxVencer(60),
     SyhAPI.getCapacitacionesProxVencer(60),
   ]);
-
-  // Filtrar por empresa en el resultado (las APIs traen todos, filtramos acá)
-  const filtrar=rows=>emp?rows.filter(r=>r.empresa_id===emp||r.empresas?.id===emp):rows;
-
+  const filtrar=rows=>emp?(rows||[]).filter(r=>r.empresa_id===emp):rows||[];
   const todas=[
-    ...filtrar(docsEmpresa||[]).map(r=>({...r,origen:'Docs empresa SyH',entidad:r.empresas?.nombre})),
-    ...filtrar(docsPersonal||[]).map(r=>({...r,origen:'Docs personal',entidad:r.empleados?.nombre||'—'})),
-    ...filtrar(docsCap||[]).map(r=>({...r,origen:'Certificado capacitacion',entidad:r.empresas?.nombre})),
+    ...filtrar(docsEmpresa).map(r=>({...r,origen:'Docs empresa SyH',entidad:r.empresas?.nombre})),
+    ...filtrar(docsPersonal).map(r=>({...r,origen:'Docs personal',entidad:r.empleados?.nombre||'—'})),
+    ...filtrar(docsCap).map(r=>({...r,origen:'Certificado capacitacion',entidad:r.empresas?.nombre})),
   ].sort((a,b)=>a.fecha_vencimiento>b.fecha_vencimiento?1:-1);
 
   const vencidos=todas.filter(r=>r.fecha_vencimiento<hoyStr);

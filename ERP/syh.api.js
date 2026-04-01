@@ -54,9 +54,7 @@ const SyhAPI = (() => {
   }
 
   async function registrarDocumentoEmpresa(payload) {
-    // El upload ya se hizo en el frontend. payload incluye archivo_url y archivo_path si hay archivo.
-    // Filtrar null para no romper columnas con NOT NULL constraint.
-    const clean = Object.fromEntries(Object.entries(payload).filter(([,v]) => v != null));
+    const clean = Object.fromEntries(Object.entries(payload).filter(([,v])=>v!=null));
     const { error } = await db.from('syh_documentos').insert(clean);
     if (error) throw error;
   }
@@ -101,11 +99,9 @@ const SyhAPI = (() => {
   }
 
   async function registrarCapacitacion(payload, asistentesIds) {
-    // El upload ya se hizo en el frontend. payload incluye archivo_url y archivo_path si hay archivo.
-    const clean = Object.fromEntries(Object.entries(payload).filter(([,v]) => v != null));
+    const clean = Object.fromEntries(Object.entries(payload).filter(([,v])=>v!=null));
     const { data: cap, error } = await db.from('syh_capacitaciones').insert(clean).select().single();
     if (error) throw error;
-
     if (asistentesIds && asistentesIds.length) {
       const { error: ea } = await db.from('syh_capacitacion_asistentes').insert(
         asistentesIds.map(empId => ({ capacitacion_id: cap.id, empleado_id: empId }))
@@ -186,8 +182,7 @@ const SyhAPI = (() => {
   }
 
   async function registrarIncidente(payload) {
-    // El upload ya se hizo en el frontend. payload incluye archivo_url y archivo_path si hay archivo.
-    const clean = Object.fromEntries(Object.entries(payload).filter(([,v]) => v != null));
+    const clean = Object.fromEntries(Object.entries(payload).filter(([,v])=>v!=null));
     const { error } = await db.from('syh_incidentes').insert(clean);
     if (error) throw error;
   }
