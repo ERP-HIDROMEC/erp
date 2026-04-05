@@ -80,3 +80,44 @@
 
 // Este archivo no contiene código ejecutable.
 // Es documentación de referencia + guía de carga.
+
+// ============================================================
+// FUNCIONES GLOBALES DISPONIBLES (desde erp-utils.js)
+// ============================================================
+//
+// FORMATO
+//   fmt(valor)              → "$1.234.567"  (ARS sin decimales)
+//   fmtF(fecha)             → "12/03/2026"  (fecha localizada)
+//   fmtNum(valor, isUSD)    → "$1.234,56" o "U$S 1.234,56"
+//
+// LOADING
+//   setLoading(id, true/false, mensaje?)
+//     → muestra/oculta spinner en un contenedor por ID
+//
+//   withLoading(id, asyncFn, mensajeCarga?)
+//     → ejecuta fn async con spinner + manejo de error automático
+//     → devuelve resultado o null si error
+//     Ejemplo:
+//       const datos = await withLoading('contenido', () => ClientesAPI.getClientes());
+//
+//   withSave(btnId, asyncFn, mensajeOk?)
+//     → deshabilita botón, muestra spinner, toast de éxito al terminar
+//     → devuelve resultado o null si error
+//     Ejemplo:
+//       const ok = await withSave('btn-guardar', () => crearCliente(payload), 'Cliente guardado');
+//
+// ERRORES
+//   manejarError(error, contexto)
+//     → toast de error con mensaje legible para el usuario
+//     → detecta: campos nulos, duplicados, FK, sesión expirada, sin conexión
+//
+// TOASTS
+//   toast(mensaje, tipo?, duracion?)
+//     → tipos: 'success' | 'error' | 'warn' | 'info'
+//
+// CONFIRMACIÓN
+//   confirmar(mensaje, opciones?)  → Promise<boolean>
+//
+// AUDITORÍA
+//   registrarAuditoria(modulo, accion, tabla, registroId, detalle)
+// ============================================================

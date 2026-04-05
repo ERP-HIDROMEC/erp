@@ -22,8 +22,7 @@ var db = supabase.createClient(SUPA_URL, SUPA_KEY);
 
 // ── Formateo ──────────────────────────────────────────────────
 var fmt  = v => new Intl.NumberFormat('es-AR',{style:'currency',currency:'ARS',maximumFractionDigits:0}).format(v||0);
-var fmtF   = d => d ? new Date(d+'T12:00:00').toLocaleDateString('es-AR') : '—';
-var fmtNum = (v, isUSD) => (isUSD ? 'U$S ' : '$') + Number(v).toLocaleString('es-AR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+var fmtF = d => d ? new Date(d+'T12:00:00').toLocaleDateString('es-AR') : '—';
 var hoy  = () => new Date().toISOString().split('T')[0];
 
 // ── Roles y permisos ──────────────────────────────────────────
@@ -272,14 +271,100 @@ function confirmar(mensaje, opciones) {
 function manejarError(error, contexto) {
   if (!error) return false;
   console.error(`Error en ${contexto}:`, error);
-  const msg = error.message || 'Error desconocido';
+  const msg = error.message || String(error) || 'Error desconocido';
   let msgUsuario;
-  if (msg.includes('not-null'))    msgUsuario = `Falta completar un campo obligatorio. (${contexto})`;
-  else if (msg.includes('unique')) msgUsuario = `Ya existe un registro con ese dato. (${contexto})`;
-  else if (msg.includes('foreign key')) msgUsuario = `El registro tiene datos relacionados que impiden la operación. (${contexto})`;
-  else                             msgUsuario = `Error en ${contexto}: ${msg}`;
+  if (msg.includes('not-null') || msg.includes('null value'))
+    msgUsuario = 'Falta completar un campo obligatorio.';
+  else if (msg.includes('unique') || msg.includes('duplicate'))
+    msgUsuario = 'Ya existe un registro con ese dato.';
+  else if (msg.includes('foreign key'))
+    msgUsuario = 'El registro tiene datos relacionados que impiden la operación.';
+  else if (msg.includes('JWT') || msg.includes('session') || msg.includes('token'))
+    msgUsuario = 'Tu sesión expiró. Recargá la página.';
+  else if (msg.includes('network') || msg.includes('fetch') || msg.includes('Failed to fetch'))
+    msgUsuario = 'Sin conexión. Verificá tu internet e intentá de nuevo.';
+  else if (msg.includes('permission') || msg.includes('policy') || msg.includes('RLS'))
+    msgUsuario = 'No tenés permiso para realizar esta acción.';
+  else
+    msgUsuario = contexto ? `Error en ${contexto}: ${msg}` : msg;
   toast(msgUsuario, 'error');
   return true;
+}
+
+// ── Loading helpers ────────────────────────────────────────────
+//
+// setLoading(containerId, true/false, mensaje?)
+//   Muestra u oculta el spinner dentro de un contenedor.
+//   Guarda el HTML original para restaurarlo al terminar.
+//
+//   setLoading('contenido', true)           → muestra spinner
+//   setLoading('contenido', false)          → restaura HTML original
+//   setLoading('contenido', true, 'Guardando...') → spinner con mensaje custom
+//
+var _loadingBackup = {};
+
+function setLoading(containerId, activo, mensaje) {
+  const el = document.getElementById(containerId);
+  if (!el) return;
+  if (activo) {
+    if (!_loadingBackup[containerId]) {
+      _loadingBackup[containerId] = el.innerHTML;
+    }
+    const msg = mensaje || 'Cargando...';
+    el.innerHTML = `<div class="spinner-wrap"><div class="spinner"></div>${msg}</div>`;
+  } else {
+    if (_loadingBackup[containerId] !== undefined) {
+      el.innerHTML = _loadingBackup[containerId];
+      delete _loadingBackup[containerId];
+    }
+  }
+}
+
+// withLoading(containerId, asyncFn, mensajeCarga?)
+//   Ejecuta una función async mostrando spinner y manejando error automáticamente.
+//   Devuelve el resultado o null si hubo error.
+//
+//   Ejemplo:
+//   const datos = await withLoading('contenido', () => ClientesAPI.getClientes());
+//
+async function withLoading(containerId, asyncFn, mensajeCarga) {
+  setLoading(containerId, true, mensajeCarga);
+  try {
+    const result = await asyncFn();
+    setLoading(containerId, false);
+    return result;
+  } catch(e) {
+    setLoading(containerId, false);
+    manejarError(e, mensajeCarga || containerId);
+    return null;
+  }
+}
+
+// withSave(btnId, asyncFn, mensajeOk?)
+//   Deshabilita un botón mientras guarda, muestra spinner en él,
+//   muestra toast de éxito y re-habilita al terminar.
+//   Devuelve true si éxito, false si error.
+//
+//   Ejemplo:
+//   const ok = await withSave('btn-guardar', () => ClientesAPI.crearCliente(payload), 'Cliente guardado');
+//
+async function withSave(btnId, asyncFn, mensajeOk) {
+  const btn = document.getElementById(btnId);
+  const textoOriginal = btn ? btn.innerHTML : null;
+  if (btn) {
+    btn.disabled = true;
+    btn.innerHTML = '<span class="spinner" style="display:inline-block;vertical-align:middle;margin-right:6px"></span>Guardando...';
+  }
+  try {
+    const result = await asyncFn();
+    if (btn) { btn.disabled = false; btn.innerHTML = textoOriginal; }
+    if (mensajeOk) toast(mensajeOk, 'success');
+    return result;
+  } catch(e) {
+    if (btn) { btn.disabled = false; btn.innerHTML = textoOriginal; }
+    manejarError(e, mensajeOk || 'guardar');
+    return null;
+  }
 }
 
 // ── Auditoría ─────────────────────────────────────────────────

@@ -167,10 +167,15 @@ async function init() {
 }
 
 async function cargarTodo() {
-  await Promise.all([cargarKPIs(), cargarVencidas(), cargarMensual(), cargarClientes()]);
+  try {
+    await Promise.all([cargarKPIs(), cargarVencidas(), cargarMensual(), cargarClientes()]);
+  } catch(e) {
+    manejarError(e, 'cargar dashboard');
+  }
 }
 
 async function cargarKPIs() {
+  try {
   const ini = mesActivo + '-01';
   const fin = new Date(mesActivo + '-01');
   fin.setMonth(fin.getMonth()+1);
@@ -200,6 +205,7 @@ async function cargarKPIs() {
       facturas_vencidas:(r7.data||[]).length };
   }));
   renderKPIs();
+  } catch(e) { manejarError(e, 'KPIs'); }
 }
 
 function filtrar(arr) {
@@ -221,6 +227,7 @@ function renderKPIs() {
 }
 
 async function cargarVencidas() {
+  try {
   const hoy = new Date().toISOString().split('T')[0];
   const filtros = { excluirAnuladas:false, soloVencidas:true };
   if(empresaActiva !== 'todas') filtros.empresaId = empresaActiva;
@@ -328,6 +335,7 @@ function cambiarMes(val) {
 
 
 async function cargarAlertas() {
+  try {
   const alertas = [];
   const hoyStr = new Date().toISOString().split('T')[0];
   const hace30 = new Date(); hace30.setDate(hace30.getDate()-30);
