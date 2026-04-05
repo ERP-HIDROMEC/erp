@@ -583,13 +583,12 @@ function calcularCostoProyecto(){
                 hs_e*_costosRoles.oficial_esp+hs_s*_costosRoles.supervisor+
                 hs_h*_costosRoles.higiene;
   const costoTotal=costoMO+mat;
-  const fmtN=v=>new Intl.NumberFormat('es-AR',{style:'currency',currency:'ARS',maximumFractionDigits:0}).format(v);
   if(totalHs>0||mat>0){
     document.getElementById('resumen-proyecto').style.display='block';
     document.getElementById('res-horas').textContent=totalHs+'h';
-    document.getElementById('res-costo-mo').textContent=fmtN(costoMO);
-    document.getElementById('res-mat').textContent=fmtN(mat);
-    document.getElementById('res-total').textContent=fmtN(costoTotal);
+    document.getElementById('res-costo-mo').textContent=fmt(costoMO);
+    document.getElementById('res-mat').textContent=fmt(mat);
+    document.getElementById('res-total').textContent=fmt(costoTotal);
   } else {
     document.getElementById('resumen-proyecto').style.display='none';
   }
@@ -1061,7 +1060,6 @@ function imprimirOT(){
 function generarPDFOrdenTrabajo(r){
   const {jsPDF}=window.jspdf;
   const doc=new jsPDF({format:'a4',unit:'mm'});
-  const fmtD=d=>d?new Date(d+'T12:00:00').toLocaleDateString('es-AR'):'—';
   const L=10,W=190,midX=105,T=8;
 
   // Borde doble
@@ -1122,7 +1120,7 @@ function generarPDFOrdenTrabajo(r){
   doc.text('FECHA ENTREGA:',midX+10,yP+8);
   doc.setFont('helvetica','normal');doc.setFontSize(11);
   doc.setTextColor(r.fecha_entrega?200:100,50,50);
-  doc.text(fmtD(r.fecha_entrega),midX+44,yP+8);
+  doc.text(fmtF(r.fecha_entrega),midX+44,yP+8);
   doc.setTextColor(0,0,0);
 
   doc.setFont('helvetica','bold');doc.setFontSize(8);

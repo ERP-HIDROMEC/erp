@@ -1463,7 +1463,6 @@ async function procesarXLS(input) {
 
   // Construir filas para preview
   _importRows = [];
-  const fmt = v => new Intl.NumberFormat('es-AR', { style: 'currency', currency: 'ARS', maximumFractionDigits: 0 }).format(v || 0);
 
   let noMatch = 0;
   const tbody = document.getElementById('import-tabla-body');

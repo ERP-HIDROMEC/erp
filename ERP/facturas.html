@@ -671,8 +671,7 @@ function abrirCobro(factId,empId,numero,total,neto){
   document.getElementById('nc-obs').value='';
   document.getElementById('nc-periodo-ret').value=new Date().toISOString().substring(0,7);
   // Mostrar base neto s/IVA
-  const fmtN=v=>new Intl.NumberFormat('es-AR',{style:'currency',currency:'ARS',maximumFractionDigits:0}).format(v||0);
-  document.getElementById('ret-base-label').textContent=fmtN(cobroMontoNeto);
+  document.getElementById('ret-base-label').textContent=fmt(cobroMontoNeto);
   // Limpiar retenciones y porcentajes
   ['ret-iva','ret-ganancias','ret-iibb','ret-suss','ret-municipal','ret-otras',
    'pct-iva','pct-ganancias','pct-iibb','pct-suss','pct-municipal','pct-otras'].forEach(id=>{
@@ -700,9 +699,8 @@ function calcularNetoPercibido(){
   const retOtras=parseFloat(document.getElementById('ret-otras').value)||0;
   const totalRet=retIva+retGan+retIibb+retSuss+retMuni+retOtras;
   const neto=total-totalRet;
-  const fmt2=v=>new Intl.NumberFormat('es-AR',{style:'currency',currency:'ARS',maximumFractionDigits:0}).format(v||0);
-  document.getElementById('total-ret').textContent=fmt2(totalRet);
-  document.getElementById('neto-cobro').textContent=fmt2(neto);
+  document.getElementById('total-ret').textContent=fmt(totalRet);
+  document.getElementById('neto-cobro').textContent=fmt(neto);
   document.getElementById('nc-monto').value=neto.toFixed(2);
 }
 

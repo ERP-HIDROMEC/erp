@@ -295,8 +295,7 @@ function calcularTotal(){
     const sub=parseFloat(tr.querySelectorAll('input')[3]?.value)||0;
     total+=sub;
   });
-  const fmtP=v=>new Intl.NumberFormat('es-AR',{style:'currency',currency:'ARS',maximumFractionDigits:0}).format(v);
-  document.getElementById('pres-total').textContent=fmtP(total);
+  document.getElementById('pres-total').textContent=fmt(total);
   return total;
 }
 
@@ -335,12 +334,11 @@ async function cargarPresupuestos(){
   const totalEnviado=enviados.reduce((s,r)=>s+Number(r.precio_venta||0),0);
   const enviadosYMas=rows.filter(r=>r.estado!=='borrador');
   const tasa=enviadosYMas.length>0?Math.round(aprobados.length/enviadosYMas.length*100):0;
-  const fmtP=v=>new Intl.NumberFormat('es-AR',{style:'currency',currency:'ARS',maximumFractionDigits:0}).format(v||0);
 
   document.getElementById('kpis').innerHTML=`
     <div class="kpi-card blue"><div class="kpi-label">Total</div><div class="kpi-value">${rows.length}</div></div>
-    <div class="kpi-card green"><div class="kpi-label">Aprobados</div><div class="kpi-value">${aprobados.length} — ${fmtP(totalAprobado)}</div></div>
-    <div class="kpi-card orange"><div class="kpi-label">Enviados</div><div class="kpi-value">${enviados.length} — ${fmtP(totalEnviado)}</div></div>
+    <div class="kpi-card green"><div class="kpi-label">Aprobados</div><div class="kpi-value">${aprobados.length} — ${fmt(totalAprobado)}</div></div>
+    <div class="kpi-card orange"><div class="kpi-label">Enviados</div><div class="kpi-value">${enviados.length} — ${fmt(totalEnviado)}</div></div>
     <div class="kpi-card ${tasa>=50?'green':'red'}"><div class="kpi-label">Tasa aprobación</div><div class="kpi-value">${tasa}%</div></div>`;
 
   document.getElementById('contenido').innerHTML=`
@@ -354,7 +352,7 @@ async function cargarPresupuestos(){
         <td class="mono">${r.numero||'—'}</td>
         <td>${r.clientes?.nombre||'Sin cliente'}</td>
         <td style="max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:12px">${r.descripcion||'—'}</td>
-        <td class="mono" style="color:var(--green)">${fmtP(r.precio_venta)}</td>
+        <td class="mono" style="color:var(--green)">${fmt(r.precio_venta)}</td>
         <td><span class="estado ${r.estado}">${r.estado}</span></td>
         <td class="mono" style="font-size:12px">${fmtF(r.fecha_envio)}</td>
         <td><div style="display:flex;gap:5px;flex-wrap:wrap">
@@ -561,8 +559,6 @@ async function generarPDF(id){
   const {jsPDF}=window.jspdf;
   const doc=new jsPDF({format:'a4',unit:'mm'});
   const L=10,R=200,W=190,midX=105,T=8;
-  const fmtP=v=>new Intl.NumberFormat('es-AR',{style:'currency',currency:'ARS',maximumFractionDigits:0}).format(v||0);
-  const fmtF2=v=>v?new Date(v+'T12:00:00').toLocaleDateString('es-AR'):'—';
 
   const esPlacemem=(p.empresas?.nombre||'').toUpperCase().includes('PLACEMEM');
   const EMP=esPlacemem?{
@@ -609,7 +605,7 @@ async function generarPDF(id){
   doc.setFontSize(12); doc.setFont('helvetica','normal');
   doc.text('N° '+(p.numero||'—'),midX+24,T+22,{align:'center'});
   doc.setFontSize(10);
-  doc.text('Fecha: '+fmtF2(p.fecha_envio||new Date().toISOString().split('T')[0]),midX+24,T+30,{align:'center'});
+  doc.text('Fecha: '+fmtF(p.fecha_envio||new Date().toISOString().split('T')[0]),midX+24,T+30,{align:'center'});
 
   // Datos empresa der
   doc.setFontSize(7.5); doc.setTextColor(60,60,60);
@@ -676,8 +672,8 @@ async function generarPDF(id){
     if(idx%2===0){doc.setFillColor(252,252,252);doc.rect(L+1,iy-5,W-2,rowH,'F');}
     doc.text(lines,colDesc+2,iy);
     doc.text(String(it.cantidad||1),colCant,iy,{align:'center'});
-    doc.text(fmtP(it.precio_unitario),colPU+18,iy,{align:'right'});
-    doc.text(fmtP(it.subtotal),colSub+18,iy,{align:'right'});
+    doc.text(fmt(it.precio_unitario),colPU+18,iy,{align:'right'});
+    doc.text(fmt(it.subtotal),colSub+18,iy,{align:'right'});
     totalPDF+=Number(it.subtotal||0);
     iy+=rowH;
     doc.setDrawColor(230,230,230); doc.setLineWidth(0.1);
@@ -695,7 +691,7 @@ async function generarPDF(id){
   doc.setFontSize(11); doc.setFont('helvetica','bold'); doc.setTextColor(0,0,0);
   doc.text('TOTAL PRESUPUESTO:',R-60,yT+8);
   doc.setFontSize(13); doc.setFont('courier','bold');
-  doc.text(fmtP(totalPDF),R-5,yT+8,{align:'right'});
+  doc.text(fmt(totalPDF),R-5,yT+8,{align:'right'});
   doc.setLineWidth(0.5); doc.line(L+1,yT+12,R-1,yT+12);
 
   // ── Vigencia / pie ──

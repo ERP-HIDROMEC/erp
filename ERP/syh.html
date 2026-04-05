@@ -12,7 +12,7 @@
 <script src="erp-sidebar.js"></script>
 <script src="empresas.api.js"></script>
 <script src="empleados.api.js"></script>
-<script src="syh.api.js"></script>
+<script src="syh_api.js"></script>
 <style>
   .kpi-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:14px;margin-bottom:20px;}
   .kpi-card{background:var(--bg2);border:1px solid var(--border);border-radius:12px;padding:18px 20px;position:relative;overflow:hidden;}
@@ -912,7 +912,6 @@ function generarPDFEPP(entrega,emp,items,empIdOEmpresaNombre){
   const {jsPDF}=window.jspdf;
   const doc=new jsPDF({format:'a4',unit:'mm'});
   const L=10,R=200,W=190,midX=105;
-  const fmtD=d=>d?new Date(d+'T12:00:00').toLocaleDateString('es-AR'):'';
 
   // Obtener nombre empresa
   const esHidro=empIdOEmpresaNombre==='a1000000-0000-0000-0000-000000000001'||empIdOEmpresaNombre==='Hidromec';
@@ -1002,7 +1001,7 @@ function generarPDFEPP(entrega,emp,items,empIdOEmpresaNombre){
       doc.text(doc.splitTextToSize(item.marca||'',cols[3].w-2)[0],cols[3].x+1,ry+5.5);
       doc.text(item.certificacion||'',cols[4].x+6,ry+5.5,{align:'center'});
       doc.text(String(item.cantidad||1),cols[5].x+4,ry+5.5,{align:'center'});
-      doc.text(fmtD(entrega.fecha_entrega),cols[6].x+1,ry+5.5);
+      doc.text(fmtF(entrega.fecha_entrega),cols[6].x+1,ry+5.5);
     }
     // Grid lines
     doc.setLineWidth(0.2);doc.rect(L,ry,W,8);

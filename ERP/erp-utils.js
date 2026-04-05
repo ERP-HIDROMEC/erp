@@ -22,7 +22,8 @@ var db = supabase.createClient(SUPA_URL, SUPA_KEY);
 
 // ── Formateo ──────────────────────────────────────────────────
 var fmt  = v => new Intl.NumberFormat('es-AR',{style:'currency',currency:'ARS',maximumFractionDigits:0}).format(v||0);
-var fmtF = d => d ? new Date(d+'T12:00:00').toLocaleDateString('es-AR') : '—';
+var fmtF   = d => d ? new Date(d+'T12:00:00').toLocaleDateString('es-AR') : '—';
+var fmtNum = (v, isUSD) => (isUSD ? 'U$S ' : '$') + Number(v).toLocaleString('es-AR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 var hoy  = () => new Date().toISOString().split('T')[0];
 
 // ── Roles y permisos ──────────────────────────────────────────
