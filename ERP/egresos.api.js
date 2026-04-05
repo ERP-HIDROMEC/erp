@@ -180,13 +180,13 @@ const EgresosAPI = (() => {
   }
 
   async function buscarOCrearProveedor(empresaId, nombre, cuit) {
-    const { data } = await db.from('proveedores')
+    const { data: found } = await db.from('proveedores')
       .select('id,nombre')
       .eq('empresa_id', empresaId)
       .ilike('nombre', nombre.trim())
       .eq('activo', true)
-      .single();
-    if (data) return data;
+      .limit(1);
+    if (found && found.length) return found[0];
     const { data: nuevo, error } = await db.from('proveedores')
       .insert({ empresa_id: empresaId, nombre: nombre.trim(), cuit: cuit || null, activo: true })
       .select()
