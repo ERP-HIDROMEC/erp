@@ -140,6 +140,31 @@
   </div>
 </div>
 
+<!-- MODAL ACTUALIZAR POR PORCENTAJE -->
+<div class="modal-overlay" id="modal-pct">
+  <div class="modal" style="max-width:420px">
+    <h3>📈 Actualizar precios por porcentaje</h3>
+    <div id="pct-contrato-info" style="background:rgba(59,130,246,0.08);border:1px solid rgba(59,130,246,0.2);border-radius:8px;padding:10px 12px;font-size:12px;color:var(--muted);margin-bottom:20px"></div>
+    <div class="form-group" style="margin-bottom:16px">
+      <label>Porcentaje de aumento</label>
+      <div style="display:flex;align-items:center;gap:8px">
+        <input type="number" id="pct-valor" placeholder="Ej: 15" min="0.01" step="0.01"
+          style="flex:1" oninput="previewPct()">
+        <span style="font-size:18px;color:var(--muted);font-weight:600">%</span>
+      </div>
+    </div>
+    <div class="form-group" style="margin-bottom:16px">
+      <label>Motivo (opcional)</label>
+      <input type="text" id="pct-motivo" placeholder="Ej: Actualización semestral, IPC, etc.">
+    </div>
+    <div id="pct-preview" style="display:none;background:var(--bg3);border:1px solid var(--border);border-radius:8px;padding:12px;margin-bottom:16px;font-size:12px;max-height:200px;overflow-y:auto"></div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" onclick="cerrarModal('modal-pct')">Cancelar</button>
+      <button class="btn btn-success" id="btn-aplicar-pct" onclick="aplicarPorcentaje()">✓ Aplicar a todos los ítems</button>
+    </div>
+  </div>
+</div>
+
 <!-- MODAL ITEM PRECIO -->
 <div class="modal-overlay" id="modal-item">
   <div class="modal">
@@ -426,7 +451,10 @@ async function cargarPrecios(){
     <div class="panel">
       <div class="panel-header">
         <h3>Lista de precios — ${contratoSelNombre}</h3>
-        <button class="btn btn-primary btn-sm" onclick="abrirNuevoItem()">+ Nuevo ítem</button>
+        <div style="display:flex;gap:8px">
+          <button class="btn btn-ghost btn-sm" onclick="abrirActualizarPct()">📈 Actualizar por %</button>
+          <button class="btn btn-primary btn-sm" onclick="abrirNuevoItem()">+ Nuevo ítem</button>
+        </div>
       </div>
       <div style="overflow-x:auto"><table>
         <thead><tr><th>Descripción / Código</th><th>Unidad</th><th>Precio unitario</th><th>Acciones</th></tr></thead>
@@ -496,6 +524,89 @@ async function guardarItem(){
     });
   }
   cerrarModal('modal-item');
+  cargarPrecios();
+}
+
+// ── Actualizar precios por porcentaje ────────────────────────
+let _itemsParaPct = [];
+
+function abrirActualizarPct() {
+  if (!contratoSelId) { toast('Seleccioná un contrato primero.', 'warn'); return; }
+  document.getElementById('pct-contrato-info').innerHTML =
+    `<strong style="color:var(--blue)">${contratoSelNombre}</strong> — se actualizarán todos los ítems activos`;
+  document.getElementById('pct-valor').value = '';
+  document.getElementById('pct-motivo').value = '';
+  document.getElementById('pct-preview').style.display = 'none';
+  document.getElementById('pct-preview').innerHTML = '';
+  // Guardar items actuales para preview
+  ContratosAPI.getItemsContrato(contratoSelId).then(items => {
+    _itemsParaPct = items || [];
+  });
+  document.getElementById('modal-pct').classList.add('show');
+}
+
+function previewPct() {
+  const pct = parseFloat(document.getElementById('pct-valor').value);
+  const preview = document.getElementById('pct-preview');
+  if (!pct || pct <= 0 || !_itemsParaPct.length) {
+    preview.style.display = 'none';
+    return;
+  }
+  const rows = _itemsParaPct.map(r => {
+    const nuevo = Math.round(Number(r.precio_unitario || 0) * (1 + pct / 100) * 100) / 100;
+    return `<div style="display:flex;justify-content:space-between;align-items:center;padding:4px 0;border-bottom:1px solid var(--border)">
+      <span style="color:var(--text);font-size:12px">${r.descripcion}</span>
+      <span style="font-family:'DM Mono',monospace;font-size:12px">
+        <span style="color:var(--muted)">${fmt(r.precio_unitario)}</span>
+        <span style="color:var(--muted);margin:0 4px">→</span>
+        <span style="color:var(--green)">${fmt(nuevo)}</span>
+      </span>
+    </div>`;
+  }).join('');
+  preview.innerHTML = `<div style="font-size:11px;color:var(--muted);margin-bottom:8px;font-weight:600">VISTA PREVIA — +${pct}%</div>${rows}`;
+  preview.style.display = 'block';
+}
+
+async function aplicarPorcentaje() {
+  const pct = parseFloat(document.getElementById('pct-valor').value);
+  const motivo = document.getElementById('pct-motivo').value.trim();
+  if (!pct || pct <= 0) { toast('Ingresá un porcentaje mayor a cero.', 'warn'); return; }
+  if (!_itemsParaPct.length) { toast('No hay ítems en este contrato.', 'warn'); return; }
+
+  const btn = document.getElementById('btn-aplicar-pct');
+  btn.disabled = true;
+  btn.textContent = 'Aplicando...';
+
+  let errores = 0;
+  for (const item of _itemsParaPct) {
+    try {
+      const precioAnterior = Number(item.precio_unitario || 0);
+      const precioNuevo = Math.round(precioAnterior * (1 + pct / 100) * 100) / 100;
+      // Guardar historial
+      await ContratosAPI.registrarCambioPrecio({
+        contrato_item_id: item.id,
+        precio_anterior: precioAnterior,
+        precio_nuevo: precioNuevo,
+        fecha_cambio: hoy(),
+        motivo: motivo || `Actualización +${pct}%`,
+      });
+      // Actualizar precio
+      await ContratosAPI.actualizarItemContrato(item.id, { precio_unitario: precioNuevo });
+    } catch(e) {
+      errores++;
+      console.warn('Error actualizando item:', item.id, e);
+    }
+  }
+
+  btn.disabled = false;
+  btn.textContent = '✓ Aplicar a todos los ítems';
+  cerrarModal('modal-pct');
+
+  if (errores > 0) {
+    toast(`Se actualizaron ${_itemsParaPct.length - errores} de ${_itemsParaPct.length} ítems. ${errores} fallaron.`, 'warn');
+  } else {
+    toast(`✓ ${_itemsParaPct.length} precios actualizados con +${pct}%`, 'success');
+  }
   cargarPrecios();
 }
 
