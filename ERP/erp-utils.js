@@ -22,7 +22,8 @@ var db = supabase.createClient(SUPA_URL, SUPA_KEY);
 
 // ── Formateo ──────────────────────────────────────────────────
 var fmt  = v => new Intl.NumberFormat('es-AR',{style:'currency',currency:'ARS',maximumFractionDigits:0}).format(v||0);
-var fmtF = d => d ? new Date(d+'T12:00:00').toLocaleDateString('es-AR') : '—';
+var fmtF   = d => d ? new Date(d+'T12:00:00').toLocaleDateString('es-AR') : '—';
+var fmtNum = (v, isUSD) => (isUSD ? 'U$S ' : '$') + Number(v).toLocaleString('es-AR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 var hoy  = () => new Date().toISOString().split('T')[0];
 
 // ── Roles y permisos ──────────────────────────────────────────
@@ -43,12 +44,14 @@ var PERMISOS = {
   gestion:             ['facturas','compras','contratos','remitos','impuestos'],
   operaciones:         ['proyectos','remitos','contratos','presupuestos'],
   gestion_operaciones: ['facturas','compras','contratos','remitos','impuestos','proyectos','presupuestos'],
+  gestion_full:        ['facturas','compras','contratos','remitos','impuestos','clientes','syh'],
   rrhh:                ['empleados','syh','clientes'],
   syh:                 ['syh'],
 };
 
 var INICIO_POR_ROL = {
   gestion:             'facturas.html',
+  gestion_full:        'facturas.html',
   gestion_operaciones: 'facturas.html',
   operaciones:         'proyectos.html',
   rrhh:                'empleados.html',
@@ -292,15 +295,6 @@ function manejarError(error, contexto) {
 }
 
 // ── Loading helpers ────────────────────────────────────────────
-//
-// setLoading(containerId, true/false, mensaje?)
-//   Muestra u oculta el spinner dentro de un contenedor.
-//   Guarda el HTML original para restaurarlo al terminar.
-//
-//   setLoading('contenido', true)           → muestra spinner
-//   setLoading('contenido', false)          → restaura HTML original
-//   setLoading('contenido', true, 'Guardando...') → spinner con mensaje custom
-//
 var _loadingBackup = {};
 
 function setLoading(containerId, activo, mensaje) {
@@ -320,13 +314,6 @@ function setLoading(containerId, activo, mensaje) {
   }
 }
 
-// withLoading(containerId, asyncFn, mensajeCarga?)
-//   Ejecuta una función async mostrando spinner y manejando error automáticamente.
-//   Devuelve el resultado o null si hubo error.
-//
-//   Ejemplo:
-//   const datos = await withLoading('contenido', () => ClientesAPI.getClientes());
-//
 async function withLoading(containerId, asyncFn, mensajeCarga) {
   setLoading(containerId, true, mensajeCarga);
   try {
@@ -340,14 +327,6 @@ async function withLoading(containerId, asyncFn, mensajeCarga) {
   }
 }
 
-// withSave(btnId, asyncFn, mensajeOk?)
-//   Deshabilita un botón mientras guarda, muestra spinner en él,
-//   muestra toast de éxito y re-habilita al terminar.
-//   Devuelve true si éxito, false si error.
-//
-//   Ejemplo:
-//   const ok = await withSave('btn-guardar', () => ClientesAPI.crearCliente(payload), 'Cliente guardado');
-//
 async function withSave(btnId, asyncFn, mensajeOk) {
   const btn = document.getElementById(btnId);
   const textoOriginal = btn ? btn.innerHTML : null;
