@@ -251,9 +251,11 @@ async function cargarVencidas() {
       <td class="mono" style="color:var(--red)">${fmt(r.monto_total)}</td>
       <td><span style="background:rgba(245,158,11,0.15);color:var(--orange);padding:2px 8px;border-radius:4px;font-size:11px">${r.dias}d</span></td>
     </tr>`).join('')}</tbody></table></div>`;
+  } catch(e) { manejarError(e, 'facturas vencidas'); }
 }
 
 async function cargarMensual() {
+  try {
   const desde = new Date(); desde.setMonth(desde.getMonth()-5); desde.setDate(1);
   const desdeStr = desde.toISOString().split('T')[0];
   const filtros = { excluirAnuladas:true, fechaDesde:desdeStr };
@@ -270,6 +272,7 @@ async function cargarMensual() {
   });
   mensData = Object.values(agg);
   renderGrafico();
+  } catch(e) { manejarError(e, 'facturación mensual'); }
 }
 
 function renderGrafico() {
@@ -335,7 +338,6 @@ function cambiarMes(val) {
 
 
 async function cargarAlertas() {
-  try {
   const alertas = [];
   const hoyStr = new Date().toISOString().split('T')[0];
   const hace30 = new Date(); hace30.setDate(hace30.getDate()-30);
