@@ -228,6 +228,7 @@
 <div class="modal-overlay" id="modal-orden">
   <div class="modal" style="max-width:560px">
     <h3>💳 Confirmar orden de pago</h3>
+    <div id="op-info-egreso"></div>
     <div class="form-row">
       <div class="form-group">
         <label>Fecha de pago</label>
@@ -928,34 +929,115 @@ async function cargarOrdenes(){
   const rows=data||[];
   const total=rows.reduce((s,r)=>s+Number(r.monto||0),0);
 
-  container.innerHTML=`
-    <div style="padding:16px 20px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between">
-      <div><span style="font-size:13px;color:var(--muted)">${rows.length} egresos liberados para pago — Total: </span>
-      <strong style="font-family:'DM Mono',monospace">${fmt(total)}</strong></div>
+  // Guardar rows globalmente para filtrar sin recargar
+  window._ordenesRows = rows;
+  renderTablaOrdenes(rows);
+}
+
+function renderTablaOrdenes(rows) {
+  const hoyStr = new Date().toISOString().split('T')[0];
+  let container = document.querySelector('.panel');
+  if (!container) return;
+  const total = rows.reduce((s,r) => s + Number(r.monto||0), 0);
+
+  container.innerHTML = `
+    <div style="padding:16px 20px;border-bottom:1px solid var(--border)">
+      <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap">
+        <div style="position:relative;flex:1;min-width:200px">
+          <svg style="position:absolute;left:10px;top:50%;transform:translateY(-50%);color:var(--muted)" width="14" height="14" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/></svg>
+          <input type="text" id="buscar-ordenes" placeholder="Buscar proveedor, descripción..."
+            style="width:100%;padding:8px 12px 8px 32px;background:var(--bg3);border:1px solid var(--border);border-radius:8px;color:var(--text);font-size:13px;font-family:'DM Sans',sans-serif;outline:none"
+            oninput="filtrarOrdenes()" onfocus="this.style.borderColor='var(--blue)'" onblur="this.style.borderColor='var(--border)'">
+        </div>
+        <span style="font-size:13px;color:var(--muted);white-space:nowrap">${rows.length} egresos — <strong style="font-family:'DM Mono',monospace;color:var(--text)">${fmt(total)}</strong></span>
+        <button id="btn-pago-multiple" class="btn btn-sm btn-success" style="display:none" onclick="abrirOrdenPagoMultiple()">💳 Pagar seleccionados (<span id="cnt-seleccionados">0</span>)</button>
+      </div>
     </div>
     <div style="overflow-x:auto"><table>
-      <thead><tr><th>Empresa</th><th>Vencimiento</th><th>Proveedor</th><th>Descripción</th><th>Monto</th><th>Liberado por</th><th>Observaciones</th><th>Acciones</th></tr></thead>
-      <tbody>${rows.length?rows.map(r=>{
-        const venc=r.fecha_vencimiento_pago;
-        const vencida=venc&&venc<hoyStr;
-        const hoy7=new Date(); hoy7.setDate(hoy7.getDate()+7);
-        const proxima=venc&&new Date(venc+'T12:00:00')<=hoy7&&!vencida;
-        return`<tr>
+      <thead><tr>
+        <th style="width:36px"><input type="checkbox" id="check-todos" onchange="toggleTodos(this.checked)" style="cursor:pointer"></th>
+        <th>Empresa</th><th>Vencimiento</th><th>Proveedor</th><th>Descripción</th><th>Monto</th><th>Liberado por</th><th>Acciones</th>
+      </tr></thead>
+      <tbody id="tbody-ordenes">${rows.length ? rows.map(r => {
+        const venc = r.fecha_vencimiento_pago;
+        const vencida = venc && venc < hoyStr;
+        const hoy7 = new Date(); hoy7.setDate(hoy7.getDate()+7);
+        const proxima = venc && new Date(venc+'T12:00:00') <= hoy7 && !vencida;
+        return `<tr data-id="${r.id}" data-proveedor="${(r.proveedores?.nombre||'').toLowerCase()}" data-desc="${(r.descripcion||'').toLowerCase()}">
+          <td><input type="checkbox" class="check-orden" data-id="${r.id}" onchange="actualizarSeleccion()" style="cursor:pointer"></td>
           <td style="font-size:12px">${r.empresas?.nombre||'—'}</td>
           <td class="mono" style="color:${vencida?'var(--red)':proxima?'var(--orange)':'var(--text)'}">
-            ${venc?fmtF(venc):'—'}
-            ${vencida?'<div style="font-size:10px;color:var(--red)">VENCIDO</div>':proxima?'<div style="font-size:10px;color:var(--orange)">Esta semana</div>':''}
+            ${venc ? fmtF(venc) : '—'}
+            ${vencida ? '<div style="font-size:10px;color:var(--red)">VENCIDO</div>' : proxima ? '<div style="font-size:10px;color:var(--orange)">Esta semana</div>' : ''}
           </td>
           <td><div style="font-size:13px">${r.proveedores?.nombre||'Sin proveedor'}</div>
-            ${r.proveedores?.cuit?`<div style="font-size:11px;color:var(--muted)">${r.proveedores.cuit}</div>`:''}</td>
+            ${r.proveedores?.cuit ? `<div style="font-size:11px;color:var(--muted)">${r.proveedores.cuit}</div>` : ''}</td>
           <td style="font-size:12px;color:var(--muted)">${r.descripcion||''}</td>
           <td class="mono" style="color:var(--red);font-weight:600">${fmt(r.monto)}</td>
           <td style="font-size:11px;color:var(--muted)">${r.liberado_por||'—'}</td>
-          <td style="font-size:11px;color:var(--muted);max-width:140px">${r.observaciones||'—'}</td>
           <td><button class="btn btn-sm btn-success" onclick="abrirOrdenPago('${r.id}')">💳 Pagar</button></td>
         </tr>`;
-      }).join(''):'<tr><td colspan="8" style="text-align:center;padding:40px;color:var(--muted)">No hay egresos liberados para pago</td></tr>'}</tbody>
+      }).join('') : '<tr><td colspan="8" style="text-align:center;padding:40px;color:var(--muted)">No hay egresos liberados para pago</td></tr>'}</tbody>
     </table></div>`;
+}
+
+function filtrarOrdenes() {
+  const q = (document.getElementById('buscar-ordenes')?.value || '').toLowerCase();
+  const rows = window._ordenesRows || [];
+  const filtrados = q ? rows.filter(r =>
+    (r.proveedores?.nombre||'').toLowerCase().includes(q) ||
+    (r.descripcion||'').toLowerCase().includes(q) ||
+    (r.empresas?.nombre||'').toLowerCase().includes(q)
+  ) : rows;
+  renderTablaOrdenes(filtrados);
+}
+
+function toggleTodos(checked) {
+  document.querySelectorAll('.check-orden').forEach(c => c.checked = checked);
+  actualizarSeleccion();
+}
+
+function actualizarSeleccion() {
+  const checks = [...document.querySelectorAll('.check-orden:checked')];
+  const cnt = checks.length;
+  const btnMultiple = document.getElementById('btn-pago-multiple');
+  const cntEl = document.getElementById('cnt-seleccionados');
+  if (btnMultiple) btnMultiple.style.display = cnt > 1 ? 'inline-flex' : 'none';
+  if (cntEl) cntEl.textContent = cnt;
+}
+
+// IDs seleccionados para pago múltiple
+let ordenesSeleccionadas = [];
+
+function abrirOrdenPagoMultiple() {
+  const checks = [...document.querySelectorAll('.check-orden:checked')];
+  ordenesSeleccionadas = checks.map(c => c.dataset.id);
+  if (ordenesSeleccionadas.length < 2) { toast('Seleccioná al menos 2 egresos.', 'warn'); return; }
+
+  // Calcular total de los seleccionados
+  const rows = window._ordenesRows || [];
+  const selRows = rows.filter(r => ordenesSeleccionadas.includes(r.id));
+  const totalSel = selRows.reduce((s,r) => s + Number(r.monto||0), 0);
+  const proveedores = [...new Set(selRows.map(r => r.proveedores?.nombre||'Sin proveedor'))].join(', ');
+
+  // Abrir modal con info de múltiples
+  ordenId = null; // null = modo múltiple
+  lineasPago = [];
+  document.getElementById('op-fecha').value = new Date().toISOString().split('T')[0];
+  document.getElementById('op-obs').value = '';
+
+  // Mostrar resumen en el modal
+  const infoEl = document.getElementById('op-info-egreso');
+  if (infoEl) infoEl.innerHTML = `
+    <div style="background:rgba(59,130,246,0.08);border:1px solid rgba(59,130,246,0.2);border-radius:8px;padding:10px 12px;font-size:12px;margin-bottom:12px">
+      <div style="font-weight:600;color:var(--blue);margin-bottom:4px">📦 Pago agrupado — ${ordenesSeleccionadas.length} egresos</div>
+      <div style="color:var(--muted)">Proveedores: ${proveedores}</div>
+      <div style="color:var(--text);font-family:'DM Mono',monospace;margin-top:4px">Total: ${fmt(totalSel)}</div>
+    </div>`;
+
+  renderLineasPago();
+  agregarLineaPago();
+  document.getElementById('modal-orden').classList.add('show');
 }
 
 async function cargarHistorialOP(){
@@ -1016,11 +1098,15 @@ async function descargarOrdenPago(egresoId){
 
 function abrirOrdenPago(id){
   ordenId=id;
+  ordenesSeleccionadas=[];
   lineasPago=[];
   document.getElementById('op-fecha').value=new Date().toISOString().split('T')[0];
   document.getElementById('op-obs').value='';
+  // Mostrar info del egreso individual
+  const infoEl=document.getElementById('op-info-egreso');
+  if(infoEl) infoEl.innerHTML='';
   renderLineasPago();
-  agregarLineaPago(); // empezar con 1 línea
+  agregarLineaPago();
   document.getElementById('modal-orden').classList.add('show');
 }
 
@@ -1116,7 +1202,6 @@ async function confirmarOrdenPago(){
   if(!fecha){toast('Ingresá la fecha de pago.','warn');return;}
   if(!lineasPago.length){toast('Agregá al menos una línea de pago.','warn');return;}
 
-  // Validaciones por tipo de pago
   for(const p of lineasPago){
     if(!p.monto||Number(p.monto)<=0){toast('Todos los pagos deben tener un monto mayor a cero.','warn');return;}
     if(p.tipo==='cheque'&&!p.numero){toast('El cheque requiere número.','warn');return;}
@@ -1126,19 +1211,69 @@ async function confirmarOrdenPago(){
 
   const totalPagos=lineasPago.reduce((s,p)=>s+Number(p.monto||0),0);
   const metodoPrincipal=lineasPago[0]?.tipo||'transferencia';
-
   const empId2=document.getElementById('sel-empresa')?.value||'';
-  // Numeración consecutiva y no repetitiva usando MAX en DB
-  const {data:_nroData,error:_nroErr}=await db.rpc('get_next_op_nro',{
-    p_empresa_id:empId2,
-    p_anio:new Date().getFullYear()
-  });
-  if(_nroErr){toast('Error al generar número de OP: '+_nroErr.message,'error');return;}
-  const nroOrden=_nroData;
-
   const u=await getUsuario();
 
-  // 1. Cargar egreso con joins completos (proveedor + empresa para PDF)
+  // Obtener número de OP consecutivo
+  let nroOrden;
+  try {
+    const {data:_nro,error:_ne}=await db.rpc('get_next_op_nro',{p_empresa_id:empId2,p_anio:new Date().getFullYear()});
+    if(_ne) throw _ne;
+    nroOrden=_nro;
+  } catch(e) {
+    // Fallback si la función no existe aún
+    const count2=await EgresosAPI.contarEgresosConOP(empId2);
+    nroOrden='OP-'+String((count2||0)+1).padStart(4,'0')+'-'+new Date().getFullYear();
+  }
+
+  // ── MODO MÚLTIPLE (varios egresos agrupados) ──────────────────
+  if(ordenesSeleccionadas && ordenesSeleccionadas.length > 1){
+    const rows=window._ordenesRows||[];
+    const selRows=rows.filter(r=>ordenesSeleccionadas.includes(r.id));
+    const totalEgresos=selRows.reduce((s,r)=>s+Number(r.monto||0),0);
+
+    if(Math.abs(totalPagos-totalEgresos)>1){
+      toast(`El total cargado (${fmt(totalPagos)}) no coincide con los egresos seleccionados (${fmt(totalEgresos)})`, 'warn');
+      return;
+    }
+
+    // Pagar cada egreso con el mismo nroOrden
+    let huboError=false;
+    for(const r of selRows){
+      try{
+        const payload={pagado:true,fecha_pago_real:fecha,metodo_pago:metodoPrincipal,orden_pago_nro:nroOrden,orden_pago_at:new Date().toISOString(),observaciones:obs||null};
+        const mov={empresa_id:r.empresa_id||empId2,tipo:'egreso',origen:'banco',categoria:'pago_proveedor',
+          descripcion:`Pago ${nroOrden} - ${r.descripcion||'Egreso'}${r.proveedores?.nombre?' — '+r.proveedores.nombre:''}`,
+          monto:Number(r.monto||0),fecha};
+        await CajaAPI.pagarEgresoConMovimiento(r.id,payload,mov);
+        // Guardar líneas de pago
+        for(const p of lineasPago){
+          await db.from('egresos_pagos_detalle').insert({egreso_id:r.id,tipo_pago:p.tipo,numero:p.numero||null,
+            fecha:p.tipo==='cheque'?p.fecha||null:fecha,monto:Number(p.monto)||0,banco:p.banco||null,referencia:p.referencia||null});
+        }
+      }catch(e){huboError=true;console.warn('Error pagando egreso:',r.id,e);}
+    }
+
+    cerrarModal('modal-orden');
+    actualizarBadgeOrdenes();
+    if(huboError) toast('Algunos pagos no se pudieron confirmar. Revisá el historial.','warn');
+    else toast(`Orden ${nroOrden} generada — ${selRows.length} egresos pagados.`,'success');
+
+    // Generar PDF con todos los egresos agrupados
+    try{
+      const primerEgreso=selRows[0];
+      const egresoConJoins={...primerEgreso,
+        _egresos_agrupados:selRows,
+        descripcion:`Pago agrupado (${selRows.length} egresos) — ${[...new Set(selRows.map(r=>r.proveedores?.nombre||'Sin proveedor'))].join(', ')}`,
+      };
+      generarPDFOrden(egresoConJoins,nroOrden,fecha,metodoPrincipal,u?.email||'',[...lineasPago]);
+    }catch(ePDF){ toast('Pagos confirmados. Error al generar PDF: '+ePDF.message,'warn'); }
+
+    cargarOrdenes();
+    return;
+  }
+
+  // ── MODO INDIVIDUAL (un solo egreso) ─────────────────────────
   let egreso=null;
   try{
     const {data:_eg,error:_ege}=await db.from('egresos')
@@ -1147,7 +1282,6 @@ async function confirmarOrdenPago(){
     if(!_ege) egreso=_eg;
   }catch(e){ console.warn('Error cargando egreso:',e); }
 
-  // 2. Validar que el total coincida con el monto del egreso
   if(egreso){
     const egresoMonto=Number(egreso.monto||0);
     if(Math.abs(totalPagos-egresoMonto)>1){
@@ -1156,52 +1290,27 @@ async function confirmarOrdenPago(){
     }
   }
 
-  // 3. Pagar egreso + registrar movimiento en caja (operación atómica)
-  const payloadEgreso={
-    pagado:true,
-    fecha_pago_real:fecha,
-    metodo_pago:metodoPrincipal,
-    orden_pago_nro:nroOrden,
-    orden_pago_at:new Date().toISOString(),
-    observaciones:obs||null,
-  };
-  const movimientoCaja={
-    empresa_id:egreso?.empresa_id||empId2,
-    tipo:'egreso',
-    origen:'banco',
-    categoria:'pago_proveedor',
+  const payloadEgreso={pagado:true,fecha_pago_real:fecha,metodo_pago:metodoPrincipal,orden_pago_nro:nroOrden,orden_pago_at:new Date().toISOString(),observaciones:obs||null};
+  const movimientoCaja={empresa_id:egreso?.empresa_id||empId2,tipo:'egreso',origen:'banco',categoria:'pago_proveedor',
     descripcion:`Pago ${nroOrden} - ${egreso?.descripcion||'Egreso'}${egreso?.proveedores?.nombre?' — '+egreso.proveedores.nombre:''}`,
-    monto:totalPagos,
-    fecha:fecha,
-  };
+    monto:totalPagos,fecha};
 
   let errOp=null;
-  try{
-    await CajaAPI.pagarEgresoConMovimiento(ordenId,payloadEgreso,movimientoCaja);
-  }catch(e){errOp=e;}
+  try{ await CajaAPI.pagarEgresoConMovimiento(ordenId,payloadEgreso,movimientoCaja); }catch(e){errOp=e;}
   if(errOp){toast('Error al confirmar pago: '+errOp.message,'error');return;}
 
-  // 4. Guardar líneas de pago en egresos_pagos_detalle
   for(const p of lineasPago){
     try{
-      await db.from('egresos_pagos_detalle').insert({
-        egreso_id:ordenId,
-        tipo_pago:p.tipo,
-        numero:p.numero||null,
-        fecha:p.tipo==='cheque'?p.fecha||null:fecha,
-        monto:Number(p.monto)||0,
-        banco:p.banco||null,
-        referencia:p.referencia||null,
-      });
+      await db.from('egresos_pagos_detalle').insert({egreso_id:ordenId,tipo_pago:p.tipo,numero:p.numero||null,
+        fecha:p.tipo==='cheque'?p.fecha||null:fecha,monto:Number(p.monto)||0,banco:p.banco||null,referencia:p.referencia||null});
     }catch(ep){ console.warn('Error guardando línea de pago:',ep); }
   }
 
   cerrarModal('modal-orden');
   actualizarBadgeOrdenes();
-  // Generar PDF — el guard interno avisa si eg es null o jsPDF no cargó
   try{
-    const pdfBlob = generarPDFOrden(egreso,nroOrden,fecha,metodoPrincipal,u?.email||'',[...lineasPago]);
-    if(pdfBlob) guardarPDFOrdenEnStorage(ordenId, nroOrden, pdfBlob);
+    const pdfBlob=generarPDFOrden(egreso,nroOrden,fecha,metodoPrincipal,u?.email||'',[...lineasPago]);
+    if(pdfBlob) guardarPDFOrdenEnStorage(ordenId,nroOrden,pdfBlob);
   }catch(ePDF){
     console.error('Error generando PDF:',ePDF);
     toast('Pago confirmado. Error al generar PDF: '+ePDF.message,'warn');
@@ -1419,30 +1528,7 @@ function generarPDFOrden(eg,nro,fecha,metodo,operador,pagos=[]){
   doc.setLineWidth(0.3);doc.setDrawColor(0,0,0);
   doc.line(L+1,yP+20,R-1,yP+20);
 
-  // Descargar localmente
   doc.save('OrdenPago_'+nro+'.pdf');
-  // Retornar blob para poder guardarlo en storage
-  return doc.output('blob');
-}
-
-// Sube el PDF de la OP a Supabase Storage y guarda la URL en el egreso
-async function guardarPDFOrdenEnStorage(egresoId, nro, pdfBlob) {
-  try {
-    const path = nro + '.pdf';
-    const { error: upErr } = await db.storage.from('op-pdfs').upload(path, pdfBlob, {
-      contentType: 'application/pdf',
-      upsert: true,
-    });
-    if (upErr) { console.warn('Error subiendo PDF OP:', upErr.message); return; }
-    // Obtener URL firmada (válida 10 años)
-    const { data: urlData } = await db.storage.from('op-pdfs').createSignedUrl(path, 60*60*24*365*10);
-    const pdfUrl = urlData?.signedUrl || null;
-    if (!pdfUrl) return;
-    // Guardar URL en el egreso
-    await db.from('egresos').update({ orden_pago_pdf_url: pdfUrl }).eq('id', egresoId);
-  } catch(e) {
-    console.warn('No se pudo guardar PDF en storage:', e.message);
-  }
 }
 
 
