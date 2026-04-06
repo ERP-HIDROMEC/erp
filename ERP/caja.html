@@ -931,6 +931,9 @@ async function cargarOrdenes(){
 
   // Guardar rows globalmente para filtrar sin recargar
   window._ordenesRows = rows;
+  // Limpiar header para recrearlo (cambio de tab)
+  const buscar = document.getElementById('buscar-ordenes');
+  if (buscar) { const h = document.getElementById('ordenes-header'); if(h) h.remove(); const t = document.getElementById('ordenes-tabla'); if(t) t.remove(); }
   renderTablaOrdenes(rows);
 }
 
@@ -940,8 +943,12 @@ function renderTablaOrdenes(rows) {
   if (!container) return;
   const total = rows.reduce((s,r) => s + Number(r.monto||0), 0);
 
-  container.innerHTML = `
-    <div style="padding:16px 20px;border-bottom:1px solid var(--border)">
+  // Solo crear el header con buscador la primera vez (para no perder el foco)
+  if (!document.getElementById('buscar-ordenes')) {
+    const header = document.createElement('div');
+    header.id = 'ordenes-header';
+    header.style.cssText = 'padding:16px 20px;border-bottom:1px solid var(--border)';
+    header.innerHTML = `
       <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap">
         <div style="position:relative;flex:1;min-width:200px">
           <svg style="position:absolute;left:10px;top:50%;transform:translateY(-50%);color:var(--muted)" width="14" height="14" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/></svg>
@@ -949,11 +956,24 @@ function renderTablaOrdenes(rows) {
             style="width:100%;padding:8px 12px 8px 32px;background:var(--bg3);border:1px solid var(--border);border-radius:8px;color:var(--text);font-size:13px;font-family:'DM Sans',sans-serif;outline:none"
             oninput="filtrarOrdenes()" onfocus="this.style.borderColor='var(--blue)'" onblur="this.style.borderColor='var(--border)'">
         </div>
-        <span style="font-size:13px;color:var(--muted);white-space:nowrap">${rows.length} egresos — <strong style="font-family:'DM Mono',monospace;color:var(--text)">${fmt(total)}</strong></span>
+        <span id="ordenes-resumen" style="font-size:13px;color:var(--muted);white-space:nowrap"></span>
         <button id="btn-pago-multiple" class="btn btn-sm btn-success" style="display:none" onclick="abrirOrdenPagoMultiple()">💳 Pagar seleccionados (<span id="cnt-seleccionados">0</span>)</button>
-      </div>
-    </div>
-    <div style="overflow-x:auto"><table>
+      </div>`;
+    container.innerHTML = '';
+    container.appendChild(header);
+    const tableWrap = document.createElement('div');
+    tableWrap.id = 'ordenes-tabla';
+    container.appendChild(tableWrap);
+  }
+
+  // Actualizar resumen sin tocar el input
+  const resumen = document.getElementById('ordenes-resumen');
+  if (resumen) resumen.innerHTML = `${rows.length} egresos — <strong style="font-family:'DM Mono',monospace;color:var(--text)">${fmt(total)}</strong>`;
+
+  // Solo re-renderizar la tabla
+  const tableWrap = document.getElementById('ordenes-tabla');
+  if (!tableWrap) return;
+  tableWrap.innerHTML = `<div style="overflow-x:auto"><table>
       <thead><tr>
         <th style="width:36px"><input type="checkbox" id="check-todos" onchange="toggleTodos(this.checked)" style="cursor:pointer"></th>
         <th>Empresa</th><th>Vencimiento</th><th>Proveedor</th><th>Descripción</th><th>Monto</th><th>Liberado por</th><th>Acciones</th>
