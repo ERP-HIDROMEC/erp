@@ -56,6 +56,7 @@
     <button class="tab" onclick="cambiarTab('docs-personal',this)">Docs Personal</button>
     <button class="tab" onclick="cambiarTab('ausencias',this)">Licencias y ausencias</button>
     <button class="tab" onclick="cambiarTab('ausentismo',this)">Analisis ausentismo</button>
+    <button class="tab" onclick="cambiarTab('francos',this)">🗓 Francos compensatorios</button>
   </div>
 
   <div class="filtros">
@@ -482,7 +483,7 @@ function cambiarTab(tab,btn){
   document.querySelectorAll('.tab').forEach(t=>t.classList.remove('active'));
   btn.classList.add('active');
   const btnNuevo=document.getElementById('btn-nuevo');
-  const noDoc=['ausentismo','costos'];
+  const noDoc=['ausentismo','costos','francos'];
   document.getElementById('btn-importar-xls').style.display=tab==='sueldos'?'':'none';
   if(tab==='sueldos') btnNuevo.textContent='+ Registrar sueldo';
   else if(tab==='vehiculos') btnNuevo.textContent='+ Nuevo vehiculo/equipo';
@@ -490,10 +491,11 @@ function cambiarTab(tab,btn){
   else if(tab==='docs-vehiculos') btnNuevo.textContent='+ Subir documento';
   else if(tab==='docs-personal') btnNuevo.textContent='+ Subir documento';
   else if(tab==='ausencias') btnNuevo.textContent='+ Registrar ausencia';
+  else if(tab==='francos') { btnNuevo.textContent='+ Cargar franco'; btnNuevo.style.display=''; }
   else if(noDoc.includes(tab)) btnNuevo.textContent='';
   else btnNuevo.textContent='+ Nuevo empleado';
   btnNuevo.style.display=noDoc.includes(tab)?'none':'';
-  const hideFiltro=['sueldos','costos','vehiculos','docs-empresa','docs-vehiculos','docs-personal','ausencias','ausentismo'];
+  const hideFiltro=['sueldos','costos','vehiculos','docs-empresa','docs-vehiculos','docs-personal','ausencias','ausentismo','francos'];
   document.getElementById('f-estado').style.display=hideFiltro.includes(tab)?'none':'';
   recargar();
 }
@@ -508,6 +510,7 @@ function recargar(){
   else if(tabActual==='docs-personal') cargarDocumentos('personal');
   else if(tabActual==='ausencias') cargarAusencias();
   else if(tabActual==='ausentismo') cargarAnalisisAusentismo();
+  else if(tabActual==='francos') cargarFrancos();
 }
 
 function abrirNuevo(){
@@ -1463,6 +1466,7 @@ async function procesarXLS(input) {
 
   // Construir filas para preview
   _importRows = [];
+  const fmt = v => new Intl.NumberFormat('es-AR', { style: 'currency', currency: 'ARS', maximumFractionDigits: 0 }).format(v || 0);
 
   let noMatch = 0;
   const tbody = document.getElementById('import-tabla-body');
@@ -1688,6 +1692,274 @@ function parsearLiquidacion(strings) {
   return { periodo: periodoBase, tipoLiq: 'multiple', empleados: todasLiqEmpleados };
 }
 
+
+// ════════════════════════════════════════════════════════════
+// FRANCOS COMPENSATORIOS
+// ════════════════════════════════════════════════════════════
+let francoEditId = null;
+let _francoTomarId = null;
+let _francosData = [];
+
+// ── Cargar tab francos ────────────────────────────────────────
+async function cargarFrancos() {
+  const empFiltro = document.getElementById('f-empresa')?.value || '';
+  const container = document.getElementById('contenido');
+  container.innerHTML = '<div class="spinner-wrap"><div class="spinner"></div>Cargando francos...</div>';
+
+  try {
+    let q = db.from('francos_compensatorios')
+      .select('*,empleados(nombre),empresas(nombre)')
+      .order('fecha_vencimiento', { ascending: true });
+    if (empFiltro) q = q.eq('empresa_id', empFiltro);
+
+    const { data, error } = await q;
+    if (error) throw error;
+
+    // Marcar automáticamente como vencidos los que pasaron la fecha
+    const hoyStr = hoy();
+    const aVencer = (data||[]).filter(r => r.estado === 'pendiente' && r.fecha_vencimiento < hoyStr);
+    for (const r of aVencer) {
+      await db.from('francos_compensatorios').update({ estado: 'vencido' }).eq('id', r.id);
+      r.estado = 'vencido';
+    }
+
+    _francosData = data || [];
+    renderFrancos(_francosData);
+  } catch(e) {
+    manejarError(e, 'cargar francos');
+  }
+}
+
+function renderFrancos(rows) {
+  const container = document.getElementById('contenido');
+  const hoyStr = hoy();
+
+  // KPIs
+  const pendientes = rows.filter(r => r.estado === 'pendiente');
+  const tomados    = rows.filter(r => r.estado === 'tomado');
+  const vencidos   = rows.filter(r => r.estado === 'vencido');
+  const proxVencer = pendientes.filter(r => {
+    const dias = Math.ceil((new Date(r.fecha_vencimiento) - new Date(hoyStr)) / 86400000);
+    return dias >= 0 && dias <= 30;
+  });
+
+  // Agrupar pendientes por empleado para resumen
+  const porEmpleado = {};
+  pendientes.forEach(r => {
+    const key = r.empleado_id;
+    if (!porEmpleado[key]) porEmpleado[key] = { nombre: r.empleados?.nombre||'—', empresa: r.empresas?.nombre||'—', tipo: r.tipo_unidad, total: 0 };
+    porEmpleado[key].total += Number(r.cantidad || 0);
+  });
+
+  container.innerHTML = `
+    <!-- KPIs -->
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:12px;margin-bottom:24px">
+      <div class="panel" style="padding:16px">
+        <div style="font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:0.8px;margin-bottom:6px">Pendientes</div>
+        <div style="font-size:24px;font-weight:600;color:var(--orange)">${pendientes.length}</div>
+      </div>
+      <div class="panel" style="padding:16px">
+        <div style="font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:0.8px;margin-bottom:6px">Vencen en 30 días</div>
+        <div style="font-size:24px;font-weight:600;color:var(--red)">${proxVencer.length}</div>
+      </div>
+      <div class="panel" style="padding:16px">
+        <div style="font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:0.8px;margin-bottom:6px">Tomados</div>
+        <div style="font-size:24px;font-weight:600;color:var(--green)">${tomados.length}</div>
+      </div>
+      <div class="panel" style="padding:16px">
+        <div style="font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:0.8px;margin-bottom:6px">Vencidos</div>
+        <div style="font-size:24px;font-weight:600;color:var(--muted)">${vencidos.length}</div>
+      </div>
+    </div>
+
+    <!-- Resumen por empleado -->
+    ${Object.keys(porEmpleado).length ? `
+    <div class="panel" style="margin-bottom:20px">
+      <div class="panel-header"><h3>Resumen de pendientes por empleado</h3></div>
+      <div style="overflow-x:auto"><table>
+        <thead><tr><th>Empleado</th><th>Empresa</th><th>Francos pendientes</th></tr></thead>
+        <tbody>${Object.values(porEmpleado).sort((a,b)=>b.total-a.total).map(e=>`<tr>
+          <td style="font-weight:500">${e.nombre}</td>
+          <td style="font-size:12px;color:var(--muted)">${e.empresa}</td>
+          <td><span style="font-family:'DM Mono',monospace;font-size:14px;font-weight:600;color:var(--orange)">${e.tipo==='horas'?e.total+' hs':e.total+' día'+(e.total!==1?'s':'')}</span></td>
+        </tr>`).join('')}
+        </tbody>
+      </table></div>
+    </div>` : ''}
+
+    <!-- Historial completo -->
+    <div class="panel">
+      <div class="panel-header">
+        <h3>Historial completo</h3>
+        <div style="display:flex;gap:8px">
+          <select id="filtro-franco-estado" onchange="filtrarFrancos()" style="padding:6px 10px;background:var(--bg3);border:1px solid var(--border);border-radius:8px;color:var(--text);font-size:12px">
+            <option value="">Todos los estados</option>
+            <option value="pendiente">Pendientes</option>
+            <option value="tomado">Tomados</option>
+            <option value="vencido">Vencidos</option>
+          </select>
+        </div>
+      </div>
+      <div id="tabla-francos"><div style="overflow-x:auto">${renderTablaFrancos(rows)}</div></div>
+    </div>`;
+}
+
+function renderTablaFrancos(rows) {
+  const hoyStr = hoy();
+  if (!rows.length) return '<div class="empty">No hay francos registrados.</div>';
+  return `<table>
+    <thead><tr>
+      <th>Empleado</th><th>Empresa</th><th>Motivo</th>
+      <th>Generado</th><th>Vencimiento</th><th>Cantidad</th>
+      <th>Estado</th><th>Tomado el</th><th>Acciones</th>
+    </tr></thead>
+    <tbody>${rows.map(r => {
+      const diasHasta = Math.ceil((new Date(r.fecha_vencimiento) - new Date(hoyStr)) / 86400000);
+      const proxVencer = r.estado === 'pendiente' && diasHasta >= 0 && diasHasta <= 30;
+      return `<tr${r.estado==='vencido'?' class="vencida-row"':''}>
+        <td style="font-weight:500">${r.empleados?.nombre||'—'}</td>
+        <td style="font-size:12px;color:var(--muted)">${r.empresas?.nombre||'—'}</td>
+        <td style="font-size:12px;max-width:180px;color:var(--muted)">${r.motivo||'—'}</td>
+        <td class="mono">${fmtF(r.fecha_generado)}</td>
+        <td class="mono">
+          ${fmtF(r.fecha_vencimiento)}
+          ${proxVencer ? `<div style="font-size:10px;color:var(--orange)">Vence en ${diasHasta}d</div>` : ''}
+          ${r.estado==='vencido' ? '<div style="font-size:10px;color:var(--red)">VENCIDO</div>' : ''}
+        </td>
+        <td class="mono" style="font-weight:600">${r.tipo_unidad==='horas' ? r.cantidad+' hs' : r.cantidad+' día'+(r.cantidad!=1?'s':'')}</td>
+        <td>
+          <span class="estado ${r.estado==='pendiente'?'pendiente':r.estado==='tomado'?'cobrada':'anulada'}">
+            ${r.estado==='pendiente'?'Pendiente':r.estado==='tomado'?'Tomado':'Vencido'}
+          </span>
+        </td>
+        <td class="mono" style="font-size:12px">${r.fecha_tomado ? fmtF(r.fecha_tomado) : '—'}</td>
+        <td><div style="display:flex;gap:6px;flex-wrap:wrap">
+          ${r.estado==='pendiente' ? `<button class="btn btn-sm btn-success" onclick="abrirTomarFranco('${r.id}','${(r.empleados?.nombre||'').replace(/'/g,"\'")}',${r.cantidad},'${r.tipo_unidad}')">✓ Tomado</button>` : ''}
+          <button class="btn btn-sm btn-danger" onclick="eliminarFranco('${r.id}')">Borrar</button>
+        </div></td>
+      </tr>`;
+    }).join('')}
+    </tbody></table>`;
+}
+
+function filtrarFrancos() {
+  const estado = document.getElementById('filtro-franco-estado')?.value || '';
+  const filtered = estado ? _francosData.filter(r => r.estado === estado) : _francosData;
+  const wrap = document.getElementById('tabla-francos');
+  if (wrap) wrap.innerHTML = '<div style="overflow-x:auto">' + renderTablaFrancos(filtered) + '</div>';
+}
+
+// ── Nuevo franco ──────────────────────────────────────────────
+async function abrirNuevoFranco() {
+  francoEditId = null;
+  document.getElementById('franco-titulo').textContent = 'Cargar franco compensatorio';
+  document.getElementById('nf-fecha-gen').value = hoy();
+  document.getElementById('nf-fecha-venc').value = '';
+  document.getElementById('nf-cantidad').value = '';
+  document.getElementById('nf-motivo').value = '';
+  document.getElementById('nf-tipo').value = 'dias';
+  document.getElementById('nf-cantidad-label').textContent = 'Cantidad de días';
+
+  // Detectar empresa del filtro activo
+  const empFiltro = document.getElementById('f-empresa')?.value || 'a1000000-0000-0000-0000-000000000001';
+  document.getElementById('nf-empresa').value = empFiltro;
+  // Auto-seleccionar tipo según empresa
+  document.getElementById('nf-tipo').value = empFiltro === 'a2000000-0000-0000-0000-000000000002' ? 'dias' : 'horas';
+  actualizarLabelTipo();
+
+  await cargarEmpleadosFranco();
+  document.getElementById('modal-franco').classList.add('show');
+}
+
+function actualizarLabelTipo() {
+  const tipo = document.getElementById('nf-tipo').value;
+  document.getElementById('nf-cantidad-label').textContent = tipo === 'horas' ? 'Cantidad de horas' : 'Cantidad de días';
+}
+
+async function cargarEmpleadosFranco() {
+  const emp = document.getElementById('nf-empresa').value;
+  // Auto tipo según empresa
+  document.getElementById('nf-tipo').value = emp === 'a2000000-0000-0000-0000-000000000002' ? 'dias' : 'horas';
+  actualizarLabelTipo();
+
+  const { data } = await db.from('empleados').select('id,nombre').eq('empresa_id', emp).eq('activo', true).order('nombre');
+  const sel = document.getElementById('nf-empleado');
+  sel.innerHTML = (data||[]).map(e => `<option value="${e.id}">${e.nombre}</option>`).join('');
+}
+
+async function guardarFranco() {
+  const empId    = document.getElementById('nf-empresa').value;
+  const empId2   = document.getElementById('nf-empleado').value;
+  const fechaGen = document.getElementById('nf-fecha-gen').value;
+  const fechaVenc= document.getElementById('nf-fecha-venc').value;
+  const tipo     = document.getElementById('nf-tipo').value;
+  const cantidad = parseFloat(document.getElementById('nf-cantidad').value);
+  const motivo   = document.getElementById('nf-motivo').value.trim();
+
+  if (!empId2)     { toast('Seleccioná un empleado.','warn'); return; }
+  if (!fechaGen)   { toast('Ingresá la fecha de generación.','warn'); return; }
+  if (!fechaVenc)  { toast('Ingresá la fecha de vencimiento.','warn'); return; }
+  if (!cantidad || cantidad <= 0) { toast('Ingresá una cantidad válida.','warn'); return; }
+  if (!motivo)     { toast('Ingresá el motivo.','warn'); return; }
+  if (fechaVenc <= fechaGen) { toast('La fecha de vencimiento debe ser posterior a la de generación.','warn'); return; }
+
+  const u = await getUsuario();
+  try {
+    await db.from('francos_compensatorios').insert({
+      empresa_id:       empId,
+      empleado_id:      empId2,
+      fecha_generado:   fechaGen,
+      fecha_vencimiento:fechaVenc,
+      tipo_unidad:      tipo,
+      cantidad:         cantidad,
+      motivo:           motivo,
+      estado:           'pendiente',
+      created_by:       u?.email || null,
+    });
+    toast('Franco registrado correctamente.','success');
+    cerrarModal('modal-franco');
+    cargarFrancos();
+  } catch(e) { manejarError(e, 'guardar franco'); }
+}
+
+// ── Tomar franco ──────────────────────────────────────────────
+function abrirTomarFranco(id, nombre, cantidad, tipo) {
+  _francoTomarId = id;
+  document.getElementById('tomar-franco-info').innerHTML =
+    `<strong style="color:var(--green)">${nombre}</strong> — ${tipo==='horas'?cantidad+' horas':cantidad+' día'+(cantidad!=1?'s':'')}`;
+  document.getElementById('tf-fecha').value = hoy();
+  document.getElementById('tf-obs').value = '';
+  document.getElementById('modal-tomar-franco').classList.add('show');
+}
+
+async function confirmarTomarFranco() {
+  const fecha = document.getElementById('tf-fecha').value;
+  const obs   = document.getElementById('tf-obs').value.trim();
+  if (!fecha) { toast('Ingresá la fecha.','warn'); return; }
+
+  try {
+    await db.from('francos_compensatorios').update({
+      estado:       'tomado',
+      fecha_tomado: fecha,
+      obs_tomado:   obs || null,
+    }).eq('id', _francoTomarId);
+    toast('Franco marcado como tomado.','success');
+    cerrarModal('modal-tomar-franco');
+    cargarFrancos();
+  } catch(e) { manejarError(e, 'tomar franco'); }
+}
+
+// ── Eliminar franco ───────────────────────────────────────────
+async function eliminarFranco(id) {
+  const ok = await confirmar('¿Eliminar este franco? Esta acción no se puede deshacer.');
+  if (!ok) return;
+  try {
+    await db.from('francos_compensatorios').delete().eq('id', id);
+    toast('Franco eliminado.','success');
+    cargarFrancos();
+  } catch(e) { manejarError(e, 'eliminar franco'); }
+}
+
 </script>
 
 <!-- MODAL IMPORTAR SUELDOS XLS -->
@@ -1720,5 +1992,79 @@ function parsearLiquidacion(strings) {
     </div>
   </div>
 </div>
+
+<!-- MODAL FRANCO COMPENSATORIO -->
+<div class="modal-overlay" id="modal-franco">
+  <div class="modal" style="max-width:520px">
+    <h3 id="franco-titulo">Cargar franco compensatorio</h3>
+    <div class="form-row">
+      <div class="form-group">
+        <label>Empresa</label>
+        <select id="nf-empresa" onchange="cargarEmpleadosFranco()">
+          <option value="a1000000-0000-0000-0000-000000000001">Hidromec</option>
+          <option value="a2000000-0000-0000-0000-000000000002">Placemem</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label>Empleado</label>
+        <select id="nf-empleado"></select>
+      </div>
+    </div>
+    <div class="form-row">
+      <div class="form-group">
+        <label>Fecha generado</label>
+        <input type="date" id="nf-fecha-gen">
+      </div>
+      <div class="form-group">
+        <label>Fecha de vencimiento</label>
+        <input type="date" id="nf-fecha-venc">
+      </div>
+    </div>
+    <div class="form-row">
+      <div class="form-group">
+        <label>Tipo</label>
+        <select id="nf-tipo">
+          <option value="dias">Días (Placemem)</option>
+          <option value="horas">Horas (Hidromec)</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label id="nf-cantidad-label">Cantidad de días</label>
+        <input type="number" id="nf-cantidad" placeholder="1" min="0.5" step="0.5">
+      </div>
+    </div>
+    <div class="form-row full">
+      <div class="form-group">
+        <label>Motivo</label>
+        <input type="text" id="nf-motivo" placeholder="Ej: Trabajó feriado 25/05, Horas extra semana...">
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" onclick="cerrarModal('modal-franco')">Cancelar</button>
+      <button class="btn btn-primary" onclick="guardarFranco()">Guardar</button>
+    </div>
+  </div>
+</div>
+
+<!-- MODAL TOMAR FRANCO -->
+<div class="modal-overlay" id="modal-tomar-franco">
+  <div class="modal" style="max-width:420px">
+    <h3>✅ Registrar toma de franco</h3>
+    <div id="tomar-franco-info" style="background:rgba(16,185,129,0.08);border:1px solid rgba(16,185,129,0.2);border-radius:8px;padding:10px 12px;font-size:12px;color:var(--muted);margin-bottom:16px"></div>
+    <div class="form-group" style="margin-bottom:14px">
+      <label>Fecha en que tomó el franco</label>
+      <input type="date" id="tf-fecha">
+    </div>
+    <div class="form-group" style="margin-bottom:14px">
+      <label>Observaciones (opcional)</label>
+      <input type="text" id="tf-obs" placeholder="Ej: Tomó el día lunes 10/06">
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" onclick="cerrarModal('modal-tomar-franco')">Cancelar</button>
+      <button class="btn btn-success" onclick="confirmarTomarFranco()">✓ Confirmar</button>
+    </div>
+  </div>
+</div>
+
 </body>
 </html>
