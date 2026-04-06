@@ -41,17 +41,16 @@ var PERMISOS = {
   admin_general:       ['*'],
   gestion_caja:        ['dashboard','facturas','compras','contratos','remitos','impuestos','caja'],
   operaciones_dash:    ['dashboard','proyectos','remitos','contratos','presupuestos'],
-  gestion:             ['facturas','compras','contratos','remitos','impuestos'],
+  gestion:             ['facturas','compras','contratos','remitos','impuestos','historial-op'],
   operaciones:         ['proyectos','remitos','contratos','presupuestos'],
   gestion_operaciones: ['facturas','compras','contratos','remitos','impuestos','proyectos','presupuestos'],
-  gestion_full:        ['facturas','compras','contratos','remitos','impuestos','clientes','syh'],
+  gestion_full:        ['facturas','compras','contratos','remitos','impuestos','clientes','syh','historial-op'],
   rrhh:                ['empleados','syh','clientes'],
   syh:                 ['syh'],
 };
 
 var INICIO_POR_ROL = {
   gestion:             'facturas.html',
-  gestion_full:        'facturas.html',
   gestion_operaciones: 'facturas.html',
   operaciones:         'proyectos.html',
   rrhh:                'empleados.html',
@@ -296,16 +295,12 @@ function manejarError(error, contexto) {
 
 // ── Loading helpers ────────────────────────────────────────────
 var _loadingBackup = {};
-
 function setLoading(containerId, activo, mensaje) {
   const el = document.getElementById(containerId);
   if (!el) return;
   if (activo) {
-    if (!_loadingBackup[containerId]) {
-      _loadingBackup[containerId] = el.innerHTML;
-    }
-    const msg = mensaje || 'Cargando...';
-    el.innerHTML = `<div class="spinner-wrap"><div class="spinner"></div>${msg}</div>`;
+    if (!_loadingBackup[containerId]) _loadingBackup[containerId] = el.innerHTML;
+    el.innerHTML = `<div class="spinner-wrap"><div class="spinner"></div>${mensaje || 'Cargando...'}</div>`;
   } else {
     if (_loadingBackup[containerId] !== undefined) {
       el.innerHTML = _loadingBackup[containerId];
@@ -313,7 +308,6 @@ function setLoading(containerId, activo, mensaje) {
     }
   }
 }
-
 async function withLoading(containerId, asyncFn, mensajeCarga) {
   setLoading(containerId, true, mensajeCarga);
   try {
@@ -326,14 +320,10 @@ async function withLoading(containerId, asyncFn, mensajeCarga) {
     return null;
   }
 }
-
 async function withSave(btnId, asyncFn, mensajeOk) {
   const btn = document.getElementById(btnId);
   const textoOriginal = btn ? btn.innerHTML : null;
-  if (btn) {
-    btn.disabled = true;
-    btn.innerHTML = '<span class="spinner" style="display:inline-block;vertical-align:middle;margin-right:6px"></span>Guardando...';
-  }
+  if (btn) { btn.disabled = true; btn.innerHTML = '<span class="spinner" style="display:inline-block;vertical-align:middle;margin-right:6px"></span>Guardando...'; }
   try {
     const result = await asyncFn();
     if (btn) { btn.disabled = false; btn.innerHTML = textoOriginal; }
