@@ -144,7 +144,7 @@
       Descripción del trabajo
     </div>
     <table class="items-table">
-      <thead><tr id="items-thead"><th style="width:90px">Cantidad</th><th>Descripción</th><th style="width:110px">Precio unit.</th><th style="width:110px">Subtotal</th><th style="width:30px"></th></tr></thead>
+      <thead><tr id="items-thead"><th style="width:90px">Cantidad</th><th style="width:160px">Ítem</th><th>Detalle entrega</th><th style="width:110px">Precio unit.</th><th style="width:110px">Subtotal</th><th style="width:30px"></th></tr></thead>
       <tbody id="items-body"></tbody>
     </table>
     <div id="msg-items-contrato" style="display:none;margin-top:8px;padding:8px 12px;background:rgba(16,185,129,0.08);border:1px solid rgba(16,185,129,0.2);border-radius:6px;font-size:12px;color:var(--green)"></div>
@@ -505,6 +505,7 @@ function agregarItemRow(cant='',desc='',precio=0,readonly=false,contratoItemId='
         <select style="width:100%;margin-bottom:4px" onchange="onItemContratoChange(this)">${opciones}</select>
         <input type="hidden" data-desc-hidden value="${desc||''}">
       </td>
+      <td><input type="text" placeholder="Descripción de lo entregado..." value="${desc||''}" data-detalle style="width:100%;font-size:12px"></td>
       <td><input type="number" min="0" placeholder="0.00" value="${precio||''}" readonly style="width:100%;background:var(--bg2);color:var(--muted)" data-precio oninput="recalcularTotales()"></td>
       <td style="font-family:'DM Mono',monospace;font-size:12px;color:var(--muted);text-align:right;padding-right:8px" data-subtotal>${subtotal>0?fmt(subtotal):'—'}</td>
       <td><button onclick="this.closest('tr').remove();recalcularTotales()" style="background:none;border:none;color:var(--muted);cursor:pointer;font-size:16px">×</button></td>`;
@@ -663,6 +664,12 @@ async function editarRemito(id){
         false,
         match?.id||''
       );
+      // Restaurar el detalle en el input de texto libre si es modo contrato
+      if(match?.id) {
+        const lastRow = document.getElementById('items-body').lastElementChild;
+        const detalleInput = lastRow?.querySelector('[data-detalle]');
+        if(detalleInput) detalleInput.value = it.descripcion || '';
+      }
     });
     if(!items||items.length<3) for(let i=(items||[]).length;i<3;i++) agregarItemRow();
     const msgEl=document.getElementById('msg-items-contrato');
@@ -782,10 +789,13 @@ async function guardarRemito(estado){
   filas.forEach((fila,i)=>{
     const cantInput=fila.querySelector('input[type="number"]');
     const cantRaw=cantInput?.value?.trim();
-    // En modo contrato desc viene del [data-desc-hidden]; en modo normal del input type=text
+    // En modo contrato: usar data-detalle (texto libre) si existe, sino data-desc-hidden (nombre del ítem)
     const hiddenDesc=fila.querySelector('[data-desc-hidden]');
-    const textDesc=fila.querySelector('input[type="text"]');
-    const desc=hiddenDesc?(hiddenDesc.value||'').trim():(textDesc?.value||'').trim();
+    const detalleInput=fila.querySelector('[data-detalle]');
+    const textDesc=fila.querySelector('input[type="text"]:not([data-detalle])');
+    const desc=detalleInput
+      ? ((detalleInput.value||'').trim() || (hiddenDesc?.value||'').trim())
+      : (hiddenDesc?(hiddenDesc.value||'').trim():(textDesc?.value||'').trim());
     const precioRaw=fila.querySelector('[data-precio]')?.value||'0';
     if(desc){
       const cantNum=parseFloat(cantRaw)||null;
