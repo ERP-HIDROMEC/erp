@@ -948,6 +948,11 @@ async function cargarDocumentos(categoria){
     (r.tipo||'').toLowerCase().includes(buscar)||
     (r.descripcion||'').toLowerCase().includes(buscar)
   );
+  // Filtros adicionales para docs personal
+  const filtroDocEmp  = document.getElementById('filtro-doc-emp')?.value  || '';
+  const filtroDocTipo = document.getElementById('filtro-doc-tipo')?.value || '';
+  if(filtroDocEmp  && categoria==='personal') rows=rows.filter(r=>r.empleado_id===filtroDocEmp);
+  if(filtroDocTipo && categoria==='personal') rows=rows.filter(r=>r.tipo===filtroDocTipo);
 
   const vencidos=rows.filter(r=>r.fecha_vencimiento&&r.fecha_vencimiento<hoyStr);
   const proxVencer=rows.filter(r=>r.fecha_vencimiento&&r.fecha_vencimiento>=hoyStr&&r.fecha_vencimiento<=en30Str);
@@ -968,7 +973,29 @@ async function cargarDocumentos(categoria){
 
   const entidadCol=categoria==='personal'?'Empleado':categoria==='vehiculo'?'Vehiculo':'Empresa';
 
+  // Filtros para docs personal
+  const empUnicosDoc = categoria==='personal'
+    ? [...new Map((data||[]).map(r=>[r.empleado_id,{id:r.empleado_id,nombre:r.empleados?.nombre||'—'}])).values()].sort((a,b)=>a.nombre.localeCompare(b.nombre))
+    : [];
+  const tiposUnicos = categoria==='personal'
+    ? [...new Set((data||[]).map(r=>r.tipo).filter(Boolean))]
+    : [];
+
   document.getElementById('contenido').innerHTML=`
+    ${categoria==='personal'?`
+    <div style="display:flex;gap:10px;margin-bottom:16px;flex-wrap:wrap;align-items:center">
+      <select id="filtro-doc-emp" onchange="cargarDocumentos('personal')"
+        style="padding:8px 12px;background:var(--bg2);border:1px solid var(--border);border-radius:8px;color:var(--text);font-size:13px;font-family:'DM Sans',sans-serif;outline:none;min-width:200px">
+        <option value="">Todos los empleados</option>
+        ${empUnicosDoc.map(e=>`<option value="${e.id}" ${e.id===filtroDocEmp?'selected':''}>${e.nombre}</option>`).join('')}
+      </select>
+      <select id="filtro-doc-tipo" onchange="cargarDocumentos('personal')"
+        style="padding:8px 12px;background:var(--bg2);border:1px solid var(--border);border-radius:8px;color:var(--text);font-size:13px;font-family:'DM Sans',sans-serif;outline:none">
+        <option value="">Todos los tipos</option>
+        ${tiposUnicos.map(t=>`<option value="${t}" ${t===filtroDocTipo?'selected':''}>${t}</option>`).join('')}
+      </select>
+    </div>`:''
+    }
     <div style="overflow-x:auto"><table>
       <thead><tr><th>${entidadCol}</th><th>Tipo</th><th>Descripcion</th><th>Vencimiento</th><th>Estado</th><th>Acciones</th></tr></thead>
       <tbody>${rows.length?rows.map(r=>{
@@ -1172,6 +1199,9 @@ async function cargarAusencias(){
   const data=ausData2;
   let rows=data||[];
   if(buscar) rows=rows.filter(r=>(r.empleados?.nombre||'').toLowerCase().includes(buscar));
+  // Filtro por empleado específico
+  const filtroAusEmp = document.getElementById('filtro-aus-emp')?.value || '';
+  if(filtroAusEmp) rows=rows.filter(r=>r.empleado_id===filtroAusEmp);
 
   // Stats
   const hoy=rows.filter(r=>r.fecha_inicio<=hoyStr&&(!r.fecha_fin||r.fecha_fin>=hoyStr)&&r.estado==='aprobada');
@@ -1199,7 +1229,18 @@ async function cargarAusencias(){
     rechazada:'background:rgba(239,68,68,0.15);color:var(--red)'
   };
 
+  // Construir opciones de empleados para filtro
+  const empUnicos=[...new Map((data||[]).map(r=>[r.empleado_id,{id:r.empleado_id,nombre:r.empleados?.nombre||'—'}])).values()]
+    .sort((a,b)=>a.nombre.localeCompare(b.nombre));
+
   document.getElementById('contenido').innerHTML=`
+    <div style="display:flex;gap:10px;margin-bottom:16px;flex-wrap:wrap;align-items:center">
+      <select id="filtro-aus-emp" onchange="cargarAusencias()"
+        style="padding:8px 12px;background:var(--bg2);border:1px solid var(--border);border-radius:8px;color:var(--text);font-size:13px;font-family:'DM Sans',sans-serif;outline:none;min-width:200px">
+        <option value="">Todos los empleados</option>
+        ${empUnicos.map(e=>`<option value="${e.id}" ${e.id===filtroAusEmp?'selected':''}>${e.nombre}</option>`).join('')}
+      </select>
+    </div>
     <div style="overflow-x:auto"><table>
       <thead><tr><th>Empleado</th><th>Empresa</th><th>Tipo</th><th>Desde</th><th>Hasta</th><th>Días</th><th>Estado</th><th>Observaciones</th><th></th></tr></thead>
       <tbody>${rows.length?rows.map(r=>{
@@ -1354,11 +1395,16 @@ async function cargarVehiculos(){
 }
 
 function verDocsVehiculo(id, nombre){
-  // Switch to docs-vehiculos tab filtered by this vehicle
-  const tab=document.querySelector('.tab:nth-child(5)'); // docs-vehiculos tab
-  cambiarTab('docs-vehiculos', document.querySelectorAll('.tab')[4]);
-  document.querySelectorAll('.tab').forEach(t=>t.classList.remove('active'));
-  document.querySelectorAll('.tab')[4].classList.add('active');
+  // Cambiar a la tab docs-vehiculos
+  const tabs = document.querySelectorAll('.tab');
+  let tabBtn = null;
+  tabs.forEach(t => { if(t.textContent.includes('Docs Vehiculos')) tabBtn = t; });
+  if(tabBtn) cambiarTab('docs-vehiculos', tabBtn);
+  // Filtrar por el vehículo seleccionado usando el buscador
+  setTimeout(() => {
+    const buscar = document.getElementById('f-buscar');
+    if(buscar) { buscar.value = nombre; recargar(); }
+  }, 200);
 }
 
 async function guardarVehiculo(){

@@ -182,7 +182,7 @@ const EmpleadosAPI = (() => {
 
   async function registrarAusencia(payload) {
     // Whitelist estricta: solo columnas que existen en empleados_ausencias
-    const COLS = ['empresa_id','empleado_id','tipo','estado','fecha_inicio','fecha_fin','observaciones'];
+    const COLS = ['empresa_id','empleado_id','tipo','estado','fecha_inicio','fecha_fin','observaciones','certificado_url','certificado_path'];
     const clean = {};
     COLS.forEach(k => { if (payload[k] != null) clean[k] = payload[k]; });
     const { error } = await db.from('empleados_ausencias').insert(clean);
