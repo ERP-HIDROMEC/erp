@@ -521,6 +521,7 @@ function abrirNuevo(){
     document.getElementById('modal-documento').classList.add('show');
   }
   else if(tabActual==='ausencias') document.getElementById('modal-ausencia').classList.add('show');
+  else if(tabActual==='francos') abrirNuevoFranco();
   else abrirNuevoEmpleado();
 }
 
