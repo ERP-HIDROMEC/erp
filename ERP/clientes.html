@@ -251,11 +251,10 @@ async function cargarClientes(){
   const activo = document.getElementById('f-activo').value;
   const buscar = document.getElementById('f-buscar').value.toLowerCase();
 
-  let clientes=await ClientesAPI.getClientes({}); let q={data:clientes,error:null};
-  if(emp) q = q.eq('empresa_id', emp);
-  if(activo !== '') q = q.eq('activo', activo === 'true');
-  const {data} = await q;
-  let rows = data || [];
+  const filtros = {};
+  if(emp) filtros.empresaId = emp;
+  if(activo !== '') filtros.soloActivos = activo === 'true';
+  let rows = await ClientesAPI.getClientes(filtros);
   if(buscar) rows = rows.filter(r =>
     (r.nombre||'').toLowerCase().includes(buscar) ||
     (r.cuit||'').includes(buscar) ||
