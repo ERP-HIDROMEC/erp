@@ -483,7 +483,7 @@ function cambiarTab(tab,btn){
   document.querySelectorAll('.tab').forEach(t=>t.classList.remove('active'));
   btn.classList.add('active');
   const btnNuevo=document.getElementById('btn-nuevo');
-  const noDoc=['ausentismo','costos','francos'];
+  const noDoc=['ausentismo','costos'];
   document.getElementById('btn-importar-xls').style.display=tab==='sueldos'?'':'none';
   if(tab==='sueldos') btnNuevo.textContent='+ Registrar sueldo';
   else if(tab==='vehiculos') btnNuevo.textContent='+ Nuevo vehiculo/equipo';
@@ -492,9 +492,8 @@ function cambiarTab(tab,btn){
   else if(tab==='docs-personal') btnNuevo.textContent='+ Subir documento';
   else if(tab==='ausencias') btnNuevo.textContent='+ Registrar ausencia';
   else if(tab==='francos') { btnNuevo.textContent='+ Cargar franco'; btnNuevo.style.display=''; }
-  else if(noDoc.includes(tab)) btnNuevo.textContent='';
-  else btnNuevo.textContent='+ Nuevo empleado';
-  btnNuevo.style.display=noDoc.includes(tab)?'none':'';
+  else if(noDoc.includes(tab)) { btnNuevo.textContent=''; btnNuevo.style.display='none'; }
+  else { btnNuevo.textContent='+ Nuevo empleado'; btnNuevo.style.display=''; }
   const hideFiltro=['sueldos','costos','vehiculos','docs-empresa','docs-vehiculos','docs-personal','ausencias','ausentismo','francos'];
   document.getElementById('f-estado').style.display=hideFiltro.includes(tab)?'none':'';
   recargar();
