@@ -73,7 +73,7 @@ const EmpleadosAPI = (() => {
 
   async function getSueldos(filtros = {}) {
     let q = db.from('sueldos')
-      .select('*,empleados(nombre),empresas(nombre),vehiculos(descripcion,patente)')
+      .select('*,empleados(nombre),empresas(nombre)')
       .order('periodo', { ascending: false });
 
     if (filtros.empresaId)  q = q.eq('empresa_id', filtros.empresaId);
@@ -169,7 +169,7 @@ const EmpleadosAPI = (() => {
 
   async function getAusencias(filtros = {}) {
     let q = db.from('empleados_ausencias')
-      .select('*,empleados(nombre),empresas(nombre),vehiculos(descripcion,patente)')
+      .select('*,empleados(nombre),empresas(nombre)')
       .order('fecha_inicio', { ascending: false });
 
     if (filtros.empresaId)  q = q.eq('empresa_id', filtros.empresaId);
