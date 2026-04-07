@@ -73,7 +73,7 @@ const EmpleadosAPI = (() => {
 
   async function getSueldos(filtros = {}) {
     let q = db.from('sueldos')
-      .select('*,empleados(nombre),empresas(nombre)')
+      .select('*,empleados(nombre),empresas(nombre),vehiculos(descripcion,patente)')
       .order('periodo', { ascending: false });
 
     if (filtros.empresaId)  q = q.eq('empresa_id', filtros.empresaId);
@@ -107,12 +107,13 @@ const EmpleadosAPI = (() => {
 
   async function getDocumentosEmpleado(filtros = {}) {
     let q = db.from('empleados_documentos')
-      .select('*,empleados(nombre),empresas(nombre)')
+      .select('*,empleados(nombre),empresas(nombre),vehiculos(descripcion,patente)')
       .order('fecha_vencimiento', { ascending: true, nullsFirst: false });
 
     if (filtros.empleadoId) q = q.eq('empleado_id', filtros.empleadoId);
     if (filtros.empresaId)  q = q.eq('empresa_id', filtros.empresaId);
     if (filtros.categoria)  q = q.eq('categoria', filtros.categoria);
+    if (filtros.vehiculoId) q = q.eq('vehiculo_id', filtros.vehiculoId);
 
     const { data, error } = await q;
     if (error) throw error;
@@ -168,7 +169,7 @@ const EmpleadosAPI = (() => {
 
   async function getAusencias(filtros = {}) {
     let q = db.from('empleados_ausencias')
-      .select('*,empleados(nombre),empresas(nombre)')
+      .select('*,empleados(nombre),empresas(nombre),vehiculos(descripcion,patente)')
       .order('fecha_inicio', { ascending: false });
 
     if (filtros.empresaId)  q = q.eq('empresa_id', filtros.empresaId);
@@ -182,7 +183,7 @@ const EmpleadosAPI = (() => {
 
   async function registrarAusencia(payload) {
     // Whitelist estricta: solo columnas que existen en empleados_ausencias
-    const COLS = ['empresa_id','empleado_id','tipo','estado','fecha_inicio','fecha_fin','observaciones','certificado_url','certificado_path'];
+    const COLS = ['empresa_id','empleado_id','tipo','estado','fecha_inicio','fecha_fin','observaciones'];
     const clean = {};
     COLS.forEach(k => { if (payload[k] != null) clean[k] = payload[k]; });
     const { error } = await db.from('empleados_ausencias').insert(clean);

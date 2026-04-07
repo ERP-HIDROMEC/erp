@@ -485,7 +485,7 @@ function cambiarTab(tab,btn){
   // Limpiar filtros persistentes al cambiar tab
   if(tab!=='docs-personal')  { _filtroDocEmp=''; _filtroDocTipo=''; }
   if(tab!=='ausencias')       _filtroAusEmp='';
-  if(tab!=='docs-vehiculos') { _filtroVehiculoId=''; document.getElementById('f-buscar').value=''; }
+  if(tab!=='docs-vehiculos') { _filtroVehiculoId=''; }
   const btnNuevo=document.getElementById('btn-nuevo');
   const noDoc=['ausentismo','costos'];
   document.getElementById('btn-importar-xls').style.display=tab==='sueldos'?'':'none';
@@ -944,8 +944,10 @@ async function cargarDocumentos(categoria){
 
   let docEmpData=await EmpleadosAPI.getDocumentosEmpleado({categoria});
   if(emp) docEmpData=docEmpData.filter(r=>r.empresa_id===emp);
-  // Filtro por vehículo específico (desde verDocsVehiculo) - filtra por buscar
-  // Se maneja via f-buscar, no por ID
+  // Filtro por vehículo específico (desde verDocsVehiculo)
+  if(_filtroVehiculoId && categoria==='vehiculo') {
+    docEmpData=docEmpData.filter(r=>r.vehiculo_id===_filtroVehiculoId);
+  }
   const data=docEmpData;
   let rows=data||[];
   if(buscar) rows=rows.filter(r=>
@@ -1004,7 +1006,7 @@ async function cargarDocumentos(categoria){
       <thead><tr><th>${entidadCol}</th><th>Tipo</th><th>Descripcion</th><th>Vencimiento</th><th>Estado</th><th>Acciones</th></tr></thead>
       <tbody>${rows.length?rows.map(r=>{
         const entidad=categoria==='personal'?(r.empleados?.nombre||'—'):
-                      categoria==='vehiculo'?(r.vehiculos?.descripcion||(r.vehiculos?.patente||'—')):
+                      categoria==='vehiculo'?(r.vehiculos?.patente||(r.vehiculos?.descripcion||'—')):
                       (r.empresas?.nombre||'—');
         const venc=r.fecha_vencimiento;
         const esV=venc&&venc<hoyStr;
@@ -1067,6 +1069,7 @@ async function guardarDocumento(){
   try{ await EmpleadosAPI.registrarDocumentoEmpleado({
     empresa_id:empId,categoria:docCategoria,
     empleado_id:empleadoId||null,
+    vehiculo_id:vehiculoId||null,
     tipo,descripcion:desc||null,
     fecha_vencimiento:venc||null,
     archivo_url:archivoUrl,archivo_path:archivoPatch,
@@ -1407,11 +1410,6 @@ function verDocsVehiculo(id, nombre){
   tabs.forEach(t => { if(t.textContent.includes('Docs Vehiculos')) tabBtn = t; });
   if(tabBtn) {
     cambiarTab('docs-vehiculos', tabBtn);
-    // Poner el nombre en el buscador para filtrar
-    setTimeout(() => {
-      const buscar = document.getElementById('f-buscar');
-      if(buscar) { buscar.value = nombre; recargar(); }
-    }, 100);
   }
 }
 
