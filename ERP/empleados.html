@@ -482,6 +482,9 @@ function cambiarTab(tab,btn){
   tabActual=tab;
   document.querySelectorAll('.tab').forEach(t=>t.classList.remove('active'));
   btn.classList.add('active');
+  // Limpiar filtros persistentes al cambiar tab
+  if(tab!=='docs-personal')  { _filtroDocEmp=''; _filtroDocTipo=''; }
+  if(tab!=='ausencias')       _filtroAusEmp='';
   const btnNuevo=document.getElementById('btn-nuevo');
   const noDoc=['ausentismo','costos'];
   document.getElementById('btn-importar-xls').style.display=tab==='sueldos'?'':'none';
@@ -940,6 +943,10 @@ async function cargarDocumentos(categoria){
 
   let docEmpData=await EmpleadosAPI.getDocumentosEmpleado({categoria});
   if(emp) docEmpData=docEmpData.filter(r=>r.empresa_id===emp);
+  // Filtro por vehículo específico (desde verDocsVehiculo)
+  if(_filtroVehiculoId && categoria==='vehiculo') {
+    docEmpData=docEmpData.filter(r=>r.empleado_id===_filtroVehiculoId||r.vehiculo_id===_filtroVehiculoId);
+  }
   const data=docEmpData;
   let rows=data||[];
   if(buscar) rows=rows.filter(r=>
@@ -948,11 +955,9 @@ async function cargarDocumentos(categoria){
     (r.tipo||'').toLowerCase().includes(buscar)||
     (r.descripcion||'').toLowerCase().includes(buscar)
   );
-  // Filtros adicionales para docs personal
-  const filtroDocEmp  = document.getElementById('filtro-doc-emp')?.value  || '';
-  const filtroDocTipo = document.getElementById('filtro-doc-tipo')?.value || '';
-  if(filtroDocEmp  && categoria==='personal') rows=rows.filter(r=>r.empleado_id===filtroDocEmp);
-  if(filtroDocTipo && categoria==='personal') rows=rows.filter(r=>r.tipo===filtroDocTipo);
+  // Filtros adicionales para docs personal (usar variables globales)
+  if(_filtroDocEmp  && categoria==='personal') rows=rows.filter(r=>r.empleado_id===_filtroDocEmp);
+  if(_filtroDocTipo && categoria==='personal') rows=rows.filter(r=>r.tipo===_filtroDocTipo);
 
   const vencidos=rows.filter(r=>r.fecha_vencimiento&&r.fecha_vencimiento<hoyStr);
   const proxVencer=rows.filter(r=>r.fecha_vencimiento&&r.fecha_vencimiento>=hoyStr&&r.fecha_vencimiento<=en30Str);
@@ -984,15 +989,15 @@ async function cargarDocumentos(categoria){
   document.getElementById('contenido').innerHTML=`
     ${categoria==='personal'?`
     <div style="display:flex;gap:10px;margin-bottom:16px;flex-wrap:wrap;align-items:center">
-      <select id="filtro-doc-emp" onchange="cargarDocumentos('personal')"
+      <select id="filtro-doc-emp" onchange="_filtroDocEmp=this.value;cargarDocumentos('personal')"
         style="padding:8px 12px;background:var(--bg2);border:1px solid var(--border);border-radius:8px;color:var(--text);font-size:13px;font-family:'DM Sans',sans-serif;outline:none;min-width:200px">
         <option value="">Todos los empleados</option>
-        ${empUnicosDoc.map(e=>`<option value="${e.id}" ${e.id===filtroDocEmp?'selected':''}>${e.nombre}</option>`).join('')}
+        ${empUnicosDoc.map(e=>`<option value="${e.id}" ${e.id===_filtroDocEmp?'selected':''}>${e.nombre}</option>`).join('')}
       </select>
-      <select id="filtro-doc-tipo" onchange="cargarDocumentos('personal')"
+      <select id="filtro-doc-tipo" onchange="_filtroDocTipo=this.value;cargarDocumentos('personal')"
         style="padding:8px 12px;background:var(--bg2);border:1px solid var(--border);border-radius:8px;color:var(--text);font-size:13px;font-family:'DM Sans',sans-serif;outline:none">
         <option value="">Todos los tipos</option>
-        ${tiposUnicos.map(t=>`<option value="${t}" ${t===filtroDocTipo?'selected':''}>${t}</option>`).join('')}
+        ${tiposUnicos.map(t=>`<option value="${t}" ${t===_filtroDocTipo?'selected':''}>${t}</option>`).join('')}
       </select>
     </div>`:''
     }
@@ -1053,8 +1058,8 @@ async function guardarDocumento(){
     const {error:uploadError}=await db.storage.from('syh-docs').upload(path,file,{contentType:file.type,upsert:false});
     if(uploadError){document.getElementById('nd-upload-progress').style.display='none';toast('Error al subir: ', 'error');return;}
     document.getElementById('nd-progress-bar').style.width='90%';
-    const {data:urlData}=db.storage.from('syh-docs').getPublicUrl(path);
-    archivoUrl=urlData?.publicUrl||null;
+    const {data:urlData}=await db.storage.from('syh-docs').createSignedUrl(path,60*60*24*365*10);
+    archivoUrl=urlData?.signedUrl||null;
     archivoPatch=path;
     document.getElementById('nd-progress-bar').style.width='100%';
   }
@@ -1199,9 +1204,8 @@ async function cargarAusencias(){
   const data=ausData2;
   let rows=data||[];
   if(buscar) rows=rows.filter(r=>(r.empleados?.nombre||'').toLowerCase().includes(buscar));
-  // Filtro por empleado específico
-  const filtroAusEmp = document.getElementById('filtro-aus-emp')?.value || '';
-  if(filtroAusEmp) rows=rows.filter(r=>r.empleado_id===filtroAusEmp);
+  // Filtro por empleado específico (usar variable global)
+  if(_filtroAusEmp) rows=rows.filter(r=>r.empleado_id===_filtroAusEmp);
 
   // Stats
   const hoy=rows.filter(r=>r.fecha_inicio<=hoyStr&&(!r.fecha_fin||r.fecha_fin>=hoyStr)&&r.estado==='aprobada');
@@ -1235,10 +1239,10 @@ async function cargarAusencias(){
 
   document.getElementById('contenido').innerHTML=`
     <div style="display:flex;gap:10px;margin-bottom:16px;flex-wrap:wrap;align-items:center">
-      <select id="filtro-aus-emp" onchange="cargarAusencias()"
+      <select id="filtro-aus-emp" onchange="_filtroAusEmp=this.value;cargarAusencias()"
         style="padding:8px 12px;background:var(--bg2);border:1px solid var(--border);border-radius:8px;color:var(--text);font-size:13px;font-family:'DM Sans',sans-serif;outline:none;min-width:200px">
         <option value="">Todos los empleados</option>
-        ${empUnicos.map(e=>`<option value="${e.id}" ${e.id===filtroAusEmp?'selected':''}>${e.nombre}</option>`).join('')}
+        ${empUnicos.map(e=>`<option value="${e.id}" ${e.id===_filtroAusEmp?'selected':''}>${e.nombre}</option>`).join('')}
       </select>
     </div>
     <div style="overflow-x:auto"><table>
@@ -1287,8 +1291,8 @@ async function guardarAusencia(){
     document.getElementById('na-progress-bar').style.width='50%';
     const {error:ue}=await db.storage.from('syh-docs').upload(path,file,{contentType:file.type,upsert:false});
     if(!ue){
-      const {data:ud}=db.storage.from('syh-docs').getPublicUrl(path);
-      certUrl=ud?.publicUrl||null;certPath=path;
+      const {data:ud}=await db.storage.from('syh-docs').createSignedUrl(path,60*60*24*365*10);
+      certUrl=ud?.signedUrl||null;certPath=path;
     }
     document.getElementById('na-progress-bar').style.width='100%';
     document.getElementById('na-upload-progress').style.display='none';
@@ -1394,17 +1398,15 @@ async function cargarVehiculos(){
     </div>`;
 }
 
+let _filtroVehiculoId = '';
+
 function verDocsVehiculo(id, nombre){
+  _filtroVehiculoId = id;
   // Cambiar a la tab docs-vehiculos
   const tabs = document.querySelectorAll('.tab');
   let tabBtn = null;
   tabs.forEach(t => { if(t.textContent.includes('Docs Vehiculos')) tabBtn = t; });
   if(tabBtn) cambiarTab('docs-vehiculos', tabBtn);
-  // Filtrar por el vehículo seleccionado usando el buscador
-  setTimeout(() => {
-    const buscar = document.getElementById('f-buscar');
-    if(buscar) { buscar.value = nombre; recargar(); }
-  }, 200);
 }
 
 async function guardarVehiculo(){
@@ -1742,6 +1744,11 @@ function parsearLiquidacion(strings) {
 // ════════════════════════════════════════════════════════════
 // FRANCOS COMPENSATORIOS
 // ════════════════════════════════════════════════════════════
+// Variables para filtros persistentes
+let _filtroDocEmp  = '';
+let _filtroDocTipo = '';
+let _filtroAusEmp  = '';
+
 let francoEditId = null;
 let _francoTomarId = null;
 let _francosData = [];
