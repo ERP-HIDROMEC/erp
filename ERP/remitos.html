@@ -45,7 +45,8 @@
   <div class="page-header">
     <h2>Remitos</h2>
     <div style="display:flex;gap:8px">
-      <button class="btn btn-ghost" onclick="cambiarTab('talonarios',document.querySelector('.tab:last-child'))">CAI / Talonarios</button>
+      <button class="btn btn-ghost" onclick="cambiarTab('talonarios',document.querySelector('.tab:nth-child(4)'))">CAI / Talonarios</button>
+      <button class="btn btn-ghost" id="btn-desde-plantilla" onclick="abrirDesidePlantilla()" style="display:none">📋 Desde plantilla</button>
       <button class="btn btn-primary" onclick="abrirNuevo()">+ Nuevo remito</button>
     </div>
   </div>
@@ -57,6 +58,7 @@
     <button class="tab" onclick="cambiarTab('pendientes',this)">Pendientes de facturar</button>
     <button class="tab" onclick="cambiarTab('historico',this)">Histórico</button>
     <button class="tab" onclick="cambiarTab('talonarios',this)">CAI / Talonarios</button>
+    <button class="tab" onclick="cambiarTab('plantillas',this)">📋 Plantillas</button>
   </div>
 
   <div class="filtros" id="filtros-main">
@@ -169,6 +171,98 @@
   </div>
 </div>
 
+<!-- MODAL SELECTOR DE PLANTILLA -->
+<div class="modal-overlay" id="modal-selector-plantilla">
+  <div class="modal" style="max-width:680px">
+    <h3>📋 Elegir plantilla</h3>
+    <div class="filtros" style="margin-bottom:16px;padding:0">
+      <select id="sp-empresa" onchange="filtrarPlantillasSelector()"
+        style="padding:8px 12px;background:var(--bg3);border:1px solid var(--border);border-radius:8px;color:var(--text);font-size:13px">
+        <option value="">Todas las empresas</option>
+        <option value="a1000000-0000-0000-0000-000000000001">Hidromec</option>
+        <option value="a2000000-0000-0000-0000-000000000002">Placemem</option>
+      </select>
+      <input type="text" id="sp-buscar" placeholder="Buscar plantilla..." oninput="filtrarPlantillasSelector()"
+        style="padding:8px 12px;background:var(--bg3);border:1px solid var(--border);border-radius:8px;color:var(--text);font-size:13px;flex:1">
+    </div>
+    <div id="sp-lista" style="max-height:400px;overflow-y:auto;display:flex;flex-direction:column;gap:8px"></div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" onclick="cerrarModal('modal-selector-plantilla')">Cancelar</button>
+    </div>
+  </div>
+</div>
+
+<!-- MODAL NUEVA/EDITAR PLANTILLA -->
+<div class="modal-overlay" id="modal-plantilla">
+  <div class="modal" style="max-width:900px;width:96vw">
+    <h3 id="plantilla-titulo">Nueva plantilla</h3>
+    <div class="form-row">
+      <div class="form-group">
+        <label>Empresa</label>
+        <select id="np-empresa" onchange="cargarDatosModalPlantilla()">
+          <option value="a1000000-0000-0000-0000-000000000001">Hidromec</option>
+          <option value="a2000000-0000-0000-0000-000000000002">Placemem</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label>Nombre de la plantilla</label>
+        <input type="text" id="np-nombre" placeholder="Ej: Hornos SIDERCA, Mantenimiento mensual...">
+      </div>
+    </div>
+    <div class="form-row">
+      <div class="form-group">
+        <label>Tipo de remito</label>
+        <select id="np-tipo" onchange="toggleContratoplantilla()">
+          <option value="contrato">Contrato</option>
+          <option value="servicio">Servicio facturable</option>
+          <option value="interno">Movimiento interno</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label>Descripción interna (opcional)</label>
+        <input type="text" id="np-desc" placeholder="Nota interna sobre esta plantilla">
+      </div>
+    </div>
+    <div class="form-row full">
+      <div class="form-group">
+        <label>Cliente</label>
+        <select id="np-cliente" onchange="cargarContratosPlantilla()"></select>
+      </div>
+    </div>
+    <div class="form-row full" id="np-grupo-contrato" style="display:none">
+      <div class="form-group">
+        <label>Contrato</label>
+        <select id="np-contrato" onchange="cargarItemsContratoplantilla()"></select>
+      </div>
+    </div>
+    <div class="form-row">
+      <div class="form-group">
+        <label>Orden de compra</label>
+        <input type="text" id="np-oc" placeholder="N° OC del cliente">
+      </div>
+      <div class="form-group">
+        <label>Orden de trabajo / Sector</label>
+        <input type="text" id="np-sector" placeholder="Sector o referencia interna">
+      </div>
+    </div>
+
+    <div style="margin:16px 0 8px;font-size:12px;font-weight:500;color:var(--muted);text-transform:uppercase;letter-spacing:0.8px">
+      Ítems de la plantilla
+    </div>
+    <table class="items-table">
+      <thead><tr><th style="width:80px">Cant.</th><th>Descripción</th><th style="width:110px">Precio unit.</th><th style="width:30px"></th></tr></thead>
+      <tbody id="np-items-body"></tbody>
+    </table>
+    <div id="np-msg-contrato" style="display:none;margin-top:8px;padding:8px 12px;background:rgba(16,185,129,0.08);border:1px solid rgba(16,185,129,0.2);border-radius:6px;font-size:12px;color:var(--green)"></div>
+    <button class="btn btn-ghost" style="font-size:12px;padding:6px 14px;margin-top:8px" onclick="agregarItemPlantilla()">+ Agregar ítem</button>
+
+    <div class="modal-footer">
+      <button class="btn btn-ghost" onclick="cerrarModal('modal-plantilla')">Cancelar</button>
+      <button class="btn btn-primary" onclick="guardarPlantilla()">Guardar plantilla</button>
+    </div>
+  </div>
+</div>
+
 <!-- MODAL TALONARIO CAI -->
 <div class="modal-overlay" id="modal-talonario">
   <div class="modal">
@@ -272,13 +366,16 @@ function cambiarTab(tab,btn){
   tabActual=tab;
   document.querySelectorAll('.tab').forEach(t=>t.classList.remove('active'));
   if(btn) btn.classList.add('active');
-  document.getElementById('filtros-main').style.display=tab==='talonarios'?'none':'flex';
+  const btnPlant=document.getElementById('btn-desde-plantilla');
+  if(btnPlant) btnPlant.style.display=(tab==='todos'||tab==='pendientes')?'':'none';
+  document.getElementById('filtros-main').style.display=(tab==='talonarios'||tab==='plantillas')?'none':'flex';
   recargar();
 }
 
 function recargar(){
   if(tabActual==='todos'||tabActual==='historico') cargarRemitos();
   else if(tabActual==='pendientes') cargarPendientes();
+  else if(tabActual==='plantillas') cargarPlantillas();
   else cargarTalonarios();
 }
 
@@ -1175,6 +1272,358 @@ async function marcarHistoricoPendiente(id){
 }
 
 init();
+
+// ════════════════════════════════════════════════════════════
+// PLANTILLAS DE REMITOS
+// ════════════════════════════════════════════════════════════
+let _plantillaEditId = null;
+let _plantillasData = [];
+let _npItemsContratoCache = [];
+
+// ── Tab Plantillas ────────────────────────────────────────────
+async function cargarPlantillas() {
+  const c = document.getElementById('contenido');
+  c.innerHTML = '<div class="spinner-wrap"><div class="spinner"></div>Cargando...</div>';
+  try {
+    const { data, error } = await db.from('remito_plantillas')
+      .select('*,clientes(nombre),empresas(nombre)')
+      .eq('activa', true)
+      .order('nombre');
+    if (error) throw error;
+    _plantillasData = data || [];
+    renderPlantillas(_plantillasData);
+  } catch(e) { manejarError(e, 'cargar plantillas'); }
+}
+
+function renderPlantillas(rows) {
+  const c = document.getElementById('contenido');
+  if (!rows.length) {
+    c.innerHTML = `<div style="text-align:center;padding:60px 20px;color:var(--muted)">
+      <div style="font-size:40px;margin-bottom:16px">📋</div>
+      <div style="font-size:15px;margin-bottom:8px">No hay plantillas todavía</div>
+      <div style="font-size:13px;margin-bottom:24px">Creá una para reutilizar remitos frecuentes</div>
+      <button class="btn btn-primary" onclick="abrirNuevaPlantilla()">+ Nueva plantilla</button>
+    </div>`;
+    return;
+  }
+  c.innerHTML = `
+    <div style="display:flex;justify-content:flex-end;margin-bottom:16px">
+      <button class="btn btn-primary" onclick="abrirNuevaPlantilla()">+ Nueva plantilla</button>
+    </div>
+    <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:12px">
+      ${rows.map(p => `
+        <div style="background:var(--bg2);border:1px solid var(--border);border-radius:12px;padding:16px;display:flex;flex-direction:column;gap:8px">
+          <div style="display:flex;justify-content:space-between;align-items:flex-start">
+            <div>
+              <div style="font-weight:600;font-size:14px">${p.nombre}</div>
+              <div style="font-size:12px;color:var(--muted);margin-top:2px">${p.empresas?.nombre||'—'} · ${p.clientes?.nombre||'Sin cliente'}</div>
+            </div>
+            <span style="font-size:11px;padding:2px 8px;border-radius:4px;background:var(--bg3);color:var(--muted)">${p.tipo||'contrato'}</span>
+          </div>
+          ${p.descripcion?`<div style="font-size:12px;color:var(--muted)">${p.descripcion}</div>`:''}
+          <div style="display:flex;gap:6px;margin-top:4px">
+            <button class="btn btn-sm btn-primary" onclick="usarPlantilla('${p.id}')">▶ Usar</button>
+            <button class="btn btn-sm btn-ghost" onclick="editarPlantilla('${p.id}')">Editar</button>
+            <button class="btn btn-sm btn-danger" onclick="eliminarPlantilla('${p.id}')">Borrar</button>
+          </div>
+        </div>`).join('')}
+    </div>`;
+}
+
+// ── Selector rápido desde "Desde plantilla" ───────────────────
+async function abrirDesidePlantilla() {
+  try {
+    const { data } = await db.from('remito_plantillas')
+      .select('*,clientes(nombre),empresas(nombre)')
+      .eq('activa', true).order('nombre');
+    _plantillasData = data || [];
+    renderSelectorPlantilla(_plantillasData);
+    document.getElementById('modal-selector-plantilla').classList.add('show');
+  } catch(e) { manejarError(e, 'cargar plantillas'); }
+}
+
+function filtrarPlantillasSelector() {
+  const emp = document.getElementById('sp-empresa').value;
+  const q = (document.getElementById('sp-buscar').value||'').toLowerCase();
+  const filtered = _plantillasData.filter(p =>
+    (!emp || p.empresa_id === emp) &&
+    (!q || p.nombre.toLowerCase().includes(q) || (p.clientes?.nombre||'').toLowerCase().includes(q))
+  );
+  renderSelectorPlantilla(filtered);
+}
+
+function renderSelectorPlantilla(rows) {
+  const lista = document.getElementById('sp-lista');
+  if (!rows.length) {
+    lista.innerHTML = '<div style="text-align:center;padding:30px;color:var(--muted)">No hay plantillas que coincidan</div>';
+    return;
+  }
+  lista.innerHTML = rows.map(p => `
+    <div style="background:var(--bg3);border:1px solid var(--border);border-radius:10px;padding:14px;cursor:pointer;transition:border-color 0.15s"
+      onclick="usarPlantilla('${p.id}')"
+      onmouseover="this.style.borderColor='var(--blue)'" onmouseout="this.style.borderColor='var(--border)'">
+      <div style="display:flex;justify-content:space-between;align-items:center">
+        <div>
+          <div style="font-weight:600;font-size:14px">${p.nombre}</div>
+          <div style="font-size:12px;color:var(--muted);margin-top:2px">
+            ${p.empresas?.nombre||'—'} · ${p.clientes?.nombre||'Sin cliente'}
+            ${p.sector?` · <span style="color:var(--muted)">${p.sector}</span>`:''}
+          </div>
+        </div>
+        <span style="font-size:11px;padding:2px 10px;border-radius:4px;background:rgba(59,130,246,0.1);color:var(--blue)">Usar →</span>
+      </div>
+      ${p.descripcion?`<div style="font-size:12px;color:var(--muted);margin-top:6px">${p.descripcion}</div>`:''}
+    </div>`).join('');
+}
+
+// ── Usar plantilla → abrir modal de remito precargado ─────────
+async function usarPlantilla(plantillaId) {
+  cerrarModal('modal-selector-plantilla');
+  try {
+    const { data: p } = await db.from('remito_plantillas')
+      .select('*,clientes(nombre)').eq('id', plantillaId).single();
+    const { data: items } = await db.from('remito_plantilla_items')
+      .select('*').eq('plantilla_id', plantillaId).order('orden');
+
+    // Abrir modal nuevo remito y precargarlo
+    editId = null;
+    _itemsContratoCache = [];
+    document.getElementById('rem-titulo').textContent = 'Nuevo remito — plantilla: ' + p.nombre;
+    document.getElementById('nr-empresa').value = p.empresa_id;
+    document.getElementById('nr-tipo').value = p.tipo || 'contrato';
+    document.getElementById('nr-fecha').value = hoy();
+    document.getElementById('nr-oc').value = p.orden_compra || '';
+    document.getElementById('nr-sector').value = p.sector || '';
+    if (document.getElementById('nr-condicion'))
+      document.getElementById('nr-condicion').value = p.condicion_venta || 'CTA. CTE.';
+
+    await cargarDatosModal();
+    if (p.cliente_id) document.getElementById('nr-cliente').value = p.cliente_id;
+
+    toggleContrato();
+    const msgEl = document.getElementById('msg-items-contrato');
+
+    // Cargar contrato si aplica
+    if (p.contrato_id && p.tipo === 'contrato') {
+      await cargarContratos();
+      const sel = document.getElementById('nr-contrato');
+      if (sel) { sel.value = p.contrato_id; await cargarItemsContrato(); }
+    }
+
+    // Poblar items
+    const tbody = document.getElementById('items-body');
+    tbody.innerHTML = '';
+    (items || []).forEach(it => {
+      const match = _itemsContratoCache.find(ci => ci.id === it.contrato_item_id) || null;
+      agregarItemRow(it.cantidad || '', it.descripcion, it.precio_unitario || 0, false, match?.id || '');
+      // Setear textarea detalle
+      const lastRow = tbody.lastElementChild;
+      const ta = lastRow?.querySelector('[data-detalle]');
+      if (ta) { ta.value = it.descripcion || ''; ta.style.height = 'auto'; ta.style.height = ta.scrollHeight + 'px'; }
+    });
+    if (!items || items.length < 2) for (let i = (items||[]).length; i < 3; i++) agregarItemRow();
+
+    recalcularTotales();
+    if (msgEl && _itemsContratoCache.length)
+      msgEl.innerHTML = `✓ Plantilla cargada — ${_itemsContratoCache.length} ítems disponibles`;
+
+    document.getElementById('modal-remito').classList.add('show');
+    toast('✓ Plantilla "' + p.nombre + '" cargada', 'success');
+  } catch(e) { manejarError(e, 'usar plantilla'); }
+}
+
+// ── Crear / editar plantilla ──────────────────────────────────
+async function abrirNuevaPlantilla() {
+  _plantillaEditId = null;
+  _npItemsContratoCache = [];
+  document.getElementById('plantilla-titulo').textContent = 'Nueva plantilla';
+  document.getElementById('np-nombre').value = '';
+  document.getElementById('np-desc').value = '';
+  document.getElementById('np-tipo').value = 'contrato';
+  document.getElementById('np-oc').value = '';
+  document.getElementById('np-sector').value = '';
+  document.getElementById('np-items-body').innerHTML = '';
+  document.getElementById('np-grupo-contrato').style.display = 'none';
+  document.getElementById('np-msg-contrato').style.display = 'none';
+  await cargarDatosModalPlantilla();
+  agregarItemPlantilla();
+  document.getElementById('modal-plantilla').classList.add('show');
+}
+
+async function editarPlantilla(id) {
+  _plantillaEditId = id;
+  _npItemsContratoCache = [];
+  const { data: p } = await db.from('remito_plantillas').select('*').eq('id', id).single();
+  const { data: items } = await db.from('remito_plantilla_items').select('*').eq('plantilla_id', id).order('orden');
+  document.getElementById('plantilla-titulo').textContent = 'Editar plantilla';
+  document.getElementById('np-empresa').value = p.empresa_id;
+  document.getElementById('np-nombre').value = p.nombre;
+  document.getElementById('np-desc').value = p.descripcion || '';
+  document.getElementById('np-tipo').value = p.tipo || 'contrato';
+  document.getElementById('np-oc').value = p.orden_compra || '';
+  document.getElementById('np-sector').value = p.sector || '';
+  await cargarDatosModalPlantilla();
+  document.getElementById('np-cliente').value = p.cliente_id || '';
+  await cargarContratosPlantilla();
+  if (p.contrato_id) {
+    document.getElementById('np-contrato').value = p.contrato_id;
+    await cargarItemsContratoplantilla();
+  }
+  // Items
+  const tbody = document.getElementById('np-items-body');
+  tbody.innerHTML = '';
+  (items || []).forEach(it => agregarItemPlantilla(it.cantidad, it.descripcion, it.precio_unitario, it.contrato_item_id));
+  if (!items || !items.length) agregarItemPlantilla();
+  document.getElementById('modal-plantilla').classList.add('show');
+}
+
+async function cargarDatosModalPlantilla() {
+  const emp = document.getElementById('np-empresa').value;
+  const { data: clientes } = await db.from('clientes').select('id,nombre').eq('empresa_id', emp).eq('activo', true).order('nombre');
+  document.getElementById('np-cliente').innerHTML =
+    '<option value="">— Sin cliente —</option>' +
+    (clientes || []).map(c => `<option value="${c.id}">${c.nombre}</option>`).join('');
+  toggleContratoplantilla();
+}
+
+function toggleContratoplantilla() {
+  const tipo = document.getElementById('np-tipo').value;
+  document.getElementById('np-grupo-contrato').style.display = tipo === 'contrato' ? '' : 'none';
+  if (tipo === 'contrato') cargarContratosPlantilla();
+}
+
+async function cargarContratosPlantilla() {
+  const emp = document.getElementById('np-empresa').value;
+  const clienteId = document.getElementById('np-cliente').value;
+  let q = db.from('contratos').select('id,numero_contrato,cliente_id').eq('empresa_id', emp).eq('estado', 'activo');
+  if (clienteId) q = q.eq('cliente_id', clienteId);
+  const { data } = await q.order('numero_contrato');
+  document.getElementById('np-contrato').innerHTML =
+    '<option value="">— Sin contrato —</option>' +
+    (data || []).map(c => `<option value="${c.id}">${c.numero_contrato}</option>`).join('');
+}
+
+async function cargarItemsContratoplantilla() {
+  const cid = document.getElementById('np-contrato').value;
+  const msg = document.getElementById('np-msg-contrato');
+  if (!cid) { _npItemsContratoCache = []; msg.style.display = 'none'; return; }
+  const { data } = await db.from('contratos_items').select('*').eq('contrato_id', cid).order('descripcion');
+  _npItemsContratoCache = data || [];
+  msg.style.display = _npItemsContratoCache.length ? 'block' : 'none';
+  if (_npItemsContratoCache.length)
+    msg.textContent = `✓ ${_npItemsContratoCache.length} ítems del contrato disponibles`;
+}
+
+function agregarItemPlantilla(cant = '', desc = '', precio = 0, contratoItemId = '') {
+  const tbody = document.getElementById('np-items-body');
+  const tr = document.createElement('tr');
+  const tipo = document.getElementById('np-tipo').value;
+  const esContrato = tipo === 'contrato' && _npItemsContratoCache.length;
+
+  if (esContrato) {
+    const opciones = '<option value="">— Elegir ítem —</option>' +
+      _npItemsContratoCache.map(it =>
+        `<option value="${it.id}" data-precio="${it.precio_unitario||0}" ${it.id===contratoItemId?'selected':''}>${it.descripcion}</option>`
+      ).join('');
+    tr.innerHTML = `
+      <td style="width:70px"><input type="number" min="0" step="any" placeholder="0" value="${cant||''}" style="width:100%"></td>
+      <td><select style="width:100%" onchange="onNpItemChange(this)">${opciones}</select>
+          <input type="hidden" data-np-ci value="${contratoItemId||''}"></td>
+      <td><input type="hidden" data-np-precio value="${precio||0}"><span style="font-size:12px;color:var(--muted)">${precio?'$'+precio:''}</span></td>
+      <td><button onclick="this.closest('tr').remove()" style="background:none;border:none;color:var(--muted);cursor:pointer;font-size:16px">×</button></td>`;
+    // Setear precio si viene con contratoItemId
+    if (contratoItemId) {
+      const opt = tr.querySelector(`option[value="${contratoItemId}"]`);
+      if (opt) {
+        const p2 = opt.dataset.precio;
+        tr.querySelector('[data-np-precio]').value = p2;
+        tr.querySelector('span').textContent = p2 ? '$' + p2 : '';
+      }
+    }
+  } else {
+    tr.innerHTML = `
+      <td style="width:70px"><input type="number" min="0" step="any" placeholder="0" value="${cant||''}" style="width:100%"></td>
+      <td><input type="text" placeholder="Descripción" value="${desc||''}" style="width:100%"></td>
+      <td><input type="number" min="0" step="any" placeholder="0.00" value="${precio||''}" data-np-precio style="width:100%"></td>
+      <td><button onclick="this.closest('tr').remove()" style="background:none;border:none;color:var(--muted);cursor:pointer;font-size:16px">×</button></td>`;
+  }
+  tbody.appendChild(tr);
+}
+
+function onNpItemChange(sel) {
+  const opt = sel.options[sel.selectedIndex];
+  const precio = opt?.dataset?.precio || 0;
+  const tr = sel.closest('tr');
+  tr.querySelector('[data-np-precio]').value = precio;
+  tr.querySelector('span').textContent = precio ? '$' + precio : '';
+  tr.querySelector('[data-np-ci]').value = opt?.value || '';
+}
+
+async function guardarPlantilla() {
+  const nombre = document.getElementById('np-nombre').value.trim();
+  if (!nombre) { toast('El nombre es obligatorio.', 'warn'); return; }
+  const emp = document.getElementById('np-empresa').value;
+  const u = await getUsuario();
+
+  const payload = {
+    empresa_id: emp,
+    nombre,
+    descripcion: document.getElementById('np-desc').value.trim() || null,
+    tipo: document.getElementById('np-tipo').value,
+    cliente_id: document.getElementById('np-cliente').value || null,
+    contrato_id: document.getElementById('np-contrato')?.value || null,
+    orden_compra: document.getElementById('np-oc').value.trim() || null,
+    sector: document.getElementById('np-sector').value.trim() || null,
+    activa: true,
+    created_by: u?.email || null,
+  };
+
+  // Recolectar items
+  const filas = document.getElementById('np-items-body').querySelectorAll('tr');
+  const itemsGuardar = [];
+  filas.forEach((fila, i) => {
+    const cantInput = fila.querySelector('input[type="number"]');
+    const descInput = fila.querySelector('input[type="text"]');
+    const selInput  = fila.querySelector('select');
+    const precioIn  = fila.querySelector('[data-np-precio]');
+    const ciIn      = fila.querySelector('[data-np-ci]');
+    const cant = parseFloat(cantInput?.value) || null;
+    const desc = descInput?.value?.trim() || selInput?.options[selInput?.selectedIndex]?.text || '';
+    const precio = parseFloat(precioIn?.value) || 0;
+    const ciId = ciIn?.value || null;
+    if (desc) itemsGuardar.push({ orden: i+1, descripcion: desc, cantidad: cant, precio_unitario: precio, contrato_item_id: ciId });
+  });
+
+  if (!itemsGuardar.length) { toast('Agregá al menos un ítem.', 'warn'); return; }
+
+  try {
+    let plantillaId;
+    if (_plantillaEditId) {
+      await db.from('remito_plantillas').update(payload).eq('id', _plantillaEditId);
+      await db.from('remito_plantilla_items').delete().eq('plantilla_id', _plantillaEditId);
+      plantillaId = _plantillaEditId;
+    } else {
+      const { data } = await db.from('remito_plantillas').insert(payload).select().single();
+      plantillaId = data.id;
+    }
+    const itemsConId = itemsGuardar.map(it => ({ ...it, plantilla_id: plantillaId }));
+    await db.from('remito_plantilla_items').insert(itemsConId);
+    toast(`✓ Plantilla "${nombre}" guardada`, 'success');
+    cerrarModal('modal-plantilla');
+    cargarPlantillas();
+  } catch(e) { manejarError(e, 'guardar plantilla'); }
+}
+
+async function eliminarPlantilla(id) {
+  const ok = await confirmar('¿Eliminar esta plantilla? No se puede deshacer.');
+  if (!ok) return;
+  try {
+    await db.from('remito_plantillas').update({ activa: false }).eq('id', id);
+    toast('Plantilla eliminada.', 'success');
+    cargarPlantillas();
+  } catch(e) { manejarError(e, 'eliminar plantilla'); }
+}
+
 </script>
 </body>
 </html>
