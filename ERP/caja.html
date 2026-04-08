@@ -1241,9 +1241,25 @@ async function confirmarOrdenPago(){
     if(_ne) throw _ne;
     nroOrden=_nro;
   } catch(e) {
-    // Fallback si la función no existe aún
-    const count2=await EgresosAPI.contarEgresosConOP(empId2);
-    nroOrden='OP-'+String((count2||0)+1).padStart(4,'0')+'-'+new Date().getFullYear();
+    // Fallback: buscar el mayor número de OP existente y sumar 1
+    try {
+      const {data:_ops}=await db.from('egresos')
+        .select('orden_pago_nro')
+        .eq('empresa_id',empId2)
+        .not('orden_pago_nro','is',null)
+        .order('orden_pago_nro',{ascending:false})
+        .limit(1);
+      const ultimo=(_ops&&_ops[0]?.orden_pago_nro)||null;
+      let siguiente=1;
+      if(ultimo){
+        const match=ultimo.match(/OP-(\d+)-\d+/);
+        if(match) siguiente=parseInt(match[1])+1;
+      }
+      nroOrden='OP-'+String(siguiente).padStart(4,'0')+'-'+new Date().getFullYear();
+    } catch(e2) {
+      const count2=await EgresosAPI.contarEgresosConOP(empId2);
+      nroOrden='OP-'+String((count2||0)+1).padStart(4,'0')+'-'+new Date().getFullYear();
+    }
   }
 
   // ── MODO MÚLTIPLE (varios egresos agrupados) ──────────────────
@@ -1266,27 +1282,41 @@ async function confirmarOrdenPago(){
           descripcion:`Pago ${nroOrden} - ${r.descripcion||'Egreso'}${r.proveedores?.nombre?' — '+r.proveedores.nombre:''}`,
           monto:Number(r.monto||0),fecha};
         await CajaAPI.pagarEgresoConMovimiento(r.id,payload,mov);
-        // Guardar líneas de pago
-        for(const p of lineasPago){
-          await db.from('egresos_pagos_detalle').insert({egreso_id:r.id,tipo_pago:p.tipo,numero:p.numero||null,
-            fecha:p.tipo==='cheque'?p.fecha||null:fecha,monto:Number(p.monto)||0,banco:p.banco||null,referencia:p.referencia||null});
-        }
       }catch(e){huboError=true;console.warn('Error pagando egreso:',r.id,e);}
     }
 
+    // Guardar líneas de pago UNA SOLA VEZ en el primer egreso
+    if(!huboError){
+      for(const p of lineasPago){
+        try{
+          await db.from('egresos_pagos_detalle').insert({
+            egreso_id:selRows[0].id,
+            tipo_pago:p.tipo,numero:p.numero||null,
+            fecha:p.tipo==='cheque'?p.fecha||null:fecha,
+            monto:Number(p.monto)||0,banco:p.banco||null,referencia:p.referencia||null,
+          });
+        }catch(ep){ console.warn('Error guardando línea pago:',ep); }
+      }
+    }
     cerrarModal('modal-orden');
     actualizarBadgeOrdenes();
     if(huboError) toast('Algunos pagos no se pudieron confirmar. Revisá el historial.','warn');
-    else toast(`Orden ${nroOrden} generada — ${selRows.length} egresos pagados.`,'success');
+    else toast(`Orden ${nroOrden} generada — ${selRows.length} facturas pagadas.`,'success');
 
-    // Generar PDF con todos los egresos agrupados
+    // Generar PDF ÚNICO con todos los egresos agrupados
     try{
-      const primerEgreso=selRows[0];
-      const egresoConJoins={...primerEgreso,
-        _egresos_agrupados:selRows,
-        descripcion:`Pago agrupado (${selRows.length} egresos) — ${[...new Set(selRows.map(r=>r.proveedores?.nombre||'Sin proveedor'))].join(', ')}`,
+      // Cargar datos completos del primer egreso (proveedor, empresa)
+      const {data:egConJoins}=await db.from('egresos')
+        .select('*,proveedores(nombre,cuit),empresas(nombre,cuit)')
+        .eq('id',selRows[0].id).single();
+      // Pasar lista de facturas agrupadas en el campo especial
+      const egresoAgrupado={
+        ...(egConJoins||selRows[0]),
+        _egresos_agrupados: selRows,
+        _total_agrupado: totalEgresos,
+        monto: totalEgresos,
       };
-      generarPDFOrden(egresoConJoins,nroOrden,fecha,metodoPrincipal,u?.email||'',[...lineasPago]);
+      generarPDFOrden(egresoAgrupado,nroOrden,fecha,metodoPrincipal,u?.email||'',[...lineasPago]);
     }catch(ePDF){ toast('Pagos confirmados. Error al generar PDF: '+ePDF.message,'warn'); }
 
     cargarOrdenes();
@@ -1426,7 +1456,14 @@ function generarPDFOrden(eg,nro,fecha,metodo,operador,pagos=[]){
   doc.setFont('helvetica','bold');
   doc.text('N° FACTURA:',lX,yC+24);
   doc.setFont('helvetica','normal');
-  doc.text(eg.numero_factura||'Sin comprobante',vX,yC+24);
+  if(eg._egresos_agrupados && eg._egresos_agrupados.length > 1){
+    // Modo agrupado: listar todas las facturas
+    const facturas=eg._egresos_agrupados.map(r=>r.numero_factura||'—').filter((v,i,a)=>a.indexOf(v)===i).join(' / ');
+    const factLines=doc.splitTextToSize(facturas,70);
+    doc.text(factLines,vX,yC+24);
+  } else {
+    doc.text(eg.numero_factura||'Sin comprobante',vX,yC+24);
+  }
 
   // Derecha proveedor
   doc.setFont('helvetica','bold');doc.setFontSize(8);
@@ -1496,10 +1533,19 @@ function generarPDFOrden(eg,nro,fecha,metodo,operador,pagos=[]){
   doc.setFontSize(8);doc.setFont('helvetica','bold');doc.setTextColor(80,80,80);
   doc.text('CONCEPTO:',L+5,yRow+6);
   doc.setFont('helvetica','normal');doc.setTextColor(0,0,0);
-  const desc=String(eg?.descripcion||'');
-  const descLines=doc.splitTextToSize(desc,150);
+  let conceptoTexto;
+  if(eg._egresos_agrupados && eg._egresos_agrupados.length > 1){
+    // Detallar cada factura con su monto
+    const detalleFacturas = eg._egresos_agrupados
+      .map(r=>`${r.numero_factura||'—'}: ${fmtM(r.monto||0)}`)
+      .join('  |  ');
+    conceptoTexto = `Pago agrupado ${eg._egresos_agrupados.length} facturas — ${detalleFacturas}`;
+  } else {
+    conceptoTexto = String(eg?.descripcion||'');
+  }
+  const descLines=doc.splitTextToSize(conceptoTexto,155);
   doc.text(descLines,L+36,yRow+6);
-  yRow+=10;
+  yRow+=Math.max(10, descLines.length*5+2);
 
   // Si hay observaciones
   if(eg?.observaciones){
@@ -1515,7 +1561,7 @@ function generarPDFOrden(eg,nro,fecha,metodo,operador,pagos=[]){
   doc.setFontSize(11);doc.setFont('helvetica','bold');doc.setTextColor(255,255,255);
   doc.text('MONTO TOTAL PAGADO:',L+8,yTotal+11);
   doc.setFontSize(14);
-  doc.text(fmtM(eg.monto),R-8,yTotal+11,{align:'right'});
+  doc.text(fmtM(eg._total_agrupado||eg.monto||0),R-8,yTotal+11,{align:'right'});
 
   // ── FIRMA (igual al remito)
   const yF=yTotal+20;
