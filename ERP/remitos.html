@@ -117,12 +117,14 @@
       </div>
     </div>
 
-    <div class="form-row">
+    <div class="form-row full">
       <div class="form-group">
         <label>Cliente</label>
         <select id="nr-cliente" onchange="cargarContratos()"></select>
       </div>
-      <div class="form-group" id="grupo-contrato" style="display:none">
+    </div>
+    <div class="form-row full" id="grupo-contrato" style="display:none">
+      <div class="form-group">
         <label>Contrato</label>
         <select id="nr-contrato" onchange="cargarItemsContrato()"></select>
       </div>
@@ -144,7 +146,7 @@
       Descripción del trabajo
     </div>
     <table class="items-table">
-      <thead><tr id="items-thead"><th style="width:90px">Cantidad</th><th style="width:160px">Ítem</th><th>Detalle entrega</th><th style="width:110px">Precio unit.</th><th style="width:110px">Subtotal</th><th style="width:30px"></th></tr></thead>
+      <thead><tr id="items-thead"><th style="width:90px">Cantidad</th><th>Descripción</th><th style="width:110px">Subtotal</th><th style="width:30px"></th></tr></thead>
       <tbody id="items-body"></tbody>
     </table>
     <div id="msg-items-contrato" style="display:none;margin-top:8px;padding:8px 12px;background:rgba(16,185,129,0.08);border:1px solid rgba(16,185,129,0.2);border-radius:6px;font-size:12px;color:var(--green)"></div>
@@ -484,7 +486,10 @@ function onItemContratoChange(sel){
   const item=_itemsContratoCache.find(it=>it.id===itemId)||null;
   const desc=item?.descripcion||'';
   const precio=item?.precio_unitario||0;
-  tr.querySelector('[data-desc-hidden]').value=desc;
+  const hidEl=tr.querySelector('[data-desc-hidden]'); if(hidEl) hidEl.value=desc;
+  // Si hay textarea de detalle vacío, sugerir la descripción del ítem
+  const ta=tr.querySelector('[data-detalle]');
+  if(ta && !ta.value.trim()) { ta.value=desc; ta.style.height='auto'; ta.style.height=ta.scrollHeight+'px'; }
   const precioInput=tr.querySelector('[data-precio]');
   if(precioInput) precioInput.value=precio||'';
   recalcularTotales();
@@ -497,30 +502,35 @@ function agregarItemRow(cant='',desc='',precio=0,readonly=false,contratoItemId='
   const esContrato=document.getElementById('nr-tipo').value==='contrato';
 
   if(esContrato){
-    // Modo contrato: dropdown para elegir ítem + cantidad
+    // Modo contrato: dropdown + texto libre de entrega (sin precio unitario)
     const opciones=_buildSelectOpciones(contratoItemId);
     tr.innerHTML=`
-      <td><input type="number" min="0" placeholder="0" value="${cant||''}" style="width:100%" oninput="recalcularTotales()"></td>
-      <td>
-        <select style="width:100%;margin-bottom:4px" onchange="onItemContratoChange(this)">${opciones}</select>
+      <td style="width:80px"><input type="number" min="0" step="any" placeholder="0" value="${cant||''}" style="width:100%" oninput="recalcularTotales()"></td>
+      <td style="width:160px">
+        <select style="width:100%" onchange="onItemContratoChange(this)">${opciones}</select>
         <input type="hidden" data-desc-hidden value="${desc||''}">
+        <input type="hidden" data-precio value="${precio||0}">
       </td>
-      <td><input type="text" placeholder="Descripción de lo entregado..." value="${desc||''}" data-detalle style="width:100%;font-size:12px"></td>
-      <td><input type="number" min="0" placeholder="0.00" value="${precio||''}" readonly style="width:100%;background:var(--bg2);color:var(--muted)" data-precio oninput="recalcularTotales()"></td>
-      <td style="font-family:'DM Mono',monospace;font-size:12px;color:var(--muted);text-align:right;padding-right:8px" data-subtotal>${subtotal>0?fmt(subtotal):'—'}</td>
+      <td><textarea placeholder="Descripción de lo entregado..." data-detalle
+        style="width:100%;min-height:34px;resize:vertical;background:var(--bg3);border:1px solid var(--border);border-radius:6px;color:var(--text);font-size:13px;padding:6px 8px;font-family:inherit;line-height:1.4"
+        oninput="this.style.height='auto';this.style.height=this.scrollHeight+'px'">${desc||''}</textarea></td>
+      <td style="font-family:'DM Mono',monospace;font-size:12px;color:var(--muted);text-align:right;padding-right:8px;white-space:nowrap" data-subtotal>${subtotal>0?fmt(subtotal):'—'}</td>
       <td><button onclick="this.closest('tr').remove();recalcularTotales()" style="background:none;border:none;color:var(--muted);cursor:pointer;font-size:16px">×</button></td>`;
-    // Si hay desc preseleccionada (edición), marcar el select
     if(desc && contratoItemId){
       const selEl=tr.querySelector('select');
       if(selEl) selEl.value=contratoItemId;
+      const ta=tr.querySelector('[data-detalle]');
+      if(ta) ta.value=desc;
     }
   } else {
-    // Modo normal: input de texto libre
+    // Modo normal: texto libre + precio
     tr.innerHTML=`
-      <td><input type="number" min="0" placeholder="0" value="${cant||''}" style="width:100%" oninput="recalcularTotales()"></td>
-      <td><input type="text" placeholder="Descripción del trabajo" value="${desc||''}" style="width:100%"></td>
-      <td><input type="number" min="0" placeholder="0.00" value="${precio||''}" ${readonly?'readonly style="width:100%;background:var(--bg2);color:var(--muted)"':'style="width:100%"'} data-precio oninput="recalcularTotales()"></td>
-      <td style="font-family:'DM Mono',monospace;font-size:12px;color:var(--muted);text-align:right;padding-right:8px" data-subtotal>${subtotal>0?fmt(subtotal):'—'}</td>
+      <td style="width:80px"><input type="number" min="0" step="any" placeholder="0" value="${cant||''}" style="width:100%" oninput="recalcularTotales()"></td>
+      <td><textarea placeholder="Descripción del trabajo" data-detalle
+        style="width:100%;min-height:34px;resize:vertical;background:var(--bg3);border:1px solid var(--border);border-radius:6px;color:var(--text);font-size:13px;padding:6px 8px;font-family:inherit;line-height:1.4"
+        oninput="this.style.height='auto';this.style.height=this.scrollHeight+'px'">${desc||''}</textarea></td>
+      <td style="width:110px"><input type="number" min="0" step="any" placeholder="0.00" value="${precio||''}" ${readonly?'readonly style="width:100%;background:var(--bg2);color:var(--muted)"':'style="width:100%"'} data-precio oninput="recalcularTotales()"></td>
+      <td style="font-family:'DM Mono',monospace;font-size:12px;color:var(--muted);text-align:right;padding-right:8px;white-space:nowrap" data-subtotal>${subtotal>0?fmt(subtotal):'—'}</td>
       <td><button onclick="this.closest('tr').remove();recalcularTotales()" style="background:none;border:none;color:var(--muted);cursor:pointer;font-size:16px">×</button></td>`;
   }
   tbody.appendChild(tr);
@@ -664,12 +674,6 @@ async function editarRemito(id){
         false,
         match?.id||''
       );
-      // Restaurar el detalle en el input de texto libre si es modo contrato
-      if(match?.id) {
-        const lastRow = document.getElementById('items-body').lastElementChild;
-        const detalleInput = lastRow?.querySelector('[data-detalle]');
-        if(detalleInput) detalleInput.value = it.descripcion || '';
-      }
     });
     if(!items||items.length<3) for(let i=(items||[]).length;i<3;i++) agregarItemRow();
     const msgEl=document.getElementById('msg-items-contrato');
@@ -718,13 +722,13 @@ async function guardarRemito(estado){
   let itemsValidos=0;
   for(const fila of filasVal){
     const hiddenDesc=fila.querySelector('[data-desc-hidden]');
-    const textDesc=fila.querySelector('input[type="text"]');
-    const desc=hiddenDesc?(hiddenDesc.value||'').trim():(textDesc?.value||'').trim();
+    const detalleEl=fila.querySelector('[data-detalle]');
+    const desc=detalleEl?((detalleEl.value||'').trim()||(hiddenDesc?.value||'').trim()):(hiddenDesc?.value||'').trim();
     const cantInput=fila.querySelector('input[type="number"]');
     const cant=parseFloat(cantInput?.value)||0;
     if(desc){
       itemsValidos++;
-      if(cant<=0&&tipoRemito==='contrato'){toast('Todos los ítems seleccionados deben tener cantidad mayor a cero.','warn');return;}
+      // cant puede ser 0 para items de texto libre (ej: ASU, referencias)
     }
   }
   if(itemsValidos===0){toast('Agregá al menos un ítem con descripción.','warn');return;}
@@ -789,13 +793,10 @@ async function guardarRemito(estado){
   filas.forEach((fila,i)=>{
     const cantInput=fila.querySelector('input[type="number"]');
     const cantRaw=cantInput?.value?.trim();
-    // En modo contrato: usar data-detalle (texto libre) si existe, sino data-desc-hidden (nombre del ítem)
+    // En modo contrato desc viene del [data-desc-hidden]; en modo normal del input type=text
     const hiddenDesc=fila.querySelector('[data-desc-hidden]');
-    const detalleInput=fila.querySelector('[data-detalle]');
-    const textDesc=fila.querySelector('input[type="text"]:not([data-detalle])');
-    const desc=detalleInput
-      ? ((detalleInput.value||'').trim() || (hiddenDesc?.value||'').trim())
-      : (hiddenDesc?(hiddenDesc.value||'').trim():(textDesc?.value||'').trim());
+    const detalleEl=fila.querySelector('[data-detalle]');
+    const desc=detalleEl?((detalleEl.value||'').trim()||(hiddenDesc?.value||'').trim()):(hiddenDesc?.value||'').trim();
     const precioRaw=fila.querySelector('[data-precio]')?.value||'0';
     if(desc){
       const cantNum=parseFloat(cantRaw)||null;
@@ -857,8 +858,15 @@ async function facturarRemitosSeleccionados(){
 }
 
 async function generarPDF(id){
-  const r=await RemitosAPI.getRemitoById(id);
+  let r=await RemitosAPI.getRemitoById(id);
   if(!r){toast('No se encontró el remito.', 'warn');return;}
+  // Cargar número de contrato si aplica
+  if(r.contrato_id && !r.contratos){
+    try{
+      const {data:ct}=await db.from('contratos').select('numero_contrato').eq('id',r.contrato_id).single();
+      r={...r, contratos:ct};
+    }catch(e){}
+  }
   const items=await RemitosAPI.getItemsRemito(id);
 
   const {jsPDF}=window.jspdf;
@@ -973,7 +981,11 @@ async function generarPDF(id){
     doc.setFont('helvetica','bold');
     doc.text('ORDEN COMPRA:', midX+45, yC+19);
     doc.setFont('helvetica','normal');
-    doc.text(r.orden_compra||'', midX+68, yC+19);
+    // En modo contrato mostrar el número de contrato; sino la OC manual
+    const ocText = r.tipo==='contrato' && r.contratos?.numero_contrato
+      ? r.contratos.numero_contrato
+      : (r.orden_compra||'');
+    doc.text(ocText, midX+68, yC+19);
 
     // Línea
     doc.setLineWidth(0.4); doc.line(L+1, yC+22, R-1, yC+22);
@@ -983,13 +995,16 @@ async function generarPDF(id){
     doc.setFont('helvetica','normal');
     doc.text(r.condicion_venta||'CTA. CTE.', valX, yC+27);
 
+    // ORDEN DE TRABAJO - en la misma línea pero con más espacio
     doc.setFont('helvetica','bold');
-    doc.text('ORDEN DE TRABAJO:', midX+45, yC+27);
+    doc.text('ORDEN DE TRABAJO:', midX+2, yC+27);
     doc.setFont('helvetica','normal');
-    doc.text(r.sector||'', midX+72, yC+27);
+    // Limitar a 30 chars para evitar overflow
+    const sectorText = (r.sector||'').substring(0,30);
+    doc.text(sectorText, midX+32, yC+27);
 
     // ── DESCRIPCIÓN DEL TRABAJO ────────────────────────
-    const yD=yC+30;
+    const yD=yC+32;
     doc.setDrawColor(0,0,0); doc.setLineWidth(0.5);
     doc.line(L+1, yD, R-1, yD);
     doc.setFillColor(230,230,230);
@@ -1012,7 +1027,7 @@ async function generarPDF(id){
     // Items — fondos alternados primero, luego texto
     doc.setTextColor(0,0,0); doc.setFont('helvetica','normal'); doc.setFontSize(9);
     let iy=yD+23;
-    const maxY=yD+155;
+    const maxY=yD+148;
     const descWidth=r.tipo==='contrato'?162:130;
     (items||[]).forEach((item,idx)=>{
       if(iy>maxY) return;
@@ -1028,23 +1043,30 @@ async function generarPDF(id){
       doc.line(L+1, iy-2, R-1, iy-2);
     });
 
-    // Redibujar línea vertical divisoria DESPUÉS de los fondos para que no quede tapada
+    // Redibujar líneas divisorias DESPUÉS de los fondos
     doc.setDrawColor(0,0,0); doc.setLineWidth(0.5);
-    doc.line(L+25, yD+8, L+25, yD+8+155);
+    // Vertical cant | desc
+    doc.line(L+25, yD+8, L+25, yF);
+    // Línea inferior del área de items
+    doc.line(L+1, yF, R-1, yF);
 
     // ── FIRMA ──────────────────────────────────────────
-    const yF=yD+155;
+    const yF=yD+153;
     doc.setDrawColor(0,0,0); doc.setLineWidth(0.4);
     doc.line(L+1, yF, R-1, yF);
+    // Línea separadora antes de firma
+    doc.setDrawColor(180,180,180); doc.setLineWidth(0.3);
+    doc.line(L+1, yF+2, R-1, yF+2);
+    doc.setDrawColor(0,0,0);
     doc.setFontSize(8.5); doc.setFont('helvetica','italic'); doc.setTextColor(60,60,60);
-    doc.text('Recibí Conforme', L+5, yF+7);
+    doc.text('Recibí Conforme', L+5, yF+9);
     doc.setFont('helvetica','normal'); doc.setTextColor(0,0,0);
-    // Líneas de firma
-    doc.line(L+5, yF+18, L+85, yF+18);
-    doc.line(L+100, yF+18, R-5, yF+18);
+    // Líneas de firma con más espacio
+    doc.line(L+5, yF+22, L+85, yF+22);
+    doc.line(L+100, yF+22, R-5, yF+22);
     doc.setFontSize(8);
-    doc.text('FIRMA', L+40, yF+23, {align:'center'});
-    doc.text('ACLARACIÓN', L+140, yF+23, {align:'center'});
+    doc.text('FIRMA', L+40, yF+27, {align:'center'});
+    doc.text('ACLARACIÓN', L+140, yF+27, {align:'center'});
 
     // ── PIE — CAI ──────────────────────────────────────
     const yP=yF+26;
