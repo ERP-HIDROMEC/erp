@@ -55,6 +55,7 @@
     <button class="tab" onclick="cambiarTab('costos',this)">Costos de obra</button>
     <button class="tab" onclick="cambiarTab('rentabilidad',this)">Rentabilidad</button>
     <button class="tab" onclick="cambiarTab('ordenes',this)">Órdenes de Trabajo</button>
+    <button class="tab" onclick="cambiarTab('parte',this)">⚡ Parte diario</button>
   </div>
 
   <div class="filtros">
@@ -447,6 +448,7 @@ async function init(){
 
 function cambiarTab(tab,btn){
   tabActual=tab;
+  document.getElementById('f-estado').style.display=tab==='parte'?'none':'';
   document.querySelectorAll('.tab').forEach(t=>t.classList.remove('active'));
   btn.classList.add('active');
   const btnNuevo=document.getElementById('btn-nuevo');
@@ -454,6 +456,7 @@ function cambiarTab(tab,btn){
   else if(tab==='horas'){btnNuevo.textContent='+ Imputar horas';btnNuevo.style.display='';}
   else if(tab==='costos'){btnNuevo.textContent='+ Costo de obra';btnNuevo.style.display='';}
   else if(tab==='ordenes'){btnNuevo.textContent='+ Nueva OT';btnNuevo.style.display='';}
+  else if(tab==='parte'){btnNuevo.style.display='none';}
   else btnNuevo.style.display='none';
   recargar();
 }
@@ -470,6 +473,7 @@ function recargar(){
   else if(tabActual==='horas') cargarHoras();
   else if(tabActual==='costos') cargarCostos();
   else if(tabActual==='ordenes') cargarOrdenesOT();
+  else if(tabActual==='parte') cargarParteDiario();
   else cargarRentabilidad();
 }
 
@@ -583,12 +587,13 @@ function calcularCostoProyecto(){
                 hs_e*_costosRoles.oficial_esp+hs_s*_costosRoles.supervisor+
                 hs_h*_costosRoles.higiene;
   const costoTotal=costoMO+mat;
+  const fmtN=v=>new Intl.NumberFormat('es-AR',{style:'currency',currency:'ARS',maximumFractionDigits:0}).format(v);
   if(totalHs>0||mat>0){
     document.getElementById('resumen-proyecto').style.display='block';
     document.getElementById('res-horas').textContent=totalHs+'h';
-    document.getElementById('res-costo-mo').textContent=fmt(costoMO);
-    document.getElementById('res-mat').textContent=fmt(mat);
-    document.getElementById('res-total').textContent=fmt(costoTotal);
+    document.getElementById('res-costo-mo').textContent=fmtN(costoMO);
+    document.getElementById('res-mat').textContent=fmtN(mat);
+    document.getElementById('res-total').textContent=fmtN(costoTotal);
   } else {
     document.getElementById('resumen-proyecto').style.display='none';
   }
@@ -1060,6 +1065,7 @@ function imprimirOT(){
 function generarPDFOrdenTrabajo(r){
   const {jsPDF}=window.jspdf;
   const doc=new jsPDF({format:'a4',unit:'mm'});
+  const fmtD=d=>d?new Date(d+'T12:00:00').toLocaleDateString('es-AR'):'—';
   const L=10,W=190,midX=105,T=8;
 
   // Borde doble
@@ -1120,7 +1126,7 @@ function generarPDFOrdenTrabajo(r){
   doc.text('FECHA ENTREGA:',midX+10,yP+8);
   doc.setFont('helvetica','normal');doc.setFontSize(11);
   doc.setTextColor(r.fecha_entrega?200:100,50,50);
-  doc.text(fmtF(r.fecha_entrega),midX+44,yP+8);
+  doc.text(fmtD(r.fecha_entrega),midX+44,yP+8);
   doc.setTextColor(0,0,0);
 
   doc.setFont('helvetica','bold');doc.setFontSize(8);
@@ -1235,6 +1241,402 @@ function cerrarModal(id){document.getElementById(id).classList.remove('show');}
 // logout() → ahora en ERP.logout() (erp-sidebar.js)
 
 init();
+
+// ════════════════════════════════════════════════════════════
+// PARTE DIARIO — carga rápida de horas
+// Reutiliza 100% ProyectosAPI.registrarHoras() y tabla imputacion_horas
+// ════════════════════════════════════════════════════════════
+
+let _parteEmpleados = [];   // cache empleados activos
+let _parteProyectos = [];   // cache proyectos activos
+let _parteEmpresa   = '';   // empresa seleccionada en el parte
+
+async function cargarParteDiario() {
+  const contenido = document.getElementById('contenido');
+  contenido.innerHTML = '<div class="spinner-wrap"><div class="spinner"></div>Cargando parte diario...</div>';
+
+  const emp = document.getElementById('f-empresa').value ||
+              'a1000000-0000-0000-0000-000000000001'; // default Hidromec
+
+  _parteEmpresa = emp;
+
+  // Cargar empleados y proyectos en paralelo
+  const [emps, proyectos] = await Promise.all([
+    db.from('empleados').select('id,nombre,costo_hora,categoria').eq('empresa_id', emp).eq('activo', true).order('nombre'),
+    ProyectosAPI.getProyectosSelect(emp, ['activo','pausado']),
+  ]);
+
+  _parteEmpleados = emps.data || [];
+  _parteProyectos = proyectos || [];
+
+  const hoyStr = hoy();
+
+  contenido.innerHTML = `
+    <div style="background:var(--bg2);border:1px solid var(--border);border-radius:12px;overflow:hidden">
+
+      <!-- Header del parte -->
+      <div style="padding:16px 20px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:16px;flex-wrap:wrap">
+        <div style="display:flex;align-items:center;gap:8px">
+          <label style="font-size:13px;color:var(--muted);white-space:nowrap">Fecha del parte:</label>
+          <input type="date" id="parte-fecha" value="${hoyStr}"
+            style="padding:7px 12px;background:var(--bg3);border:1px solid var(--border);border-radius:8px;color:var(--text);font-size:13px;font-family:'DM Sans',sans-serif">
+        </div>
+        <div style="display:flex;align-items:center;gap:8px">
+          <label style="font-size:13px;color:var(--muted);white-space:nowrap">Empresa:</label>
+          <select id="parte-empresa" onchange="recargarParteEmpresa()"
+            style="padding:7px 12px;background:var(--bg3);border:1px solid var(--border);border-radius:8px;color:var(--text);font-size:13px;font-family:'DM Sans',sans-serif">
+            <option value="a1000000-0000-0000-0000-000000000001" ${emp==='a1000000-0000-0000-0000-000000000001'?'selected':''}>Hidromec</option>
+            <option value="a2000000-0000-0000-0000-000000000002" ${emp==='a2000000-0000-0000-0000-000000000002'?'selected':''}>Placemem</option>
+          </select>
+        </div>
+        <button class="btn btn-ghost btn-sm" onclick="copiarDiaAnterior()" title="Copia las filas del último parte cargado">
+          📋 Copiar día anterior
+        </button>
+        <button class="btn btn-ghost btn-sm" onclick="agregarFilaParte()">+ Fila</button>
+        <div style="margin-left:auto;display:flex;align-items:center;gap:12px">
+          <span style="font-size:13px;color:var(--muted)">Total: <strong id="parte-total-hs" style="color:var(--text);font-family:'DM Mono',monospace">0 hs</strong> · <strong id="parte-total-costo" style="color:var(--orange);font-family:'DM Mono',monospace">$0</strong></span>
+          <button class="btn btn-success" onclick="guardarParte()" style="padding:8px 20px;font-size:14px">
+            ✓ Guardar parte
+          </button>
+        </div>
+      </div>
+
+      <!-- Tabla editable -->
+      <div style="overflow-x:auto">
+        <table style="width:100%;border-collapse:collapse">
+          <thead>
+            <tr style="background:var(--bg3)">
+              <th style="padding:10px 12px;text-align:left;font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:0.6px;white-space:nowrap">Empleado</th>
+              <th style="padding:10px 12px;text-align:left;font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:0.6px">Proyecto</th>
+              <th style="padding:10px 12px;text-align:left;font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:0.6px;width:90px">Tipo hora</th>
+              <th style="padding:10px 12px;text-align:center;font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:0.6px;width:70px">Horas</th>
+              <th style="padding:10px 12px;text-align:right;font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:0.6px;width:110px">Costo</th>
+              <th style="padding:10px 12px;text-align:left;font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:0.6px">Obs.</th>
+              <th style="width:32px"></th>
+            </tr>
+          </thead>
+          <tbody id="parte-body"></tbody>
+        </table>
+      </div>
+
+      <!-- Footer resumen -->
+      <div id="parte-resumen-dia" style="padding:12px 20px;border-top:1px solid var(--border);font-size:12px;color:var(--muted);display:none"></div>
+    </div>
+
+    <!-- Historial del día -->
+    <div id="parte-historial" style="margin-top:20px"></div>`;
+
+  // Agregar 3 filas iniciales vacías
+  for (let i = 0; i < 3; i++) agregarFilaParte();
+
+  // Cargar historial del día
+  await cargarHistorialParte(hoyStr);
+
+  // Cuando cambia la fecha, recargar historial
+  document.getElementById('parte-fecha').addEventListener('change', async (e) => {
+    await cargarHistorialParte(e.target.value);
+  });
+}
+
+function _opcionesEmpleados(selectedId = '') {
+  return '<option value="">— Empleado —</option>' +
+    _parteEmpleados.map(e =>
+      `<option value="${e.id}" data-costo="${e.costo_hora||0}" data-rol="${e.categoria||'oficial'}" ${e.id===selectedId?'selected':''}>${e.nombre}</option>`
+    ).join('');
+}
+
+function _opcionesProyectos(selectedId = '') {
+  return '<option value="">— Proyecto —</option>' +
+    _parteProyectos.map(p =>
+      `<option value="${p.id}" ${p.id===selectedId?'selected':''}>${p.nombre}</option>`
+    ).join('');
+}
+
+function agregarFilaParte(datos = {}) {
+  const tbody = document.getElementById('parte-body');
+  if (!tbody) return;
+  const tr = document.createElement('tr');
+  tr.style.cssText = 'border-bottom:1px solid var(--border);transition:background 0.1s';
+  tr.onmouseover = () => tr.style.background = 'rgba(255,255,255,0.02)';
+  tr.onmouseout  = () => tr.style.background = '';
+
+  const empOpts     = _opcionesEmpleados(datos.empleado_id||'');
+  const proyOpts    = _opcionesProyectos(datos.proyecto_id||'');
+  const tipoHora    = datos.tipo_hora || 'normal';
+  const horas       = datos.horas || '';
+  const obs         = datos.obs || '';
+  const costoInicial = datos.costo_calculado || 0;
+
+  tr.innerHTML = `
+    <td style="padding:8px 10px">
+      <select onchange="onParteEmpleadoChange(this)" data-emp
+        style="width:100%;padding:7px 8px;background:var(--bg3);border:1px solid var(--border);border-radius:6px;color:var(--text);font-size:13px;font-family:'DM Sans',sans-serif">
+        ${empOpts}
+      </select>
+    </td>
+    <td style="padding:8px 10px">
+      <select data-proy
+        style="width:100%;padding:7px 8px;background:var(--bg3);border:1px solid var(--border);border-radius:6px;color:var(--text);font-size:13px;font-family:'DM Sans',sans-serif">
+        ${proyOpts}
+      </select>
+    </td>
+    <td style="padding:8px 10px">
+      <select data-tipo onchange="recalcularFilaParte(this.closest('tr'))"
+        style="width:100%;padding:7px 8px;background:var(--bg3);border:1px solid var(--border);border-radius:6px;color:var(--text);font-size:13px;font-family:'DM Sans',sans-serif">
+        <option value="normal"  ${tipoHora==='normal' ?'selected':''}>Normal</option>
+        <option value="h50"     ${tipoHora==='h50'    ?'selected':''}>50%</option>
+        <option value="h100"    ${tipoHora==='h100'   ?'selected':''}>100%</option>
+      </select>
+    </td>
+    <td style="padding:8px 10px">
+      <input type="number" min="0" step="0.5" placeholder="8" value="${horas}" data-hs
+        oninput="recalcularFilaParte(this.closest('tr'))"
+        style="width:100%;padding:7px 8px;background:var(--bg3);border:1px solid var(--border);border-radius:6px;color:var(--text);font-size:13px;text-align:center;font-family:'DM Mono',monospace">
+    </td>
+    <td style="padding:8px 10px;text-align:right">
+      <span data-costo-fila style="font-family:'DM Mono',monospace;font-size:13px;color:var(--orange)">
+        ${costoInicial ? fmt(costoInicial) : '—'}
+      </span>
+      <input type="hidden" data-costo-hora value="${datos.costo_hora_usado||0}">
+    </td>
+    <td style="padding:8px 10px">
+      <input type="text" placeholder="Obs. opcional" value="${obs}" data-obs
+        style="width:100%;padding:7px 8px;background:var(--bg3);border:1px solid var(--border);border-radius:6px;color:var(--text);font-size:12px;font-family:'DM Sans',sans-serif">
+    </td>
+    <td style="padding:8px 10px;text-align:center">
+      <button onclick="this.closest('tr').remove();recalcularTotalParte()"
+        style="background:none;border:none;color:var(--muted);cursor:pointer;font-size:16px;padding:2px 6px">×</button>
+    </td>`;
+
+  tbody.appendChild(tr);
+  if (datos.costo_hora_usado) recalcularFilaParte(tr);
+}
+
+function onParteEmpleadoChange(sel) {
+  const opt = sel.options[sel.selectedIndex];
+  const costoHora = parseFloat(opt?.dataset?.costo||0);
+  const tr = sel.closest('tr');
+  tr.querySelector('[data-costo-hora]').value = costoHora;
+  recalcularFilaParte(tr);
+}
+
+function recalcularFilaParte(tr) {
+  const hs    = parseFloat(tr.querySelector('[data-hs]')?.value)||0;
+  const tipo  = tr.querySelector('[data-tipo]')?.value||'normal';
+  const ch    = parseFloat(tr.querySelector('[data-costo-hora]')?.value)||0;
+  const mult  = tipo==='h100'?2:tipo==='h50'?1.5:1;
+  const costo = hs * ch * mult;
+  const span  = tr.querySelector('[data-costo-fila]');
+  if (span) span.textContent = costo > 0 ? fmt(costo) : '—';
+  recalcularTotalParte();
+}
+
+function recalcularTotalParte() {
+  const filas = document.querySelectorAll('#parte-body tr');
+  let totalHs = 0, totalCosto = 0;
+  filas.forEach(tr => {
+    const hs   = parseFloat(tr.querySelector('[data-hs]')?.value)||0;
+    const tipo = tr.querySelector('[data-tipo]')?.value||'normal';
+    const ch   = parseFloat(tr.querySelector('[data-costo-hora]')?.value)||0;
+    const mult = tipo==='h100'?2:tipo==='h50'?1.5:1;
+    totalHs    += hs;
+    totalCosto += hs * ch * mult;
+  });
+  const elHs    = document.getElementById('parte-total-hs');
+  const elCosto = document.getElementById('parte-total-costo');
+  if (elHs)    elHs.textContent    = totalHs + ' hs';
+  if (elCosto) elCosto.textContent = fmt(totalCosto);
+}
+
+async function recargarParteEmpresa() {
+  const emp = document.getElementById('parte-empresa').value;
+  _parteEmpresa = emp;
+  const [emps, proyectos] = await Promise.all([
+    db.from('empleados').select('id,nombre,costo_hora,categoria').eq('empresa_id', emp).eq('activo', true).order('nombre'),
+    ProyectosAPI.getProyectosSelect(emp, ['activo','pausado']),
+  ]);
+  _parteEmpleados = emps.data || [];
+  _parteProyectos = proyectos || [];
+  // Reconstruir selects en filas existentes
+  document.querySelectorAll('#parte-body tr').forEach(tr => {
+    const empSel  = tr.querySelector('[data-emp]');
+    const proySel = tr.querySelector('[data-proy]');
+    if (empSel)  empSel.innerHTML  = _opcionesEmpleados();
+    if (proySel) proySel.innerHTML = _opcionesProyectos();
+    tr.querySelector('[data-costo-hora]').value = 0;
+    const span = tr.querySelector('[data-costo-fila]');
+    if (span) span.textContent = '—';
+  });
+  recalcularTotalParte();
+}
+
+async function copiarDiaAnterior() {
+  const fecha = document.getElementById('parte-fecha').value;
+  try {
+    // Buscar el día más reciente anterior a la fecha seleccionada
+    const { data } = await db.from('imputacion_horas')
+      .select('*')
+      .eq('empresa_id', _parteEmpresa)
+      .lt('fecha', fecha)
+      .order('fecha', { ascending: false })
+      .limit(50);
+
+    if (!data || !data.length) { toast('No hay partes anteriores para copiar.', 'warn'); return; }
+
+    // Tomar solo los registros de la última fecha encontrada
+    const ultimaFecha = data[0].fecha;
+    const registros   = data.filter(r => r.fecha === ultimaFecha);
+
+    // Limpiar filas actuales y cargar las del día anterior
+    document.getElementById('parte-body').innerHTML = '';
+    registros.forEach(r => {
+      // Buscar costo_hora actualizado del empleado
+      const emp = _parteEmpleados.find(e => e.id === r.empleado_id);
+      agregarFilaParte({
+        empleado_id:    r.empleado_id,
+        proyecto_id:    r.proyecto_id,
+        tipo_hora:      r.tipo_hora || 'normal',
+        horas:          r.horas,
+        obs:            r.observaciones || '',
+        costo_hora_usado: emp ? (emp.costo_hora || 0) : (r.costo_hora_usado || 0),
+      });
+    });
+    recalcularTotalParte();
+    toast(`✓ Copiado parte del ${fmtF(ultimaFecha)} (${registros.length} registros)`, 'success');
+  } catch(e) { manejarError(e, 'copiar día anterior'); }
+}
+
+async function guardarParte() {
+  const fecha   = document.getElementById('parte-fecha').value;
+  const filas   = document.querySelectorAll('#parte-body tr');
+  const registros = [];
+
+  filas.forEach(tr => {
+    const empId  = tr.querySelector('[data-emp]')?.value;
+    const proyId = tr.querySelector('[data-proy]')?.value;
+    const hs     = parseFloat(tr.querySelector('[data-hs]')?.value)||0;
+    const tipo   = tr.querySelector('[data-tipo]')?.value||'normal';
+    const ch     = parseFloat(tr.querySelector('[data-costo-hora]')?.value)||0;
+    const obs    = tr.querySelector('[data-obs]')?.value?.trim()||null;
+    const mult   = tipo==='h100'?2:tipo==='h50'?1.5:1;
+
+    if (!empId || !proyId || !hs) return; // fila incompleta → ignorar
+
+    // Buscar rol del empleado para registrar
+    const emp = _parteEmpleados.find(e => e.id === empId);
+    const rol = emp?.categoria || 'oficial';
+
+    registros.push({
+      empresa_id:        _parteEmpresa,
+      proyecto_id:       proyId,
+      empleado_id:       empId,
+      fecha,
+      rol,
+      tipo_hora:         tipo,
+      horas:             hs,
+      cantidad_personas: 1,
+      costo_hora_usado:  ch,
+      costo_calculado:   hs * ch * mult,
+      observaciones:     obs,
+    });
+  });
+
+  if (!registros.length) {
+    toast('No hay filas completas para guardar. Verificá que cada fila tenga empleado, proyecto y horas.', 'warn');
+    return;
+  }
+
+  const btn = document.querySelector('#contenido .btn-success');
+  if (btn) { btn.disabled = true; btn.textContent = 'Guardando...'; }
+
+  try {
+    // Insertar todos los registros de golpe — alimenta imputacion_horas directamente
+    const { error } = await db.from('imputacion_horas').insert(registros);
+    if (error) throw error;
+
+    toast(`✓ Parte guardado — ${registros.length} registro${registros.length!==1?'s':''} (${fmt(registros.reduce((s,r)=>s+r.costo_calculado,0))})`, 'success');
+
+    // Resetear filas y recargar historial
+    document.getElementById('parte-body').innerHTML = '';
+    for (let i = 0; i < 3; i++) agregarFilaParte();
+    recalcularTotalParte();
+    await cargarHistorialParte(fecha);
+  } catch(e) {
+    manejarError(e, 'guardar parte');
+  } finally {
+    if (btn) { btn.disabled = false; btn.textContent = '✓ Guardar parte'; }
+  }
+}
+
+async function cargarHistorialParte(fecha) {
+  const hist = document.getElementById('parte-historial');
+  if (!hist) return;
+
+  try {
+    const { data } = await db.from('imputacion_horas')
+      .select('*,empleados(nombre),proyectos(nombre)')
+      .eq('empresa_id', _parteEmpresa)
+      .eq('fecha', fecha)
+      .order('empleados(nombre)');
+
+    if (!data || !data.length) {
+      hist.innerHTML = `<div style="padding:16px;color:var(--muted);font-size:13px;text-align:center">Sin registros para el ${fmtF(fecha)}</div>`;
+      return;
+    }
+
+    const totalHs    = data.reduce((s,r) => s + Number(r.horas||0), 0);
+    const totalCosto = data.reduce((s,r) => s + Number(r.costo_calculado||0), 0);
+    const TIPO_LABEL = { normal:'Normal', h50:'50%', h100:'100%' };
+    const TIPO_COLOR = { normal:'var(--muted)', h50:'var(--orange)', h100:'var(--red)' };
+
+    hist.innerHTML = `
+      <div style="background:var(--bg2);border:1px solid var(--border);border-radius:12px;overflow:hidden">
+        <div style="padding:14px 20px;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center">
+          <span style="font-weight:600;font-size:14px">📋 Registrado el ${fmtF(fecha)}</span>
+          <span style="font-size:13px;color:var(--muted)">${data.length} registros · <strong style="font-family:'DM Mono',monospace;color:var(--text)">${totalHs} hs</strong> · <strong style="font-family:'DM Mono',monospace;color:var(--orange)">${fmt(totalCosto)}</strong></span>
+        </div>
+        <div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse">
+          <thead><tr style="background:var(--bg3)">
+            <th style="padding:8px 12px;text-align:left;font-size:11px;color:var(--muted);text-transform:uppercase">Empleado</th>
+            <th style="padding:8px 12px;text-align:left;font-size:11px;color:var(--muted);text-transform:uppercase">Proyecto</th>
+            <th style="padding:8px 12px;text-align:center;font-size:11px;color:var(--muted);text-transform:uppercase">Tipo</th>
+            <th style="padding:8px 12px;text-align:center;font-size:11px;color:var(--muted);text-transform:uppercase">Horas</th>
+            <th style="padding:8px 12px;text-align:right;font-size:11px;color:var(--muted);text-transform:uppercase">Costo</th>
+            <th style="padding:8px 12px;text-align:left;font-size:11px;color:var(--muted);text-transform:uppercase">Obs.</th>
+            <th style="width:32px"></th>
+          </tr></thead>
+          <tbody>
+            ${data.map(r => `<tr style="border-bottom:1px solid var(--border)">
+              <td style="padding:8px 12px;font-size:13px;font-weight:500">${r.empleados?.nombre||'—'}</td>
+              <td style="padding:8px 12px;font-size:12px;color:var(--muted)">${r.proyectos?.nombre||'—'}</td>
+              <td style="padding:8px 12px;text-align:center">
+                <span style="font-size:11px;padding:2px 8px;border-radius:4px;background:var(--bg3);color:${TIPO_COLOR[r.tipo_hora||'normal']}">${TIPO_LABEL[r.tipo_hora||'normal']||r.tipo_hora}</span>
+              </td>
+              <td style="padding:8px 12px;text-align:center;font-family:'DM Mono',monospace;font-size:13px">${r.horas}</td>
+              <td style="padding:8px 12px;text-align:right;font-family:'DM Mono',monospace;font-size:13px;color:var(--orange)">${fmt(r.costo_calculado)}</td>
+              <td style="padding:8px 12px;font-size:12px;color:var(--muted)">${r.observaciones||'—'}</td>
+              <td style="padding:8px 12px;text-align:center">
+                <button onclick="borrarRegistroParte('${r.id}')" title="Borrar este registro"
+                  style="background:none;border:none;color:var(--muted);cursor:pointer;font-size:14px">×</button>
+              </td>
+            </tr>`).join('')}
+          </tbody>
+        </table></div>
+      </div>`;
+  } catch(e) { console.warn('Error cargando historial parte:', e); }
+}
+
+async function borrarRegistroParte(id) {
+  const ok = await confirmar('¿Borrar este registro de horas?');
+  if (!ok) return;
+  try {
+    await ProyectosAPI.eliminarImputacion(id);
+    const fecha = document.getElementById('parte-fecha')?.value || hoy();
+    await cargarHistorialParte(fecha);
+    toast('Registro eliminado.', 'success');
+  } catch(e) { manejarError(e, 'borrar registro'); }
+}
+
 </script>
 </body>
 </html>
