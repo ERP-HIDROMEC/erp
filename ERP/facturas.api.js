@@ -142,8 +142,10 @@ const FacturasAPI = (() => {
   }
 
   async function actualizarFactura(id, payload) {
+    // Excluir campos que no son columnas de la tabla
+    const { remitos_ids, ...clean } = payload;
     const { error } = await db.from('facturas_emitidas')
-      .update(payload)
+      .update(clean)
       .eq('id', id);
     if (error) throw error;
   }
