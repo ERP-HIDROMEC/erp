@@ -1049,15 +1049,15 @@ async function generarPDF(id){
       doc.line(L+1, iy-2, R-1, iy-2);
     });
 
+    // ── FIRMA ──────────────────────────────────────────
+    const yF=yD+153;
+
     // Redibujar líneas divisorias DESPUÉS de los fondos
     doc.setDrawColor(0,0,0); doc.setLineWidth(0.5);
     // Vertical cant | desc
     doc.line(L+25, yD+8, L+25, yF);
     // Línea inferior del área de items
     doc.line(L+1, yF, R-1, yF);
-
-    // ── FIRMA ──────────────────────────────────────────
-    const yF=yD+153;
     doc.setDrawColor(0,0,0); doc.setLineWidth(0.4);
     doc.line(L+1, yF, R-1, yF);
     // Línea separadora antes de firma
