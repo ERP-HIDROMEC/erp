@@ -90,7 +90,7 @@
 
 <!-- MODAL NUEVO REMITO -->
 <div class="modal-overlay" id="modal-remito">
-  <div class="modal">
+  <div class="modal" style="max-width:920px;width:96vw">
     <h3 id="rem-titulo">Nuevo remito</h3>
 
     <div id="cai-info" class="cai-info" style="display:none"></div>
@@ -505,14 +505,14 @@ function agregarItemRow(cant='',desc='',precio=0,readonly=false,contratoItemId='
     // Modo contrato: dropdown + texto libre de entrega (sin precio unitario)
     const opciones=_buildSelectOpciones(contratoItemId);
     tr.innerHTML=`
-      <td style="width:80px"><input type="number" min="0" step="any" placeholder="0" value="${cant||''}" style="width:100%" oninput="recalcularTotales()"></td>
-      <td style="width:160px">
+      <td style="width:65px"><input type="number" min="0" step="any" placeholder="0" value="${cant||''}" style="width:100%" oninput="recalcularTotales()"></td>
+      <td style="width:140px;min-width:120px">
         <select style="width:100%" onchange="onItemContratoChange(this)">${opciones}</select>
         <input type="hidden" data-desc-hidden value="${desc||''}">
         <input type="hidden" data-precio value="${precio||0}">
       </td>
       <td><textarea placeholder="Descripción de lo entregado..." data-detalle
-        style="width:100%;min-height:34px;resize:vertical;background:var(--bg3);border:1px solid var(--border);border-radius:6px;color:var(--text);font-size:13px;padding:6px 8px;font-family:inherit;line-height:1.4"
+        style="width:100%;min-height:60px;resize:vertical;background:var(--bg3);border:1px solid var(--border);border-radius:6px;color:var(--text);font-size:13px;padding:8px 10px;font-family:inherit;line-height:1.5"
         oninput="this.style.height='auto';this.style.height=this.scrollHeight+'px'">${desc||''}</textarea></td>
       <td style="font-family:'DM Mono',monospace;font-size:12px;color:var(--muted);text-align:right;padding-right:8px;white-space:nowrap" data-subtotal>${subtotal>0?fmt(subtotal):'—'}</td>
       <td><button onclick="this.closest('tr').remove();recalcularTotales()" style="background:none;border:none;color:var(--muted);cursor:pointer;font-size:16px">×</button></td>`;
@@ -525,9 +525,9 @@ function agregarItemRow(cant='',desc='',precio=0,readonly=false,contratoItemId='
   } else {
     // Modo normal: texto libre + precio
     tr.innerHTML=`
-      <td style="width:80px"><input type="number" min="0" step="any" placeholder="0" value="${cant||''}" style="width:100%" oninput="recalcularTotales()"></td>
+      <td style="width:65px"><input type="number" min="0" step="any" placeholder="0" value="${cant||''}" style="width:100%" oninput="recalcularTotales()"></td>
       <td><textarea placeholder="Descripción del trabajo" data-detalle
-        style="width:100%;min-height:34px;resize:vertical;background:var(--bg3);border:1px solid var(--border);border-radius:6px;color:var(--text);font-size:13px;padding:6px 8px;font-family:inherit;line-height:1.4"
+        style="width:100%;min-height:60px;resize:vertical;background:var(--bg3);border:1px solid var(--border);border-radius:6px;color:var(--text);font-size:13px;padding:8px 10px;font-family:inherit;line-height:1.5"
         oninput="this.style.height='auto';this.style.height=this.scrollHeight+'px'">${desc||''}</textarea></td>
       <td style="width:110px"><input type="number" min="0" step="any" placeholder="0.00" value="${precio||''}" ${readonly?'readonly style="width:100%;background:var(--bg2);color:var(--muted)"':'style="width:100%"'} data-precio oninput="recalcularTotales()"></td>
       <td style="font-family:'DM Mono',monospace;font-size:12px;color:var(--muted);text-align:right;padding-right:8px;white-space:nowrap" data-subtotal>${subtotal>0?fmt(subtotal):'—'}</td>
@@ -858,6 +858,12 @@ async function facturarRemitosSeleccionados(){
 }
 
 async function generarPDF(id){
+  try{
+  if(!window.jspdf||!window.jspdf.jsPDF){
+    toast('Librería PDF no cargada. Recargá la página.','error');
+    console.error('jsPDF no disponible:', window.jspdf);
+    return;
+  }
   let r=await RemitosAPI.getRemitoById(id);
   if(!r){toast('No se encontró el remito.', 'warn');return;}
   // Cargar número de contrato si aplica
@@ -1119,6 +1125,10 @@ async function generarPDF(id){
 
   const nroText=r.numero_formateado||r.numero;
   doc.save('Remito_'+nroText+'_'+(r.clientes?.nombre||'cliente').replace(/ /g,'_')+'.pdf');
+  } catch(e) {
+    console.error('Error generando PDF:', e);
+    toast('Error al generar PDF: '+(e?.message||String(e)), 'error');
+  }
 }
 
 // ===== TALONARIOS =====
