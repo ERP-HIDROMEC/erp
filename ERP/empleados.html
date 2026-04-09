@@ -1059,8 +1059,8 @@ async function guardarDocumento(){
     const {error:uploadError}=await db.storage.from('syh-docs').upload(path,file,{contentType:file.type,upsert:false});
     if(uploadError){document.getElementById('nd-upload-progress').style.display='none';toast('Error al subir: ', 'error');return;}
     document.getElementById('nd-progress-bar').style.width='90%';
-    const {data:urlData}=await db.storage.from('syh-docs').createSignedUrl(path,60*60*24*365*10);
-    archivoUrl=urlData?.signedUrl||null;
+    const {data:urlData}=db.storage.from('syh-docs').getPublicUrl(path);
+    archivoUrl=urlData?.publicUrl||null;
     archivoPatch=path;
     document.getElementById('nd-progress-bar').style.width='100%';
   }
@@ -1293,8 +1293,8 @@ async function guardarAusencia(){
     document.getElementById('na-progress-bar').style.width='50%';
     const {error:ue}=await db.storage.from('syh-docs').upload(path,file,{contentType:file.type,upsert:false});
     if(!ue){
-      const {data:ud}=await db.storage.from('syh-docs').createSignedUrl(path,60*60*24*365*10);
-      certUrl=ud?.signedUrl||null;certPath=path;
+      const {data:ud}=db.storage.from('syh-docs').getPublicUrl(path);
+      certUrl=ud?.publicUrl||null;certPath=path;
     }
     document.getElementById('na-progress-bar').style.width='100%';
     document.getElementById('na-upload-progress').style.display='none';
@@ -1555,7 +1555,7 @@ async function procesarXLS(input) {
       empleado_bd_id: empBD?.id || null,
       empleado_nombre: emp.nombre,
       empleado_cuil: emp.cuil,
-      empresa_id: empId,
+      empresa_id: empBD?.empresa_id || empId,
       periodo: emp.periodo || parsed.periodo,
       tipo: emp.tipoLiq || parsed.tipoLiq,
       monto_bruto: bruto,
