@@ -489,15 +489,16 @@ function cambiarTab(tab,btn){
   const btnNuevo=document.getElementById('btn-nuevo');
   const noDoc=['ausentismo','costos'];
   document.getElementById('btn-importar-xls').style.display=tab==='sueldos'?'':'none';
-  if(tab==='sueldos') btnNuevo.textContent='+ Registrar sueldo';
-  else if(tab==='vehiculos') btnNuevo.textContent='+ Nuevo vehiculo/equipo';
-  else if(tab==='docs-empresa') btnNuevo.textContent='+ Subir documento';
-  else if(tab==='docs-vehiculos') btnNuevo.textContent='+ Subir documento';
-  else if(tab==='docs-personal') btnNuevo.textContent='+ Subir documento';
-  else if(tab==='ausencias') btnNuevo.textContent='+ Registrar ausencia';
-  else if(tab==='francos') { btnNuevo.textContent='+ Cargar franco'; btnNuevo.style.display=''; }
-  else if(noDoc.includes(tab)) { btnNuevo.textContent=''; btnNuevo.style.display='none'; }
-  else { btnNuevo.textContent='+ Nuevo empleado'; btnNuevo.style.display=''; }
+  if(noDoc.includes(tab)) { btnNuevo.textContent=''; btnNuevo.style.display='none'; }
+  else {
+    btnNuevo.style.display='';
+    if(tab==='sueldos')          btnNuevo.textContent='+ Registrar sueldo';
+    else if(tab==='vehiculos')   btnNuevo.textContent='+ Nuevo vehiculo/equipo';
+    else if(tab==='docs-empresa'||tab==='docs-vehiculos'||tab==='docs-personal') btnNuevo.textContent='+ Subir documento';
+    else if(tab==='ausencias')   btnNuevo.textContent='+ Registrar ausencia';
+    else if(tab==='francos')     btnNuevo.textContent='+ Cargar franco';
+    else                         btnNuevo.textContent='+ Nuevo empleado';
+  }
   const hideFiltro=['sueldos','costos','vehiculos','docs-empresa','docs-vehiculos','docs-personal','ausencias','ausentismo','francos'];
   document.getElementById('f-estado').style.display=hideFiltro.includes(tab)?'none':'';
   recargar();
