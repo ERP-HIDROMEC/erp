@@ -1071,49 +1071,98 @@ async function cargarHistorialOP(){
     .eq('pagado',true)
     .not('orden_pago_nro','is',null)
     .order('orden_pago_at',{ascending:false})
-    .limit(100);
+    .limit(500);
   if(error){container.innerHTML='<div style="padding:40px;text-align:center;color:var(--red)">Error cargando historial</div>';return;}
   const rows=data||[];
 
+  // Agrupar por orden_pago_nro — una fila por OP
+  const opMap={};
+  rows.forEach(r=>{
+    const nro=r.orden_pago_nro;
+    if(!opMap[nro]){
+      opMap[nro]={
+        nro,
+        fecha:r.fecha_pago_real,
+        empresa:r.empresas?.nombre||'—',
+        proveedor:r.proveedores?.nombre||'Sin proveedor',
+        cuit:r.proveedores?.cuit||'',
+        metodo:r.metodo_pago||'—',
+        monto:0,
+        facturas:[],
+        primerEgresoId:r.id,  // para descargar el PDF
+      };
+    }
+    opMap[nro].monto+=Number(r.monto||0);
+    if(r.numero_factura) opMap[nro].facturas.push(r.numero_factura);
+  });
+  const ops=Object.values(opMap).sort((a,b)=>b.nro.localeCompare(a.nro));
+
   container.innerHTML=`
     <div style="padding:16px 20px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between">
-      <div><span style="font-size:13px;color:var(--muted)">${rows.length} órdenes de pago emitidas</span></div>
+      <div><span style="font-size:13px;color:var(--muted)">${ops.length} órdenes de pago emitidas</span></div>
     </div>
     <div style="overflow-x:auto"><table>
-      <thead><tr><th>N° Orden</th><th>Fecha pago</th><th>Empresa</th><th>Proveedor</th><th>Descripción</th><th>Método</th><th>Monto</th><th>Acción</th></tr></thead>
-      <tbody>${rows.length?rows.map(r=>`<tr>
-        <td class="mono" style="font-weight:600;color:var(--blue)">${r.orden_pago_nro||'—'}</td>
-        <td class="mono">${r.fecha_pago_real?fmtF(r.fecha_pago_real):'—'}</td>
-        <td style="font-size:12px">${r.empresas?.nombre||'—'}</td>
-        <td><div style="font-size:13px">${r.proveedores?.nombre||'Sin proveedor'}</div>
-          ${r.proveedores?.cuit?`<div style="font-size:11px;color:var(--muted)">${r.proveedores.cuit}</div>`:''}</td>
-        <td style="font-size:12px;color:var(--muted);max-width:160px">${r.descripcion||''}</td>
-        <td style="font-size:12px">${r.metodo_pago||'—'}</td>
-        <td class="mono" style="font-weight:600">${fmt(r.monto)}</td>
-        <td><button class="btn btn-sm btn-ghost" onclick="descargarOrdenPago('${r.id}')">⬇ PDF</button></td>
+      <thead><tr><th>N° Orden</th><th>Fecha pago</th><th>Empresa</th><th>Proveedor</th><th>Facturas</th><th>Método</th><th>Monto total</th><th>PDF</th></tr></thead>
+      <tbody>${ops.length?ops.map(op=>`<tr>
+        <td class="mono" style="font-weight:600;color:var(--blue)">${op.nro}</td>
+        <td class="mono">${op.fecha?fmtF(op.fecha):'—'}</td>
+        <td style="font-size:12px">${op.empresa}</td>
+        <td><div style="font-size:13px">${op.proveedor}</div>
+          ${op.cuit?`<div style="font-size:11px;color:var(--muted)">${op.cuit}</div>`:''}</td>
+        <td style="font-size:11px;color:var(--muted);max-width:180px">${op.facturas.slice(0,3).join(' / ')+(op.facturas.length>3?' +'+( op.facturas.length-3)+' más':'')}</td>
+        <td style="font-size:12px">${op.metodo}</td>
+        <td class="mono" style="font-weight:600;color:var(--green)">${fmt(op.monto)}</td>
+        <td><button class="btn btn-sm btn-ghost" onclick="descargarOrdenPagoAgrupada('${op.nro}')">⬇ PDF</button></td>
       </tr>`).join(''):'<tr><td colspan="8" style="text-align:center;padding:40px;color:var(--muted)">Sin órdenes de pago emitidas</td></tr>'}</tbody>
     </table></div>`;
 }
 
 async function descargarOrdenPago(egresoId){
-  // Cargar egreso con joins + líneas de pago
-  const {data:eg}=await db.from('egresos')
-    .select('*,proveedores(nombre,cuit),empresas(nombre,cuit)')
-    .eq('id',egresoId).single();
-  if(!eg){toast('No se pudo cargar el egreso','error');return;}
+  // Compatibilidad hacia atrás — delegar a la función agrupada si tiene nro
+  const {data:eg}=await db.from('egresos').select('orden_pago_nro').eq('id',egresoId).single();
+  if(eg?.orden_pago_nro) { await descargarOrdenPagoAgrupada(eg.orden_pago_nro); return; }
+  toast('No se encontró la orden de pago.','warn');
+}
 
+async function descargarOrdenPagoAgrupada(nroOrden){
+  // Cargar TODOS los egresos con ese número de OP
+  const {data:egresos}=await db.from('egresos')
+    .select('*,proveedores(nombre,cuit),empresas(nombre,cuit)')
+    .eq('orden_pago_nro',nroOrden)
+    .order('created_at');
+  if(!egresos||!egresos.length){toast('No se encontró la orden de pago.','error');return;}
+
+  // Cargar líneas de pago del primer egreso (donde las guardamos)
   let lineas=[];
   try{
-    const {data:_l,error:_le}=await db.from('egresos_pagos_detalle')
-      .select('*')
-      .eq('egreso_id',egresoId)
-      .order('created_at');
-    if(!_le&&_l) lineas=_l;
+    const {data:_l}=await db.from('egresos_pagos_detalle')
+      .select('*').eq('egreso_id',egresos[0].id).order('created_at');
+    if(_l) lineas=_l;
   }catch(e){ console.warn('egresos_pagos_detalle no disponible:',e); }
 
   const u=await getUsuario();
-  generarPDFOrden(eg,eg.orden_pago_nro||'OP-???',eg.fecha_pago_real||new Date().toISOString().split('T')[0],
-    eg.metodo_pago||'—',u?.email||'',lineas);
+  const totalAgrupado=egresos.reduce((s,r)=>s+Number(r.monto||0),0);
+
+  if(egresos.length===1){
+    // OP individual — PDF simple
+    generarPDFOrden(egresos[0],nroOrden,
+      egresos[0].fecha_pago_real||new Date().toISOString().split('T')[0],
+      egresos[0].metodo_pago||'—',u?.email||'',lineas);
+  } else {
+    // OP agrupada — PDF con todas las facturas
+    const {data:egConJoins}=await db.from('egresos')
+      .select('*,proveedores(nombre,cuit),empresas(nombre,cuit)')
+      .eq('id',egresos[0].id).single();
+    const egresoAgrupado={
+      ...(egConJoins||egresos[0]),
+      _egresos_agrupados:egresos,
+      _total_agrupado:totalAgrupado,
+      monto:totalAgrupado,
+    };
+    generarPDFOrden(egresoAgrupado,nroOrden,
+      egresos[0].fecha_pago_real||new Date().toISOString().split('T')[0],
+      egresos[0].metodo_pago||'—',u?.email||'',lineas);
+  }
 }
 
 function abrirOrdenPago(id){
