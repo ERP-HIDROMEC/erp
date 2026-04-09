@@ -133,8 +133,12 @@ const FacturasAPI = (() => {
   // ── Mutaciones de facturas ──────────────────────────────────
 
   async function crearFactura(payload) {
+    const clean = { ...payload };
+    if (!clean.cliente_id)  clean.cliente_id  = null;
+    if (!clean.proyecto_id) clean.proyecto_id = null;
+    if (!clean.contrato_id) clean.contrato_id = null;
     const { data, error } = await db.from('facturas_emitidas')
-      .insert(payload)
+      .insert(clean)
       .select()
       .single();
     if (error) throw error;
@@ -142,8 +146,11 @@ const FacturasAPI = (() => {
   }
 
   async function actualizarFactura(id, payload) {
-    // Excluir campos que no son columnas de la tabla
-    const { remitos_ids, ...clean } = payload;
+    // Limpiar campos uuid vacíos — Supabase no acepta string vacío como uuid
+    const clean = { ...payload };
+    if (!clean.cliente_id)  clean.cliente_id  = null;
+    if (!clean.proyecto_id) clean.proyecto_id = null;
+    if (!clean.contrato_id) clean.contrato_id = null;
     const { error } = await db.from('facturas_emitidas')
       .update(clean)
       .eq('id', id);
