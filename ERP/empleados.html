@@ -1291,13 +1291,16 @@ async function guardarAusencia(){
     const path=`ausencias/${empId2}/${empId}_${Date.now()}.${ext}`;
     document.getElementById('na-upload-progress').style.display='block';
     document.getElementById('na-progress-bar').style.width='50%';
-    const {error:ue}=await db.storage.from('syh-docs').upload(path,file,{contentType:file.type,upsert:true});
+    console.log('[Ausencia] Subiendo archivo a syh-docs, path:', path);
+    const {data:uploadData, error:ue}=await db.storage.from('syh-docs').upload(path,file,{contentType:file.type,upsert:true});
     document.getElementById('na-progress-bar').style.width='100%';
     document.getElementById('na-upload-progress').style.display='none';
+    console.log('[Ausencia] Upload resultado — error:', ue, 'data:', uploadData);
     if(ue){ toast('Error al subir el archivo: '+ue.message, 'error'); return; }
     const {data:ud}=db.storage.from('syh-docs').getPublicUrl(path);
     certUrl=ud?.publicUrl||null;
     certPath=path;
+    console.log('[Ausencia] certUrl:', certUrl, 'certPath:', certPath);
   }
 
   // Payload solo con campos que existen en empleados_ausencias
@@ -1314,6 +1317,7 @@ async function guardarAusencia(){
   if(certPath) payloadAus.certificado_path=certPath;
   if(certUrl)  payloadAus.certificado_url=certUrl;
 
+  console.log('[Ausencia] payload a guardar:', JSON.stringify(payloadAus));
   let error;
   try{ await EmpleadosAPI.registrarAusencia(payloadAus); }catch(e){error=e;}
   if(error){toast('Error: '+(error?.message||String(error)), 'error');return;}
