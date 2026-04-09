@@ -626,8 +626,9 @@ async function guardarFactura(){
     monto_total:parseFloat(document.getElementById('nf-total').value)||0,
     estado:document.getElementById('nf-estado').value,
     observaciones:document.getElementById('nf-obs').value||null,
-    remitos_ids:_remitosSeleccionados,
   };
+  // remitos_ids solo al crear (Supabase lo rechaza en updates si la columna no existe o es array)
+  if(!facturaEditId) payload.remitos_ids=_remitosSeleccionados;
   // Limpiar campos uuid vacíos — Supabase rechaza string vacío como uuid
   if(!payload.cliente_id)  payload.cliente_id  = null;
   if(!payload.proyecto_id) payload.proyecto_id = null;
@@ -640,7 +641,7 @@ async function guardarFactura(){
   } else {
     try{ data=await FacturasAPI.crearFactura(payload); }catch(e){error=e;}
   }
-  if(error){toast('Error: ', 'error');return;}
+  if(error){toast('Error al guardar: '+error.message, 'error');return;}
   // Marcar remitos como facturados
   const factId=data?.id||facturaEditId;
   if(_remitosSeleccionados.length&&factId){
@@ -726,7 +727,7 @@ async function guardarCobro(){
     observaciones:document.getElementById('nc-obs').value||null,
   });
   }catch(e){error=e;}
-  if(error){toast('Error al guardar cobro: ', 'error');return;}
+  if(error){toast('Error al guardar cobro: '+error.message, 'error');return;}
 
   // Marcar factura como cobrada
   await FacturasAPI.marcarFacturaCobrada(cobroFacturaId);
@@ -785,8 +786,8 @@ async function guardarRemito(){
     estado:'pendiente',total:0,
   };
   if(!payload.numero_remito){toast('Ingresá número de remito.', 'warn');return;}
-  try{ await RemitosAPI.crearRemitoLegacy(payload); }catch(e){error=e;}
-  if(error){toast('Error: ', 'error');return;}
+  let errRem; try{ await RemitosAPI.crearRemitoLegacy(payload); }catch(e){errRem=e;}
+  if(errRem){toast('Error: '+errRem.message, 'error');return;}
   cerrarModal('modal-remito');
   cargarRemitos();
 }
@@ -893,7 +894,7 @@ async function confirmarImport(){
       monto_neto:r.neto,monto_iva:r.iva,monto_total:r.total,
       estado:'pendiente',
     }); }catch(e){errFac=e;}
-    if(!errFac) ok++; else skip++;
+  if(!errFac) ok++; else { console.warn('Error importando factura:',errFac.message); skip++; }
   }
   cerrarModal('modal-import');
   toast(`Importación completada:\n✓ ${ok} facturas importadas\n⊘ ${skip} omitidas (duplicadas o sin cliente)`, 'success');
