@@ -628,6 +628,10 @@ async function guardarFactura(){
     observaciones:document.getElementById('nf-obs').value||null,
     remitos_ids:_remitosSeleccionados,
   };
+  // Limpiar campos uuid vacíos — Supabase rechaza string vacío como uuid
+  if(!payload.cliente_id)  payload.cliente_id  = null;
+  if(!payload.proyecto_id) payload.proyecto_id = null;
+  if(!payload.contrato_id) payload.contrato_id = null;
   if(!payload.numero_factura||!payload.monto_total){toast('Completá número y monto.', 'warn');return;}
   let error,data;
   if(facturaEditId){
@@ -671,7 +675,8 @@ function abrirCobro(factId,empId,numero,total,neto){
   document.getElementById('nc-obs').value='';
   document.getElementById('nc-periodo-ret').value=new Date().toISOString().substring(0,7);
   // Mostrar base neto s/IVA
-  document.getElementById('ret-base-label').textContent=fmt(cobroMontoNeto);
+  const fmtN=v=>new Intl.NumberFormat('es-AR',{style:'currency',currency:'ARS',maximumFractionDigits:0}).format(v||0);
+  document.getElementById('ret-base-label').textContent=fmtN(cobroMontoNeto);
   // Limpiar retenciones y porcentajes
   ['ret-iva','ret-ganancias','ret-iibb','ret-suss','ret-municipal','ret-otras',
    'pct-iva','pct-ganancias','pct-iibb','pct-suss','pct-municipal','pct-otras'].forEach(id=>{
@@ -699,8 +704,9 @@ function calcularNetoPercibido(){
   const retOtras=parseFloat(document.getElementById('ret-otras').value)||0;
   const totalRet=retIva+retGan+retIibb+retSuss+retMuni+retOtras;
   const neto=total-totalRet;
-  document.getElementById('total-ret').textContent=fmt(totalRet);
-  document.getElementById('neto-cobro').textContent=fmt(neto);
+  const fmt2=v=>new Intl.NumberFormat('es-AR',{style:'currency',currency:'ARS',maximumFractionDigits:0}).format(v||0);
+  document.getElementById('total-ret').textContent=fmt2(totalRet);
+  document.getElementById('neto-cobro').textContent=fmt2(neto);
   document.getElementById('nc-monto').value=neto.toFixed(2);
 }
 
