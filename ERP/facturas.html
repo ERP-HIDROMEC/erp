@@ -554,11 +554,16 @@ async function cargarCobros(){
 }
 
 // ============ NUEVA FACTURA ============
-async function cargarClientesPorEmpresa(){
+async function cargarClientesPorEmpresa(clienteActualId){
   const empId=document.getElementById('nf-empresa').value;
   const data=await ClientesAPI.getClientesSelect(empId);
   const sel=document.getElementById('nf-cliente');
   sel.innerHTML=(data||[]).map(c=>`<option value="${c.id}">${c.nombre}</option>`).join('');
+  // Si el cliente actual no está en la lista (inactivo), agregarlo igual
+  if(clienteActualId && !(data||[]).find(c=>c.id===clienteActualId)){
+    const cli=await ClientesAPI.getClienteById(clienteActualId);
+    if(cli) sel.innerHTML=`<option value="${cli.id}">${cli.nombre} (inactivo)</option>`+sel.innerHTML;
+  }
 }
 
 async function cargarClientesRemito(){
@@ -595,9 +600,11 @@ async function editarFactura(id){
   if(!data) return;
   facturaEditId=id;
   document.getElementById('modal-titulo').textContent='Editar factura';
+  // Primero setear empresa, LUEGO cargar clientes, LUEGO setear cliente
   document.getElementById('nf-empresa').value=data.empresa_id;
-  await cargarClientesPorEmpresa();
-  document.getElementById('nf-cliente').value=data.cliente_id;
+  await cargarClientesPorEmpresa(data.cliente_id);
+  await new Promise(r=>setTimeout(r,0));
+  document.getElementById('nf-cliente').value=data.cliente_id||'';
   document.getElementById('nf-tipo').value=data.tipo;
   document.getElementById('nf-numero').value=data.numero_factura;
   document.getElementById('nf-fecha-emision').value=data.fecha_emision;
