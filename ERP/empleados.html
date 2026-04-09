@@ -1291,13 +1291,13 @@ async function guardarAusencia(){
     const path=`ausencias/${empId2}/${empId}_${Date.now()}.${ext}`;
     document.getElementById('na-upload-progress').style.display='block';
     document.getElementById('na-progress-bar').style.width='50%';
-    const {error:ue}=await db.storage.from('syh-docs').upload(path,file,{contentType:file.type,upsert:false});
-    if(!ue){
-      const {data:ud}=db.storage.from('syh-docs').getPublicUrl(path);
-      certUrl=ud?.publicUrl||null;certPath=path;
-    }
+    const {error:ue}=await db.storage.from('syh-docs').upload(path,file,{contentType:file.type,upsert:true});
     document.getElementById('na-progress-bar').style.width='100%';
     document.getElementById('na-upload-progress').style.display='none';
+    if(ue){ toast('Error al subir el archivo: '+ue.message, 'error'); return; }
+    const {data:ud}=db.storage.from('syh-docs').getPublicUrl(path);
+    certUrl=ud?.publicUrl||null;
+    certPath=path;
   }
 
   // Payload solo con campos que existen en empleados_ausencias
