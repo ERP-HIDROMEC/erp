@@ -552,13 +552,13 @@ async function cargarDatosModal(){
   const empId=document.getElementById('nr-empresa').value;
   // Recargar talonario CAI según la empresa seleccionada en el modal
   caiActual=await RemitosAPI.getTalonarioActivo(empId);
-  const infoEl=document.getElementById('cai-info');
-  if(caiActual&&infoEl){
-    const restantes=caiActual.nro_hasta-caiActual.nro_actual+1;
-    infoEl.style.display='block';
-    infoEl.innerHTML='CAI: <strong style="font-family:\'DM Mono\',monospace">'+caiActual.cai+'</strong> — Próximo N°: <strong>'+caiActual.punto_venta+'-'+String(caiActual.nro_actual).padStart(8,'0')+'</strong> — Vence: '+fmtF(caiActual.fecha_vencimiento)+' — Restantes: '+restantes;
-  } else if(infoEl){
-    infoEl.style.display='none';
+  const caiInfoEl=document.getElementById('cai-info');
+  if(caiActual&&caiInfoEl){
+    const restantesCai=caiActual.nro_hasta-caiActual.nro_actual+1;
+    caiInfoEl.style.display='block';
+    caiInfoEl.innerHTML='CAI: <strong style="font-family:\'DM Mono\',monospace">'+caiActual.cai+'</strong> — Próximo N°: <strong>'+caiActual.punto_venta+'-'+String(caiActual.nro_actual).padStart(8,'0')+'</strong> — Vence: '+fmtF(caiActual.fecha_vencimiento)+' — Restantes: '+restantesCai;
+  } else if(caiInfoEl){
+    caiInfoEl.style.display='none';
   }
   const clientes=await ClientesAPI.getClientesSelect(empId);
   document.getElementById('nr-cliente').innerHTML='<option value="">Seleccioná cliente</option>'+(clientes||[]).map(c=>`<option value="${c.id}">${c.nombre}</option>`).join('');
