@@ -42,6 +42,7 @@
     <h2>Facturación</h2>
     <div style="display:flex;gap:8px">
       <button class="btn btn-ghost" onclick="abrirImport()">↑ Importar AFIP</button>
+      <button class="btn btn-ghost" id="btn-cobro-multiple" onclick="abrirCobroMultiple()" style="display:none">💰 Cobrar seleccionadas</button>
       <button class="btn btn-primary" id="btn-nuevo" onclick="abrirNuevo()">+ Nueva factura</button>
     </div>
   </div>
@@ -198,6 +199,54 @@
     <div class="modal-footer">
       <button class="btn btn-ghost" onclick="cerrarModal('modal-factura')">Cancelar</button>
       <button class="btn btn-primary" onclick="guardarFactura()">Guardar factura</button>
+    </div>
+  </div>
+</div>
+
+<!-- MODAL COBRO MÚLTIPLE -->
+<div class="modal-overlay" id="modal-cobro-multiple">
+  <div class="modal" style="max-width:680px">
+    <h3>💰 Registrar cobro de múltiples facturas</h3>
+    <div id="cm-lista" style="max-height:200px;overflow-y:auto;margin-bottom:16px;background:var(--bg3);border:1px solid var(--border);border-radius:8px"></div>
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;padding:10px 14px;background:rgba(16,185,129,0.08);border:1px solid rgba(16,185,129,0.2);border-radius:8px">
+      <span style="font-size:13px;font-weight:500">Total seleccionado:</span>
+      <span id="cm-total" style="font-size:16px;font-weight:600;font-family:'DM Mono',monospace;color:var(--green)">$0</span>
+    </div>
+    <div class="form-row">
+      <div class="form-group">
+        <label>Fecha de cobro</label>
+        <input type="date" id="cm-fecha">
+      </div>
+      <div class="form-group">
+        <label>Método de pago</label>
+        <select id="cm-metodo">
+          <option value="transferencia">Transferencia</option>
+          <option value="cheque">Cheque</option>
+          <option value="echeq">E-Cheq</option>
+          <option value="efectivo">Efectivo</option>
+          <option value="otro">Otro</option>
+        </select>
+      </div>
+    </div>
+    <div class="form-row">
+      <div class="form-group">
+        <label>N° cheque / referencia (opcional)</label>
+        <input type="text" id="cm-cheque" placeholder="Solo si aplica">
+      </div>
+      <div class="form-group">
+        <label>Período retenciones</label>
+        <input type="month" id="cm-periodo-ret">
+      </div>
+    </div>
+    <div class="form-row full">
+      <div class="form-group">
+        <label>Observaciones</label>
+        <input type="text" id="cm-obs" placeholder="Opcional...">
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" onclick="cerrarModal('modal-cobro-multiple')">Cancelar</button>
+      <button class="btn btn-success" onclick="confirmarCobroMultiple()">✓ Confirmar cobro agrupado</button>
     </div>
   </div>
 </div>
@@ -396,6 +445,98 @@ let cobroFacturaId=null;
 let cobroEmpresaId=null;
 let importRows=[];
 
+// ── Selección múltiple para cobro agrupado ───────────────────
+let _selFacturas = new Map(); // id -> {empresa_id, monto}
+
+function toggleSeleccionFactura(id, empresaId, monto) {
+  if (_selFacturas.has(id)) {
+    _selFacturas.delete(id);
+  } else {
+    _selFacturas.set(id, {empresa_id: empresaId, monto: Number(monto||0)});
+  }
+  const btn = document.getElementById('btn-cobro-multiple');
+  if (btn) btn.style.display = _selFacturas.size > 0 ? '' : 'none';
+}
+
+function abrirCobroMultiple() {
+  if (_selFacturas.size === 0) { toast('Seleccioná al menos una factura.','warn'); return; }
+  const ids = [..._selFacturas.keys()];
+  const total = [..._selFacturas.values()].reduce((s,v) => s+v.monto, 0);
+
+  // Buscar datos de las facturas seleccionadas en el DOM
+  document.getElementById('cm-lista').innerHTML = `
+    <table style="width:100%;border-collapse:collapse">
+      <thead><tr>
+        <th style="padding:8px 12px;font-size:11px;color:var(--muted);text-align:left;border-bottom:1px solid var(--border)">N° Factura</th>
+        <th style="padding:8px 12px;font-size:11px;color:var(--muted);text-align:right;border-bottom:1px solid var(--border)">Monto</th>
+      </tr></thead>
+      <tbody>${ids.map(id => {
+        const d = _selFacturas.get(id);
+        const rowEl = document.getElementById('cb-fac-'+id)?.closest('tr');
+        const nroFac = rowEl?.querySelector('.mono')?.textContent || id.substring(0,8);
+        return `<tr>
+          <td style="padding:6px 12px;font-size:12px">${nroFac}</td>
+          <td style="padding:6px 12px;font-family:'DM Mono',monospace;font-size:12px;text-align:right;color:var(--green)">${fmt(d.monto)}</td>
+        </tr>`;
+      }).join('')}</tbody>
+    </table>`;
+
+  document.getElementById('cm-total').textContent = fmt(total);
+  document.getElementById('cm-fecha').value = hoy();
+  document.getElementById('cm-periodo-ret').value = new Date().toISOString().substring(0,7);
+  document.getElementById('cm-obs').value = '';
+  document.getElementById('cm-cheque').value = '';
+  document.getElementById('modal-cobro-multiple').classList.add('show');
+}
+
+async function confirmarCobroMultiple() {
+  const fecha = document.getElementById('cm-fecha').value;
+  const metodo = document.getElementById('cm-metodo').value;
+  const cheque = document.getElementById('cm-cheque').value || null;
+  const obs = document.getElementById('cm-obs').value || null;
+  const periodo = document.getElementById('cm-periodo-ret').value;
+  if (!fecha) { toast('Ingresá la fecha de cobro.','warn'); return; }
+
+  const ids = [..._selFacturas.keys()];
+  const total = [..._selFacturas.values()].reduce((s,v) => s+v.monto, 0);
+  const empresaId = [..._selFacturas.values()][0]?.empresa_id;
+
+  // Generar número de OP de cobro
+  const nroOP = 'OPC-' + String(Date.now()).slice(-6) + '-' + new Date().getFullYear();
+
+  let errores = 0;
+  for (const id of ids) {
+    try {
+      await FacturasAPI.registrarCobro({
+        empresa_id: empresaId,
+        factura_id: id,
+        fecha,
+        monto: _selFacturas.get(id).monto,
+        metodo_pago: metodo,
+        numero_cheque: cheque,
+        observaciones: obs ? obs + ' | OP: ' + nroOP : 'OP: ' + nroOP,
+      });
+      await FacturasAPI.marcarFacturaCobrada(id);
+    } catch(e) {
+      console.warn('Error cobrando factura', id, e);
+      errores++;
+    }
+  }
+
+  cerrarModal('modal-cobro-multiple');
+  // Limpiar selección y checkboxes
+  _selFacturas.clear();
+  document.querySelectorAll('.cb-factura').forEach(cb => cb.checked = false);
+  const btn = document.getElementById('btn-cobro-multiple');
+  if (btn) btn.style.display = 'none';
+
+  cargarFacturas();
+  const msg = errores > 0
+    ? `⚠ ${ids.length - errores} facturas cobradas, ${errores} errores.`
+    : `✓ ${ids.length} facturas cobradas. OP: ${nroOP} · Total: ${fmt(total)}`;
+  setTimeout(() => toast(msg, errores > 0 ? 'warn' : 'success'), 100);
+}
+
 async function init(){
   const usuario = await ERP.initLayout('facturas');
   if(!usuario) return;
@@ -440,7 +581,15 @@ async function cargarFacturas(){
   const filtros={};
   if(emp) filtros.empresaId=emp;
   if(estado) filtros.estado=estado;
-  if(mes){ filtros.fechaDesde=mes+'-01'; const fin=new Date(mes+'-01');fin.setMonth(fin.getMonth()+1);filtros.fechaHasta=fin.toISOString().split('T')[0]; }
+  if(mes){
+    filtros.fechaDesde=mes+'-01';
+    // Construir fechaHasta sin timezone: sumar 1 mes al string directamente
+    const [ym,mm]=mes.split('-').map(Number);
+    const nextM=mm===12?1:mm+1;
+    const nextY=mm===12?ym+1:ym;
+    filtros.fechaHasta=`${nextY}-${String(nextM).padStart(2,'0')}-01`;
+    // Usar lt (no lte) en la API — ya está definido así en FacturasAPI.getFacturas
+  }
   const facData=await FacturasAPI.getFacturas(filtros);
   let data=facData, error=null;
   if(tipo) data=data.filter(r=>r.tipo===tipo);
@@ -485,7 +634,9 @@ async function cargarFacturas(){
           <td>${r.fecha_cobro_estimada?`<span style="font-size:12px${venc?';color:var(--red)':''}">${fmtF(r.fecha_cobro_estimada)}${venc?` <span class="dias-badge">${dias}d</span>`:''}</span>`:'—'}</td>
           <td>
             <div style="display:flex;gap:6px">
-              ${r.estado!=='cobrada'&&r.estado!=='anulada'&&!esNC(r)?`<button class="btn btn-sm btn-success" onclick="abrirCobro('${r.id}','${r.empresa_id}','${r.numero_factura}','${r.monto_total}','${r.monto_neto||0}')">Cobrar</button>`:''}
+              ${r.estado!=='cobrada'&&r.estado!=='anulada'&&!esNC(r)?`
+                <input type="checkbox" class="cb-factura" id="cb-fac-${r.id}" onchange="toggleSeleccionFactura('${r.id}','${r.empresa_id}',${r.monto_total||0})" style="cursor:pointer;width:14px;height:14px">
+                <button class="btn btn-sm btn-success" onclick="abrirCobro('${r.id}','${r.empresa_id}','${r.numero_factura}','${r.monto_total}','${r.monto_neto||0}')">Cobrar</button>`:''}
               <button class="btn btn-sm btn-ghost" onclick="editarFactura('${r.id}')">Editar</button>
               ${r.estado!=='anulada'&&!esNC(r)?`<button class="btn btn-sm btn-danger" onclick="anularFactura('${r.id}','${r.numero_factura}')">Anular</button>`:''}
             </div>
@@ -554,16 +705,11 @@ async function cargarCobros(){
 }
 
 // ============ NUEVA FACTURA ============
-async function cargarClientesPorEmpresa(clienteActualId){
+async function cargarClientesPorEmpresa(){
   const empId=document.getElementById('nf-empresa').value;
   const data=await ClientesAPI.getClientesSelect(empId);
   const sel=document.getElementById('nf-cliente');
   sel.innerHTML=(data||[]).map(c=>`<option value="${c.id}">${c.nombre}</option>`).join('');
-  // Si el cliente actual no está en la lista (inactivo), agregarlo igual
-  if(clienteActualId && !(data||[]).find(c=>c.id===clienteActualId)){
-    const cli=await ClientesAPI.getClienteById(clienteActualId);
-    if(cli) sel.innerHTML=`<option value="${cli.id}">${cli.nombre} (inactivo)</option>`+sel.innerHTML;
-  }
 }
 
 async function cargarClientesRemito(){
@@ -600,11 +746,9 @@ async function editarFactura(id){
   if(!data) return;
   facturaEditId=id;
   document.getElementById('modal-titulo').textContent='Editar factura';
-  // Primero setear empresa, LUEGO cargar clientes, LUEGO setear cliente
   document.getElementById('nf-empresa').value=data.empresa_id;
-  await cargarClientesPorEmpresa(data.cliente_id);
-  await new Promise(r=>setTimeout(r,0));
-  document.getElementById('nf-cliente').value=data.cliente_id||'';
+  await cargarClientesPorEmpresa();
+  document.getElementById('nf-cliente').value=data.cliente_id;
   document.getElementById('nf-tipo').value=data.tipo;
   document.getElementById('nf-numero').value=data.numero_factura;
   document.getElementById('nf-fecha-emision').value=data.fecha_emision;
@@ -633,9 +777,8 @@ async function guardarFactura(){
     monto_total:parseFloat(document.getElementById('nf-total').value)||0,
     estado:document.getElementById('nf-estado').value,
     observaciones:document.getElementById('nf-obs').value||null,
+    remitos_ids:_remitosSeleccionados,
   };
-  // remitos_ids solo al crear (Supabase lo rechaza en updates si la columna no existe o es array)
-  if(!facturaEditId) payload.remitos_ids=_remitosSeleccionados;
   // Limpiar campos uuid vacíos — Supabase rechaza string vacío como uuid
   if(!payload.cliente_id)  payload.cliente_id  = null;
   if(!payload.proyecto_id) payload.proyecto_id = null;
@@ -648,7 +791,7 @@ async function guardarFactura(){
   } else {
     try{ data=await FacturasAPI.crearFactura(payload); }catch(e){error=e;}
   }
-  if(error){toast('Error al guardar: '+error.message, 'error');return;}
+  if(error){toast('Error: ', 'error');return;}
   // Marcar remitos como facturados
   const factId=data?.id||facturaEditId;
   if(_remitosSeleccionados.length&&factId){
@@ -734,7 +877,7 @@ async function guardarCobro(){
     observaciones:document.getElementById('nc-obs').value||null,
   });
   }catch(e){error=e;}
-  if(error){toast('Error al guardar cobro: '+error.message, 'error');return;}
+  if(error){toast('Error al guardar cobro: ', 'error');return;}
 
   // Marcar factura como cobrada
   await FacturasAPI.marcarFacturaCobrada(cobroFacturaId);
@@ -793,8 +936,8 @@ async function guardarRemito(){
     estado:'pendiente',total:0,
   };
   if(!payload.numero_remito){toast('Ingresá número de remito.', 'warn');return;}
-  let errRem; try{ await RemitosAPI.crearRemitoLegacy(payload); }catch(e){errRem=e;}
-  if(errRem){toast('Error: '+errRem.message, 'error');return;}
+  try{ await RemitosAPI.crearRemitoLegacy(payload); }catch(e){error=e;}
+  if(error){toast('Error: ', 'error');return;}
   cerrarModal('modal-remito');
   cargarRemitos();
 }
@@ -901,7 +1044,7 @@ async function confirmarImport(){
       monto_neto:r.neto,monto_iva:r.iva,monto_total:r.total,
       estado:'pendiente',
     }); }catch(e){errFac=e;}
-  if(!errFac) ok++; else { console.warn('Error importando factura:',errFac.message); skip++; }
+    if(!errFac) ok++; else skip++;
   }
   cerrarModal('modal-import');
   toast(`Importación completada:\n✓ ${ok} facturas importadas\n⊘ ${skip} omitidas (duplicadas o sin cliente)`, 'success');

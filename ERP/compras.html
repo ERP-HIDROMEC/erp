@@ -329,6 +329,7 @@
         <select id="opm-metodo" onchange="toggleChequesMultiples()">
           <option value="transferencia">Transferencia</option>
           <option value="cheques">Cheques (varios)</option>
+          <option value="echeq">E-Cheq (varios)</option>
           <option value="efectivo">Efectivo</option>
           <option value="otro">Otro</option>
         </select>
@@ -415,8 +416,9 @@ async function abrirOPMultiple(){
 function toggleChequesMultiples(){
   const metodo=document.getElementById('opm-metodo').value;
   const sec=document.getElementById('seccion-cheques-multi');
-  sec.style.display=metodo==='cheques'?'block':'none';
-  if(metodo==='cheques'&&document.getElementById('lista-cheques-multi').children.length===0){
+  const esCheque=metodo==='cheques'||metodo==='echeq';
+  sec.style.display=esCheque?'block':'none';
+  if(esCheque&&document.getElementById('lista-cheques-multi').children.length===0){
     agregarChequeMulti();
   }
 }
@@ -475,7 +477,7 @@ async function confirmarOPMultiple(){
     try{
       await EgresosAPI.pagarEgreso(r.id,{
         pagado:true,fecha_pago_real:fecha,
-        metodo_pago:metodo==='cheques'?'cheque':metodo,
+        metodo_pago:metodo==='cheques'?'cheque':metodo==='echeq'?'echeq':metodo,
         orden_pago_nro:nroOrden,
         orden_pago_at:new Date().toISOString(),
         observaciones:obsFinal||null,
@@ -614,7 +616,8 @@ function generarPDFOrdenMultiple(rows,nro,fecha,metodo,obs,operador,cheques){
   doc.setFontSize(11);doc.setFont('helvetica','normal');
   doc.text(nro,midX+15,T+22,{align:'center'});
   doc.text('Fecha: '+fmtD(fecha),midX+15,T+30,{align:'center'});
-  doc.text('Método: '+metodo.toUpperCase(),midX+15,T+37,{align:'center'});
+  const metodoLabel={'transferencia':'TRANSFERENCIA','cheques':'CHEQUES','echeq':'E-CHEQ','efectivo':'EFECTIVO','otro':'OTRO'}[metodo]||metodo.toUpperCase();
+  doc.text('Método: '+metodoLabel,midX+15,T+37,{align:'center'});
 
   doc.setLineWidth(0.5);doc.setDrawColor(0,0,0);doc.line(L+1,T+41,R-1,T+41);
 

@@ -112,11 +112,35 @@ function filtrar() {
     return true;
   });
 
-  const total = rows.reduce((s,r) => s + Number(r.monto||0), 0);
-  document.getElementById('badge-total').textContent =
-    rows.length + ' órdenes — ' + fmt(total);
+  // ── Agrupar por orden_pago_nro ───────────────────────────
+  const grupos = {};
+  rows.forEach(r => {
+    const key = r.orden_pago_nro || r.id; // si no tiene nro OP, cada uno es su propio grupo
+    if (!grupos[key]) {
+      grupos[key] = {
+        orden_pago_nro: r.orden_pago_nro,
+        fecha_pago_real: r.fecha_pago_real,
+        empresa_id: r.empresa_id,
+        empresas: r.empresas,
+        metodo_pago: r.metodo_pago,
+        orden_pago_pdf_url: r.orden_pago_pdf_url,
+        total: 0,
+        items: [],
+        primer_id: r.id,
+      };
+    }
+    grupos[key].total += Number(r.monto||0);
+    grupos[key].items.push(r);
+  });
 
-  if (!rows.length) {
+  const ops = Object.values(grupos).sort((a,b) =>
+    (b.fecha_pago_real||'').localeCompare(a.fecha_pago_real||''));
+
+  const total = ops.reduce((s,g) => s + g.total, 0);
+  document.getElementById('badge-total').textContent =
+    ops.length + ' órdenes — ' + fmt(total);
+
+  if (!ops.length) {
     document.getElementById('contenido').innerHTML =
       '<div class="empty">Sin órdenes de pago para los filtros seleccionados.</div>';
     return;
@@ -126,29 +150,156 @@ function filtrar() {
     <div style="overflow-x:auto"><table>
       <thead><tr>
         <th>N° Orden</th><th>Fecha</th><th>Empresa</th>
-        <th>Proveedor</th><th>Descripción</th><th>Método</th>
-        <th>Monto</th><th>PDF</th>
+        <th>Proveedores / Facturas</th><th>Método</th>
+        <th>Total</th><th>PDF</th>
       </tr></thead>
-      <tbody>${rows.map(r => `<tr>
-        <td class="mono" style="font-weight:600;color:var(--blue)">${r.orden_pago_nro||'—'}</td>
-        <td class="mono">${r.fecha_pago_real ? fmtF(r.fecha_pago_real) : '—'}</td>
-        <td style="font-size:12px">${r.empresas?.nombre||'—'}</td>
-        <td>
-          <div style="font-size:13px">${r.proveedores?.nombre||'Sin proveedor'}</div>
-          ${r.proveedores?.cuit?`<div style="font-size:11px;color:var(--muted)">${r.proveedores.cuit}</div>`:''}
-        </td>
-        <td style="font-size:12px;color:var(--muted);max-width:180px">${r.descripcion||''}</td>
-        <td><span class="tag-metodo">${r.metodo_pago||'—'}</span></td>
-        <td class="mono" style="font-weight:600;color:var(--green)">${fmt(r.monto)}</td>
-        <td>
-          ${r.orden_pago_pdf_url
-            ? `<a href="${r.orden_pago_pdf_url}" target="_blank" class="btn btn-sm btn-ghost">📄 Ver</a>`
-            : `<button class="btn btn-sm btn-ghost" onclick="descargarOrdenPago('${r.id}')">⬇ PDF</button>`
-          }
-        </td>
-      </tr>`).join('')}
+      <tbody>${ops.map(g => {
+        const proveedores = [...new Set(g.items.map(r => r.proveedores?.nombre||'Sin proveedor'))];
+        const facturas = g.items.map(r => r.numero_factura||'s/n').filter(Boolean);
+        return `<tr>
+          <td class="mono" style="font-weight:600;color:var(--blue)">${g.orden_pago_nro||'—'}</td>
+          <td class="mono">${g.fecha_pago_real ? fmtF(g.fecha_pago_real) : '—'}</td>
+          <td style="font-size:12px">${g.empresas?.nombre||'—'}</td>
+          <td>
+            ${proveedores.map(p => `<div style="font-size:13px">${p}</div>`).join('')}
+            ${g.items.length > 1
+              ? `<div style="font-size:11px;color:var(--muted);margin-top:2px">${g.items.length} facturas · Fac: ${facturas.slice(0,3).join(', ')}${facturas.length>3?'…':''}</div>`
+              : `<div style="font-size:11px;color:var(--muted)">${g.items[0]?.descripcion||''}</div>`
+            }
+          </td>
+          <td><span class="tag-metodo">${g.metodo_pago||'—'}</span></td>
+          <td class="mono" style="font-weight:600;color:var(--green)">${fmt(g.total)}</td>
+          <td>
+            ${g.orden_pago_pdf_url
+              ? `<a href="${g.orden_pago_pdf_url}" target="_blank" class="btn btn-sm btn-ghost">📄 Ver</a>`
+              : `<button class="btn btn-sm btn-ghost" onclick="descargarOrdenPagoAgrupada('${g.primer_id}','${g.orden_pago_nro||''}')">⬇ PDF</button>`
+            }
+          </td>
+        </tr>`;
+      }).join('')}
       </tbody>
     </table></div>`;
+}
+
+async function descargarOrdenPagoAgrupada(primerId, nroOrden){
+  // Cargar todos los egresos con el mismo orden_pago_nro
+  let rows = [];
+  if (nroOrden) {
+    const { data } = await db.from('egresos')
+      .select('*,proveedores(nombre,cuit),empresas(nombre,cuit)')
+      .eq('orden_pago_nro', nroOrden);
+    rows = data || [];
+  }
+  if (!rows.length) {
+    // fallback: cargar solo el primero
+    const { data } = await db.from('egresos')
+      .select('*,proveedores(nombre,cuit),empresas(nombre,cuit)')
+      .eq('id', primerId).single();
+    if (data) rows = [data];
+  }
+  if (!rows.length) { toast('No se pudieron cargar los datos.','error'); return; }
+
+  const eg = rows[0];
+  const fecha = eg.fecha_pago_real || new Date().toISOString().split('T')[0];
+  const metodo = eg.metodo_pago || '—';
+  const u = await getUsuario();
+
+  if (rows.length === 1) {
+    // Una sola factura — usar generarPDFOrden normal
+    generarPDFOrden(eg, eg.orden_pago_nro||'OP-???', fecha, metodo, u?.email||'', []);
+  } else {
+    // Múltiples — usar generarPDFOrdenMultiple si está disponible, sino generar uno simple
+    if (typeof generarPDFOrdenMultiple === 'function') {
+      const blob = generarPDFOrdenMultiple(rows, nroOrden, fecha, metodo, '', u?.email||'', []);
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a'); a.href = url; a.download = nroOrden+'.pdf'; a.click();
+    } else {
+      // Generar PDF agrupado inline
+      generarPDFOrdenAgrupada(rows, nroOrden, fecha, metodo, u?.email||'');
+    }
+  }
+}
+
+function generarPDFOrdenAgrupada(rows, nro, fecha, metodo, operador) {
+  if(!window.jspdf||!window.jspdf.jsPDF){ toast('jsPDF no cargado','error'); return; }
+  const {jsPDF} = window.jspdf;
+  const doc = new jsPDF({format:'a4', unit:'mm'});
+  const fmtM = v => new Intl.NumberFormat('es-AR',{style:'currency',currency:'ARS',maximumFractionDigits:0}).format(v||0);
+  const fmtD = d => d ? new Date(d+'T12:00:00').toLocaleDateString('es-AR') : '—';
+  const L=10,R=200,W=190,midX=105,T=8;
+  const total = rows.reduce((s,r) => s+Number(r.monto||0), 0);
+  const empresa = rows[0]?.empresas?.nombre || 'Hidromec S.R.L.';
+
+  doc.setDrawColor(0,0,0); doc.setLineWidth(0.8); doc.rect(L,T,W,275);
+  doc.setLineWidth(0.3); doc.rect(L+1,T+1,W-2,273);
+  doc.setFillColor(245,245,245); doc.rect(L+1,T+1,W-2,40,'F');
+
+  doc.setFontSize(16); doc.setFont('helvetica','bold'); doc.setTextColor(0,0,0);
+  doc.text(empresa, L+5, T+14);
+  doc.setFontSize(8); doc.setFont('helvetica','normal'); doc.setTextColor(80,80,80);
+  doc.text('ERP — Orden de Pago', L+5, T+22);
+
+  doc.setDrawColor(180,180,180); doc.setLineWidth(0.3); doc.line(midX-10,T+1,midX-10,T+41);
+
+  doc.setFontSize(18); doc.setFont('helvetica','bold'); doc.setTextColor(0,0,0);
+  doc.text('ORDEN DE PAGO', midX+15, T+13, {align:'center'});
+  doc.setFontSize(11); doc.setFont('helvetica','normal');
+  doc.text(nro, midX+15, T+22, {align:'center'});
+  doc.text('Fecha: '+fmtD(fecha), midX+15, T+30, {align:'center'});
+  const metodoLabel = {'transferencia':'TRANSFERENCIA','cheques':'CHEQUES','echeq':'E-CHEQ','efectivo':'EFECTIVO','otro':'OTRO'}[metodo]||metodo.toUpperCase();
+  doc.text('Método: '+metodoLabel, midX+15, T+37, {align:'center'});
+
+  doc.setLineWidth(0.5); doc.setDrawColor(0,0,0); doc.line(L+1,T+41,R-1,T+41);
+
+  let y = T+48;
+  doc.setFillColor(230,230,230); doc.rect(L+1,y-6,W-2,8,'F');
+  doc.setFontSize(10); doc.setFont('helvetica','bold');
+  doc.text('DETALLE DE COMPROBANTES', midX, y, {align:'center'});
+  doc.setLineWidth(0.3); doc.line(L+1,y+2,R-1,y+2);
+  y+=8;
+
+  doc.setFontSize(8); doc.setFont('helvetica','bold'); doc.setTextColor(100,100,100);
+  doc.text('PROVEEDOR',L+5,y+5); doc.text('DESCRIPCIÓN',L+60,y+5);
+  doc.text('N° FACTURA',L+130,y+5); doc.text('MONTO',R-8,y+5,{align:'right'});
+  doc.setDrawColor(200,200,200); doc.line(L+1,y+7,R-1,y+7); y+=9;
+
+  doc.setFont('helvetica','normal'); doc.setTextColor(0,0,0);
+  rows.forEach((r,i) => {
+    if(i%2===0){ doc.setFillColor(252,252,252); doc.rect(L+1,y-4,W-2,9,'F'); }
+    doc.setFontSize(9);
+    doc.text(doc.splitTextToSize(r.proveedores?.nombre||'—',50)[0], L+5, y+2);
+    doc.text(doc.splitTextToSize(r.descripcion||'—',60)[0], L+60, y+2);
+    doc.text(r.numero_factura||'—', L+130, y+2);
+    doc.setFont('helvetica','bold');
+    doc.text(fmtM(r.monto), R-8, y+2, {align:'right'});
+    doc.setFont('helvetica','normal');
+    y+=9;
+  });
+
+  doc.setLineWidth(0.4); doc.line(L+1,y,R-1,y); y+=2;
+  doc.setFillColor(30,36,54); doc.rect(L+1,y,W-2,12,'F');
+  doc.setFontSize(11); doc.setFont('helvetica','bold'); doc.setTextColor(255,255,255);
+  doc.text('TOTAL:', L+5, y+8);
+  doc.setFontSize(14); doc.text(fmtM(total), R-8, y+8, {align:'right'});
+  y+=16;
+
+  const yF = Math.max(y+10, T+220);
+  doc.setDrawColor(0,0,0); doc.setLineWidth(0.3);
+  doc.line(L+5,yF,L+80,yF); doc.line(L+110,yF,R-5,yF);
+  doc.setFontSize(8); doc.setFont('helvetica','normal'); doc.setTextColor(80,80,80);
+  doc.text('FIRMA EMISOR', L+35, yF+5, {align:'center'});
+  doc.text('FIRMA RECEPTOR', L+147, yF+5, {align:'center'});
+
+  const yP = yF+12;
+  doc.setFillColor(240,240,240); doc.rect(L+1,yP,W-2,16,'F');
+  doc.setLineWidth(0.3); doc.line(L+1,yP,R-1,yP);
+  doc.setFontSize(8); doc.setFont('helvetica','bold'); doc.setTextColor(0,0,0);
+  doc.text('N° ORDEN: '+nro, L+5, yP+6);
+  doc.text('Operador: '+operador, L+5, yP+12);
+  doc.setFont('helvetica','normal'); doc.setTextColor(100,100,100);
+  doc.text('Sistema ERP — Hidromec SRL / Placemem SRL', R-5, yP+12, {align:'right'});
+
+  doc.save('OrdenPago_'+nro+'.pdf');
 }
 
 async function descargarOrdenPago(egresoId){
