@@ -1059,8 +1059,8 @@ async function guardarDocumento(){
     const {error:uploadError}=await db.storage.from('syh-docs').upload(path,file,{contentType:file.type,upsert:false});
     if(uploadError){document.getElementById('nd-upload-progress').style.display='none';toast('Error al subir: ', 'error');return;}
     document.getElementById('nd-progress-bar').style.width='90%';
-    const {data:urlData}=await db.storage.from('syh-docs').createSignedUrl(path,60*60*24*365*10);
-    archivoUrl=urlData?.signedUrl||null;
+    const {data:urlData}=db.storage.from('syh-docs').getPublicUrl(path);
+    archivoUrl=urlData?.publicUrl||null;
     archivoPatch=path;
     document.getElementById('nd-progress-bar').style.width='100%';
   }
@@ -1291,10 +1291,10 @@ async function guardarAusencia(){
     const path=`ausencias/${empId2}/${empId}_${Date.now()}.${ext}`;
     document.getElementById('na-upload-progress').style.display='block';
     document.getElementById('na-progress-bar').style.width='50%';
-    const {error:ue}=await db.storage.from('syh-docs').upload(path,file,{contentType:file.type,upsert:false});
+    const {error:ue}=await db.storage.from('syh-docs').upload(path,file,{contentType:file.type,upsert:true});
     if(!ue){
-      const {data:ud}=await db.storage.from('syh-docs').createSignedUrl(path,60*60*24*365*10);
-      certUrl=ud?.signedUrl||null;certPath=path;
+      const {data:ud}=db.storage.from('syh-docs').getPublicUrl(path);
+      certUrl=ud?.publicUrl||null;certPath=path;
     }
     document.getElementById('na-progress-bar').style.width='100%';
     document.getElementById('na-upload-progress').style.display='none';
@@ -1315,7 +1315,10 @@ async function guardarAusencia(){
   if(certUrl)  payloadAus.certificado_url=certUrl;
 
   let error;
-  try{ await EmpleadosAPI.registrarAusencia(payloadAus); }catch(e){error=e;}
+  try{
+    const {error:dbErr} = await db.from('empleados_ausencias').insert(payloadAus);
+    if(dbErr) throw dbErr;
+  }catch(e){error=e;}
   if(error){toast('Error: '+(error?.message||String(error)), 'error');return;}
   if(fileInput) fileInput.value='';
   cerrarModal('modal-ausencia');
@@ -1589,7 +1592,7 @@ async function procesarXLS(input) {
           <option value="a1000000-0000-0000-0000-000000000001" ${empresaIdFinal==='a1000000-0000-0000-0000-000000000001'?'selected':''}>Hidromec</option>
           <option value="a2000000-0000-0000-0000-000000000002" ${empresaIdFinal==='a2000000-0000-0000-0000-000000000002'?'selected':''}>Placemem</option>
         </select>
-      </td>\`;
+      </td>`;
     tbody.appendChild(tr);
   });
 
