@@ -10,7 +10,7 @@
 <script src="erp-utils.js"></script>
 <script src="erp-sidebar.js"></script>
 <script src="empresas.api.js"></script>
-<script src="empleados.api.js?v=2"></script>
+<script src="empleados.api.js"></script>
 <script src="clientes.api.js"></script>
 <script src="proyectos.api.js"></script>
 <style>
@@ -489,16 +489,15 @@ function cambiarTab(tab,btn){
   const btnNuevo=document.getElementById('btn-nuevo');
   const noDoc=['ausentismo','costos'];
   document.getElementById('btn-importar-xls').style.display=tab==='sueldos'?'':'none';
-  if(noDoc.includes(tab)) { btnNuevo.textContent=''; btnNuevo.style.display='none'; }
-  else {
-    btnNuevo.style.display='';
-    if(tab==='sueldos')          btnNuevo.textContent='+ Registrar sueldo';
-    else if(tab==='vehiculos')   btnNuevo.textContent='+ Nuevo vehiculo/equipo';
-    else if(tab==='docs-empresa'||tab==='docs-vehiculos'||tab==='docs-personal') btnNuevo.textContent='+ Subir documento';
-    else if(tab==='ausencias')   btnNuevo.textContent='+ Registrar ausencia';
-    else if(tab==='francos')     btnNuevo.textContent='+ Cargar franco';
-    else                         btnNuevo.textContent='+ Nuevo empleado';
-  }
+  if(tab==='sueldos') btnNuevo.textContent='+ Registrar sueldo';
+  else if(tab==='vehiculos') btnNuevo.textContent='+ Nuevo vehiculo/equipo';
+  else if(tab==='docs-empresa') btnNuevo.textContent='+ Subir documento';
+  else if(tab==='docs-vehiculos') btnNuevo.textContent='+ Subir documento';
+  else if(tab==='docs-personal') btnNuevo.textContent='+ Subir documento';
+  else if(tab==='ausencias') btnNuevo.textContent='+ Registrar ausencia';
+  else if(tab==='francos') { btnNuevo.textContent='+ Cargar franco'; btnNuevo.style.display=''; }
+  else if(noDoc.includes(tab)) { btnNuevo.textContent=''; btnNuevo.style.display='none'; }
+  else { btnNuevo.textContent='+ Nuevo empleado'; btnNuevo.style.display=''; }
   const hideFiltro=['sueldos','costos','vehiculos','docs-empresa','docs-vehiculos','docs-personal','ausencias','ausentismo','francos'];
   document.getElementById('f-estado').style.display=hideFiltro.includes(tab)?'none':'';
   recargar();
@@ -1060,8 +1059,8 @@ async function guardarDocumento(){
     const {error:uploadError}=await db.storage.from('syh-docs').upload(path,file,{contentType:file.type,upsert:false});
     if(uploadError){document.getElementById('nd-upload-progress').style.display='none';toast('Error al subir: ', 'error');return;}
     document.getElementById('nd-progress-bar').style.width='90%';
-    const {data:urlData}=db.storage.from('syh-docs').getPublicUrl(path);
-    archivoUrl=urlData?.publicUrl||null;
+    const {data:urlData}=await db.storage.from('syh-docs').createSignedUrl(path,60*60*24*365*10);
+    archivoUrl=urlData?.signedUrl||null;
     archivoPatch=path;
     document.getElementById('nd-progress-bar').style.width='100%';
   }
@@ -1292,13 +1291,13 @@ async function guardarAusencia(){
     const path=`ausencias/${empId2}/${empId}_${Date.now()}.${ext}`;
     document.getElementById('na-upload-progress').style.display='block';
     document.getElementById('na-progress-bar').style.width='50%';
-    const {data:uploadData, error:ue}=await db.storage.from('syh-docs').upload(path,file,{contentType:file.type,upsert:true});
+    const {error:ue}=await db.storage.from('syh-docs').upload(path,file,{contentType:file.type,upsert:false});
+    if(!ue){
+      const {data:ud}=await db.storage.from('syh-docs').createSignedUrl(path,60*60*24*365*10);
+      certUrl=ud?.signedUrl||null;certPath=path;
+    }
     document.getElementById('na-progress-bar').style.width='100%';
     document.getElementById('na-upload-progress').style.display='none';
-    if(ue){ toast('Error al subir el archivo: '+ue.message, 'error'); return; }
-    const {data:ud}=db.storage.from('syh-docs').getPublicUrl(path);
-    certUrl=ud?.publicUrl||null;
-    certPath=path;
   }
 
   // Payload solo con campos que existen en empleados_ausencias
@@ -1566,18 +1565,31 @@ async function procesarXLS(input) {
       matched,
     });
 
+    const rowIdx = _importRows.length - 1;
+    const empresaIdFinal = _importRows[rowIdx].empresa_id;
     const tr = document.createElement('tr');
+    tr.dataset.rowIdx = rowIdx;
     tr.innerHTML = `
-      <td style="padding:7px 8px;font-size:12px;border-bottom:1px solid var(--border)">${emp.nombre}</td>
+      <td style="padding:7px 8px;font-size:12px;border-bottom:1px solid var(--border)">
+        <div style="font-weight:500">${emp.nombre}</div>
+        <div style="font-size:10px;color:var(--muted);font-family:'DM Mono',monospace">${emp.cuil}</div>
+      </td>
       <td style="padding:7px 8px;font-size:12px;border-bottom:1px solid var(--border)">${emp.tipoLiq || parsed.tipoLiq}</td>
       <td style="padding:7px 8px;font-family:'DM Mono',monospace;font-size:12px;border-bottom:1px solid var(--border)">${fmt(bruto)}</td>
       <td style="padding:7px 8px;font-family:'DM Mono',monospace;font-size:12px;color:var(--red);border-bottom:1px solid var(--border)">-${fmt(aportes)}</td>
       <td style="padding:7px 8px;font-family:'DM Mono',monospace;font-size:12px;color:var(--green);border-bottom:1px solid var(--border)">${fmt(neto)}</td>
       <td style="padding:7px 8px;font-size:12px;border-bottom:1px solid var(--border)">
-        ${matched 
+        ${matched
           ? '<span style="color:var(--green)">✓ '+empBD.nombre+'</span>'
           : '<span style="color:var(--orange)">⚠ No encontrado</span>'}
-      </td>`;
+      </td>
+      <td style="padding:4px 8px;border-bottom:1px solid var(--border)">
+        <select onchange="cambiarEmpresaImport(${rowIdx},this.value)"
+          style="padding:4px 6px;background:var(--bg3);border:1px solid var(--border);border-radius:6px;color:var(--text);font-size:12px">
+          <option value="a1000000-0000-0000-0000-000000000001" ${empresaIdFinal==='a1000000-0000-0000-0000-000000000001'?'selected':''}>Hidromec</option>
+          <option value="a2000000-0000-0000-0000-000000000002" ${empresaIdFinal==='a2000000-0000-0000-0000-000000000002'?'selected':''}>Placemem</option>
+        </select>
+      </td>\`;
     tbody.appendChild(tr);
   });
 
@@ -1597,6 +1609,12 @@ async function procesarXLS(input) {
   document.getElementById('import-no-match-warn').style.color = noMatch > 0 ? 'var(--orange)' : 'var(--green)';
 
   document.getElementById('modal-import-xls').classList.add('show');
+}
+
+function cambiarEmpresaImport(idx, empresaId) {
+  if (_importRows[idx]) {
+    _importRows[idx].empresa_id = empresaId;
+  }
 }
 
 async function confirmarImportXLS() {
@@ -2033,11 +2051,12 @@ async function eliminarFranco(id) {
         <thead style="position:sticky;top:0;background:var(--bg2)">
           <tr>
             <th style="padding:8px;font-size:11px;color:var(--muted);text-align:left;border-bottom:1px solid var(--border)">Empleado</th>
-            <th style="padding:8px;font-size:11px;color:var(--muted);text-align:left;border-bottom:1px solid var(--border)">Tipo liquidación</th>
+            <th style="padding:8px;font-size:11px;color:var(--muted);text-align:left;border-bottom:1px solid var(--border)">Tipo liq.</th>
             <th style="padding:8px;font-size:11px;color:var(--muted);text-align:left;border-bottom:1px solid var(--border)">Bruto</th>
             <th style="padding:8px;font-size:11px;color:var(--muted);text-align:left;border-bottom:1px solid var(--border)">Aportes</th>
             <th style="padding:8px;font-size:11px;color:var(--muted);text-align:left;border-bottom:1px solid var(--border)">Neto</th>
             <th style="padding:8px;font-size:11px;color:var(--muted);text-align:left;border-bottom:1px solid var(--border)">Match BD</th>
+            <th style="padding:8px;font-size:11px;color:var(--muted);text-align:left;border-bottom:1px solid var(--border)">Empresa</th>
           </tr>
         </thead>
         <tbody id="import-tabla-body"></tbody>
