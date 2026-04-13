@@ -177,9 +177,11 @@ async function cargarTodo() {
 async function cargarKPIs() {
   try {
   const ini = mesActivo + '-01';
-  const fin = new Date(mesActivo + '-01');
-  fin.setMonth(fin.getMonth()+1);
-  const finStr = fin.toISOString().split('T')[0];
+  // Calcular fin de mes sin timezone para no perder el día 31
+  const [_y,_m] = mesActivo.split('-').map(Number);
+  const nextM = _m===12 ? 1 : _m+1;
+  const nextY = _m===12 ? _y+1 : _y;
+  const finStr = `${nextY}-${String(nextM).padStart(2,'0')}-01`;
   const anioIni = mesActivo.substring(0,4) + '-01-01';
   const anioFin = (parseInt(mesActivo.substring(0,4))+1) + '-01-01';
   const hoy = new Date().toISOString().split('T')[0];
@@ -256,8 +258,11 @@ async function cargarVencidas() {
 
 async function cargarMensual() {
   try {
-  const desde = new Date(); desde.setMonth(desde.getMonth()-5); desde.setDate(1);
-  const desdeStr = desde.toISOString().split('T')[0];
+  // Calcular "hace 5 meses, día 1" sin timezone
+  const _hoyM = new Date();
+  let _bkY = _hoyM.getFullYear(), _bkM = _hoyM.getMonth()+1 - 5;
+  if(_bkM <= 0){ _bkM += 12; _bkY -= 1; }
+  const desdeStr = `${_bkY}-${String(_bkM).padStart(2,'0')}-01`;
   const filtros = { excluirAnuladas:true, fechaDesde:desdeStr };
   if(empresaActiva !== 'todas') filtros.empresaId = empresaActiva;
   const filtroEmp = empresaActiva === 'todas' ? null : empresaActiva;
