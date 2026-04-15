@@ -991,6 +991,17 @@ async function generarPDF(id){
     doc.rect(L+1, T+1, W-2, 273);
 
     // ── HEADER ──────────────────────────────────────────
+    // Detectar empresa ANTES de usar en logo
+    const esPlacemem = r.empresa_id === 'a2000000-0000-0000-0000-000000000002';
+    const EMP = esPlacemem ? {
+      cuit:'30-71232493-3', iibb:'30-71232493-3', inicio:'20/06/2012',
+      dir:'3 de Febrero 353 - Zárate - Bs.As.',
+      tel:'', email:'administracion@placemem.com.ar',
+    } : {
+      cuit:'30-71163249-9', iibb:'30-71163249-9', inicio:'01/01/2011',
+      dir:'Colectora Oeste 1525 - Zárate - Bs.As.',
+      tel:'Tel: 03487-456419', email:'administracion@hidromecsrl.com.ar',
+    };
     // Fondo gris suave en header
     doc.setFillColor(245,245,245);
     doc.rect(L+1, T+1, W-2, 42, 'F');
@@ -1013,17 +1024,7 @@ async function generarPDF(id){
       doc.text(esPlacemem?'PLACEMEM S.R.L.':'HIDROMEC S.R.L.', L+5, T+15);
     }
 
-    // Datos empresa dinámica según empresa_id del remito
-    const esPlacemem = r.empresa_id === 'a2000000-0000-0000-0000-000000000002';
-    const EMP = esPlacemem ? {
-      cuit:'30-71232493-3', iibb:'30-71232493-3', inicio:'20/06/2012',
-      dir:'3 de Febrero 353 - Zárate - Bs.As.',
-      tel:'', email:'administracion@placemem.com.ar',
-    } : {
-      cuit:'30-71163249-9', iibb:'30-71163249-9', inicio:'01/01/2011',
-      dir:'Colectora Oeste 1525 - Zárate - Bs.As.',
-      tel:'Tel: 03487-456419', email:'administracion@hidromecsrl.com.ar',
-    };
+
     doc.setFontSize(7.5); doc.setFont('helvetica','normal'); doc.setTextColor(80,80,80);
     doc.text(EMP.dir, L+4, T+28);
     if(EMP.tel) doc.text(EMP.tel, L+4, T+33);
