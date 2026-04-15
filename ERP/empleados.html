@@ -70,6 +70,7 @@
       <option value="true">Solo activos</option>
       <option value="false">Solo inactivos</option>
     </select>
+    <input type="month" id="f-mes-sueldo" onchange="recargar()" style="display:none">
     <input type="text" id="f-buscar" placeholder="Buscar..." oninput="recargar()" style="min-width:200px">
   </div>
 
@@ -168,9 +169,17 @@
       <div class="form-group">
         <label>Tipo</label>
         <select id="ns-tipo">
+          <option value="mensual">Mensual</option>
           <option value="convenio">Convenio</option>
           <option value="fuera_convenio">Fuera convenio</option>
           <option value="monotributo">Monotributo</option>
+          <option value="1ra_quincena">1ra quincena</option>
+          <option value="2da_quincena">2da quincena</option>
+          <option value="adelanto">Adelanto</option>
+          <option value="vacaciones">Vacaciones</option>
+          <option value="aguinaldo">Aguinaldo / SAC</option>
+          <option value="liquidacion_final">Liquidación final</option>
+          <option value="maternidad">Maternidad</option>
         </select>
       </div>
     </div>
@@ -490,6 +499,11 @@ function cambiarTab(tab,btn){
   const btnNuevo=document.getElementById('btn-nuevo');
   const noDoc=['ausentismo','costos'];
   document.getElementById('btn-importar-xls').style.display=tab==='sueldos'?'':'none';
+  const mesSueldo=document.getElementById('f-mes-sueldo');
+  if(mesSueldo){
+    mesSueldo.style.display=tab==='sueldos'?'':'none';
+    if(tab==='sueldos'&&!mesSueldo.value) mesSueldo.value=new Date().toISOString().substring(0,7);
+  }
   if(tab==='sueldos') btnNuevo.textContent='+ Registrar sueldo';
   else if(tab==='vehiculos') btnNuevo.textContent='+ Nuevo vehiculo/equipo';
   else if(tab==='docs-empresa') btnNuevo.textContent='+ Subir documento';
@@ -641,12 +655,15 @@ async function cargarSueldos(){
   document.getElementById('kpis').innerHTML='';
   document.getElementById('contenido').innerHTML='<div class="spinner-wrap"><div class="spinner"></div>Cargando...</div>';
   const emp=document.getElementById('f-empresa').value;
+  const mes=document.getElementById('f-mes-sueldo')?.value||'';
   const buscar=document.getElementById('f-buscar').value.toLowerCase();
-  let sueldosData=await EmpleadosAPI.getSueldos({});
-  if(emp) sueldosData=sueldosData.filter(r=>r.empresa_id===emp);
+  const filtros={};
+  if(emp) filtros.empresaId=emp;
+  if(mes) filtros.periodo=mes;
+  let sueldosData=await EmpleadosAPI.getSueldos(filtros);
   const data=sueldosData;
   let rows=data||[];
-  if(buscar) rows=rows.filter(r=>(r.empleados?.nombre||'').toLowerCase().includes(buscar));
+  if(buscar) rows=rows.filter(r=>(r.empleados?.nombre||'').toLowerCase().includes(buscar)||(r.tipo||'').toLowerCase().includes(buscar));
 
   const totalBruto=rows.reduce((s,r)=>s+Number(r.monto_bruto||0),0);
   const totalNeto=rows.reduce((s,r)=>s+Number(r.monto_neto||0),0);
@@ -665,7 +682,7 @@ async function cargarSueldos(){
         <td style="font-size:12px">${r.empresas?.nombre||'—'}</td>
         <td>${r.empleados?.nombre||'—'}</td>
         <td class="mono">${r.periodo}</td>
-        <td><span class="tag ${r.tipo}">${r.tipo}</span></td>
+        <td><span class="tag ${r.tipo}" style="text-transform:capitalize">${{mensual:'Mensual',convenio:'Convenio',fuera_convenio:'Fuera conv.',monotributo:'Monotributo','1ra_quincena':'1ra quinc.','2da_quincena':'2da quinc.',adelanto:'Adelanto',vacaciones:'Vacaciones',aguinaldo:'Aguinaldo',liquidacion_final:'Liq. Final',maternidad:'Maternidad',multiple:'Múltiple'}[r.tipo]||r.tipo}</span></td>
         <td class="mono">${fmt(r.monto_bruto)}</td>
         <td class="mono" style="color:var(--red)">-${fmt(r.deducciones)}</td>
         <td class="mono" style="color:var(--green)">${fmt(r.monto_neto)}</td>
@@ -701,7 +718,15 @@ async function editarSueldo(id){
   await new Promise(r=>setTimeout(r,0));
   document.getElementById('ns-empleado').value=sueldo.empleado_id||'';
   document.getElementById('ns-periodo').value=sueldo.periodo||'';
-  document.getElementById('ns-tipo').value=sueldo.tipo||'convenio';
+  // Setear tipo — si el valor no existe en las opciones, agregarlo
+  const tipoSel = document.getElementById('ns-tipo');
+  const tipoVal = sueldo.tipo||'mensual';
+  if(![...tipoSel.options].find(o=>o.value===tipoVal)){
+    const opt=document.createElement('option');
+    opt.value=tipoVal; opt.textContent=tipoVal.replace(/_/g,' ');
+    tipoSel.appendChild(opt);
+  }
+  tipoSel.value=tipoVal;
   document.getElementById('ns-bruto').value=sueldo.monto_bruto||'';
   document.getElementById('ns-deducciones').value=sueldo.deducciones||'';
   document.getElementById('ns-neto').value=sueldo.monto_neto||'';
