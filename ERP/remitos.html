@@ -83,7 +83,7 @@
       <option value="anulado">Anulado</option>
     </select>
     <input type="month" id="f-mes" onchange="recargar()">
-    <input type="text" id="f-buscar" placeholder="N° remito, cliente, descripción de ítem..." oninput="recargar()" style="min-width:260px">
+    <input type="text" id="f-buscar" placeholder="N° remito o cliente..." oninput="recargar()" style="min-width:200px">
   </div>
 
   <div class="kpi-grid" id="kpis"></div>
@@ -341,28 +341,34 @@ async function init(){
 }
 
 async function verificarCAI(){
-  const empIdCAI=document.getElementById('f-empresa')?.value||'a1000000-0000-0000-0000-000000000001';
-  caiActual=await RemitosAPI.getTalonarioActivo(empIdCAI);
+  // Verificar talonarios de ambas empresas y mostrar alertas relevantes
   const alerta=document.getElementById('alerta-cai');
-  if(!caiActual){
-    alerta.style.display='block';
-    alerta.textContent='⚠ No hay talonario CAI activo para Hidromec. Cargá uno antes de emitir remitos.';
-    return;
-  }
-  const tal=caiActual;
+  const alertas=[];
   const hoyStr=hoy();
-  const restantes=tal.nro_hasta-tal.nro_actual+1;
-  if(tal.fecha_vencimiento<hoyStr){
-    alerta.style.display='block';
-    alerta.textContent=`⚠ El CAI ${tal.cai} venció el ${fmtF(tal.fecha_vencimiento)}. Cargá un talonario nuevo.`;
-  } else if(restantes<=50){
-    alerta.style.display='block';
-    alerta.style.background='rgba(245,158,11,0.1)';
-    alerta.style.borderColor='rgba(245,158,11,0.3)';
-    alerta.style.color='var(--orange)';
-    alerta.textContent=`⚠ Quedan solo ${restantes} remitos disponibles en el talonario actual (CAI vence ${fmtF(tal.fecha_vencimiento)}).`;
+  for(const [empId,empNombre] of [
+    ['a1000000-0000-0000-0000-000000000001','Hidromec'],
+    ['a2000000-0000-0000-0000-000000000002','Placemem']
+  ]){
+    const tal=await RemitosAPI.getTalonarioActivo(empId);
+    if(!tal){
+      alertas.push(`⚠ Sin talonario activo para ${empNombre}.`);
+    } else if(tal.fecha_vencimiento<hoyStr){
+      alertas.push(`⚠ CAI ${empNombre} vencido (${fmtF(tal.fecha_vencimiento)}).`);
+    } else {
+      const restantes=tal.nro_hasta-tal.nro_actual+1;
+      if(restantes<=50) alertas.push(`⚠ ${empNombre}: quedan ${restantes} remitos en el talonario.`);
+    }
   }
-  caiActual=tal;
+  // caiActual se actualiza dinámicamente en cargarDatosModal() según empresa del modal
+  if(alertas.length){
+    alerta.style.display='block';
+    alerta.style.background='rgba(239,68,68,0.08)';
+    alerta.style.borderColor='rgba(239,68,68,0.2)';
+    alerta.style.color='var(--red)';
+    alerta.textContent=alertas.join(' ');
+  } else {
+    alerta.style.display='none';
+  }
 }
 
 function cambiarTab(tab,btn){
@@ -410,25 +416,7 @@ async function cargarRemitos(){
     const facMap={};(facs||[]).forEach(f=>facMap[f.id]=f.numero_factura);
     rows=rows.map(r=>({...r,_nroFactura:r.factura_id?facMap[r.factura_id]:null}));
   }
-  // Búsqueda: siempre incluye número, cliente, OC, sector e ítems del remito
-  window._buscarItemsMap = {};
-  if(buscar){
-    const {data:itemsMatch} = await db.from('remito_items_v2')
-      .select('remito_id,descripcion,cantidad')
-      .ilike('descripcion', '%'+buscar+'%')
-      .limit(500);
-    const idsConMatch = new Set((itemsMatch||[]).map(i=>i.remito_id));
-    const itemMatchMap = {};
-    (itemsMatch||[]).forEach(i=>{ if(!itemMatchMap[i.remito_id]) itemMatchMap[i.remito_id]=i; });
-    window._buscarItemsMap = itemMatchMap;
-    rows=rows.filter(r=>
-      idsConMatch.has(r.id) ||
-      (r.numero_formateado||'').toLowerCase().includes(buscar) ||
-      (r.clientes?.nombre||'').toLowerCase().includes(buscar) ||
-      (r.orden_compra||'').toLowerCase().includes(buscar) ||
-      (r.sector||'').toLowerCase().includes(buscar)
-    );
-  }
+  if(buscar) rows=rows.filter(r=>(r.numero_formateado||'').includes(buscar)||(r.clientes?.nombre||'').toLowerCase().includes(buscar));
 
   const pendFac=rows.filter(r=>['emitido','enviado','aceptado'].includes(r.estado)&&r.tipo!=='interno').length;
   const totalVal=rows.filter(r=>r.estado!=='anulado').reduce((s,r)=>s+Number(r.total_valorizado||0),0);
@@ -446,10 +434,7 @@ async function cargarRemitos(){
         <th>OC</th><th>Factura</th><th>Valorizado</th><th>Estado</th><th>Acciones</th>
       </tr></thead>
       <tbody>${rows.length?rows.map(r=>`<tr>
-        <td class="mono" style="font-weight:600">
-          ${r.numero_formateado||r.numero}
-          ${(window._buscarItemsMap||{})[r.id]?`<div style="font-size:10px;color:var(--blue);margin-top:2px;font-family:'DM Sans',sans-serif;font-weight:400;white-space:normal;max-width:120px;overflow:hidden;text-overflow:ellipsis">📦 ${((window._buscarItemsMap||{})[r.id]?.descripcion||'').substring(0,40)}</div>`:''}
-        </td>
+        <td class="mono" style="font-weight:600">${r.numero_formateado||r.numero}</td>
         <td class="mono">${fmtF(r.fecha)}</td>
         <td style="font-size:12px;color:var(--muted)">${r.tipo}</td>
         <td>${r.clientes?.nombre||'—'}</td>
@@ -572,15 +557,17 @@ async function cargarDatosModal(){
   const empId=document.getElementById('nr-empresa').value;
   const clientes=await ClientesAPI.getClientesSelect(empId);
   document.getElementById('nr-cliente').innerHTML='<option value="">Seleccioná cliente</option>'+(clientes||[]).map(c=>`<option value="${c.id}">${c.nombre}</option>`).join('');
-  // Info CAI
+  // Info CAI — SIEMPRE actualizar caiActual según la empresa del modal
   const tal=await RemitosAPI.getTalonarioActivo(empId);
   const infoEl=document.getElementById('cai-info');
   if(tal&&tal.length){
     const t=tal[0];
+    caiActual=t; // ← actualizar variable global con el talonario correcto
     const restantes=t.nro_hasta-t.nro_actual+1;
     infoEl.style.display='block';
     infoEl.innerHTML=`CAI: <strong style="font-family:'DM Mono',monospace">${t.cai}</strong> — Próximo N°: <strong>0001-${t.nro_actual.toString().padStart(8,'0')}</strong> — Vence: ${fmtF(t.fecha_vencimiento)} — Restantes: ${restantes}`;
   } else {
+    caiActual=null; // ← limpiar si no hay talonario para esta empresa
     infoEl.style.display='none';
   }
   // Items iniciales
@@ -857,7 +844,12 @@ async function guardarRemito(estado){
   // Obtener CAI si se emite
   let numero=null, cai=null, caiVto=null, puntoVenta='0001', talonarioId=null;
   if(estado==='emitido'&&!editId){
-    if(!caiActual){toast('No hay talonario CAI activo. Cargá uno en CAI/Talonarios.', 'warn');return;}
+    // Refrescar caiActual para asegurar que corresponde a la empresa del modal
+    const talFresh=await RemitosAPI.getTalonarioActivo(empId);
+    if(talFresh) caiActual=talFresh;
+    if(!caiActual||caiActual.empresa_id!==empId){
+      toast('No hay talonario CAI activo para esta empresa. Cargá uno en CAI/Talonarios.', 'warn');return;
+    }
     if(caiActual.fecha_vencimiento<hoy()){toast('El CAI está vencido. Cargá un talonario nuevo.', 'warn');return;}
     if(caiActual.nro_actual>caiActual.nro_hasta){toast('Se agotaron los números del talonario. Cargá uno nuevo.', 'warn');return;}
     numero=caiActual.nro_actual;
