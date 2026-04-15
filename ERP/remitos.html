@@ -551,7 +551,7 @@ async function cargarDatosModal(){
   const empId=document.getElementById('nr-empresa').value;
   const clientes=await ClientesAPI.getClientesSelect(empId);
   document.getElementById('nr-cliente').innerHTML='<option value="">Seleccioná cliente</option>'+(clientes||[]).map(c=>`<option value="${c.id}">${c.nombre}</option>`).join('');
-  // Info CAI — actualizar caiActual con la empresa del modal (fix multiempresa)
+  // Info CAI — sincronizar caiActual con la empresa del modal
   const tal=await RemitosAPI.getTalonarioActivo(empId);
   caiActual=tal||null;
   const infoEl=document.getElementById('cai-info');
@@ -797,12 +797,6 @@ async function editarRemito(id){
 }
 
 async function guardarRemito(estado){
-  const btns=document.querySelectorAll('#modal-nuevo .btn-primary, #modal-nuevo .btn-ghost[onclick*="borrador"]');
-  btns.forEach(b=>b.disabled=true);
-  try { await _guardarRemitoInterno(estado); } finally { btns.forEach(b=>b.disabled=false); }
-}
-
-async function _guardarRemitoInterno(estado){
   const empId=document.getElementById('nr-empresa').value;
   const clienteId=document.getElementById('nr-cliente').value||null;
   const tipoRemito=document.getElementById('nr-tipo').value;
@@ -878,7 +872,7 @@ async function _guardarRemitoInterno(estado){
     if(error){toast('Error: '+(error?.message||String(error)), 'error');return;}
   } else {
     if(estado==='borrador'){
-      // Para borrador: sin numero ni punto_venta para no violar unique constraint
+      // Para borrador: numero y punto_venta null para no violar unique constraint
       delete payload.numero;
       delete payload.punto_venta;
       payload.numero_formateado='BORRADOR';
