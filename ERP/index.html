@@ -102,7 +102,7 @@
   <div class="kpi-grid">
     <div class="kpi-card blue"><div class="kpi-label">Facturación del mes</div><div class="kpi-value" id="k-fac-mes">—</div></div>
     <div class="kpi-card green"><div class="kpi-label">Cobrado este mes</div><div class="kpi-value" id="k-cob-mes">—</div></div>
-    <div class="kpi-card red"><div class="kpi-label">Egresos del mes</div><div class="kpi-value" id="k-egr-mes">—</div></div>
+    <div class="kpi-card red"><div class="kpi-label">Gastos del mes</div><div class="kpi-value" id="k-egr-mes">—</div><div class="kpi-sub" id="k-egr-sub" style="font-size:11px;color:var(--muted);margin-top:4px"></div></div>
     <div class="kpi-card orange"><div class="kpi-label">Resultado del mes</div><div class="kpi-value" id="k-res-mes">—</div></div>
   </div>
   <div class="kpi-grid">
@@ -189,7 +189,7 @@ async function cargarKPIs() {
   const emps = await EmpresasAPI.getEmpresas();
 
   kpiData = await Promise.all((emps||[]).map(async emp => {
-    const [r1,r2,r3,r4,r5,r6,r7] = await Promise.all([
+    const [r1,r2,r3,r4,r5,r6,r7,r8] = await Promise.all([
       FacturasAPI.getFacturas({empresaId:emp.id,excluirAnuladas:true,fechaDesde:ini,fechaHasta:finStr}).then(d=>({data:d})),
       FacturasAPI.getCobrosParaDashboard(emp.id,ini,finStr).then(d=>({data:d})),
       EgresosAPI.getEgresosParaDashboard(emp.id,ini,finStr).then(d=>({data:d})),
@@ -197,12 +197,18 @@ async function cargarKPIs() {
       FacturasAPI.getFacturas({empresaId:emp.id,soloVencidas:false}).then(d=>({data:d.filter(f=>f.estado!=='cobrada'&&f.estado!=='anulada')})),
       EgresosAPI.getEgresos({empresaId:emp.id,pagado:false}).then(d=>({data:d})),
       FacturasAPI.getFacturas({empresaId:emp.id,soloVencidas:true}).then(d=>({data:d})),
+      // Sueldos del mes (monto_bruto = gasto real de la empresa)
+      EmpleadosAPI.getSueldos({empresaId:emp.id,periodo:mesActivo}).then(d=>({data:d})),
     ]);
     const s = (r,f='monto_total') => (r.data||[]).reduce((a,x)=>a+Number(x[f]||x.monto||0),0);
-    const fac = s(r1); const egr = s(r3);
+    const fac = s(r1);
+    const egr = s(r3);
+    const sueldos = (r8.data||[]).reduce((a,x)=>a+Number(x.monto_bruto||0),0);
+    const gastoTotal = egr + sueldos;
     return { empresa_id:emp.id, empresa:emp.nombre,
-      facturacion_mes:fac, cobrado_mes:s(r2,'monto'), egresos_mes:egr,
-      resultado_mes:fac-egr, facturacion_anio:s(r4),
+      facturacion_mes:fac, cobrado_mes:s(r2,'monto'),
+      egresos_mes:egr, sueldos_mes:sueldos, gastos_mes:gastoTotal,
+      resultado_mes:fac-gastoTotal, facturacion_anio:s(r4),
       cuentas_por_cobrar:s(r5), cuentas_por_pagar:s(r6,'monto'),
       facturas_vencidas:(r7.data||[]).length };
   }));
@@ -219,7 +225,14 @@ function renderKPIs() {
   const res = sum(kpiData,'resultado_mes');
   document.getElementById('k-fac-mes').textContent = fmt(sum(kpiData,'facturacion_mes'));
   document.getElementById('k-cob-mes').textContent = fmt(sum(kpiData,'cobrado_mes'));
-  document.getElementById('k-egr-mes').textContent = fmt(sum(kpiData,'egresos_mes'));
+  document.getElementById('k-egr-mes').textContent = fmt(sum(kpiData,'gastos_mes'));
+  const subEl = document.getElementById('k-egr-sub');
+  if(subEl){
+    const egr = sum(kpiData,'egresos_mes');
+    const sue = sum(kpiData,'sueldos_mes');
+    if(sue > 0) subEl.textContent = 'Compras ' + fmt(egr) + ' · Sueldos ' + fmt(sue);
+    else subEl.textContent = '';
+  }
   const el = document.getElementById('k-res-mes');
   el.textContent = fmt(res); el.className = 'kpi-value '+(res>=0?'pos':'neg');
   document.getElementById('k-x-cob').textContent = fmt(sum(kpiData,'cuentas_por_cobrar'));
