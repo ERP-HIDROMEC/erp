@@ -9,10 +9,10 @@
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="erp-utils.js"></script>
 <script src="erp-sidebar.js"></script>
-<script src="empresas_api.js"></script>
-<script src="clientes_api.js"></script>
-<script src="remitos_api.js"></script>
-<script src="contratos_api.js"></script>
+<script src="empresas.api.js"></script>
+<script src="clientes.api.js"></script>
+<script src="remitos.api.js"></script>
+<script src="contratos.api.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js"></script>
 <style>
   .kpi-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:14px;margin-bottom:20px;}
@@ -797,6 +797,12 @@ async function editarRemito(id){
 }
 
 async function guardarRemito(estado){
+  const btns=document.querySelectorAll('#modal-nuevo .btn-primary, #modal-nuevo .btn-ghost[onclick*="borrador"]');
+  btns.forEach(b=>b.disabled=true);
+  try { await _guardarRemitoInterno(estado); } finally { btns.forEach(b=>b.disabled=false); }
+}
+
+async function _guardarRemitoInterno(estado){
   const empId=document.getElementById('nr-empresa').value;
   const clienteId=document.getElementById('nr-cliente').value||null;
   const tipoRemito=document.getElementById('nr-tipo').value;
@@ -872,8 +878,9 @@ async function guardarRemito(estado){
     if(error){toast('Error: '+(error?.message||String(error)), 'error');return;}
   } else {
     if(estado==='borrador'){
-      // Para borrador no necesita número
-      payload.numero=Date.now();
+      // Para borrador: sin numero ni punto_venta para no violar unique constraint
+      delete payload.numero;
+      delete payload.punto_venta;
       payload.numero_formateado='BORRADOR';
     }
     let data=null,error=null; try{ data=await RemitosAPI.crearRemito(payload); }catch(e){error=e;}
