@@ -459,6 +459,7 @@
 let tabActual='empleados';
 let empEditId=null;
 let cliEditId=null;
+let sueldoEditId=null;
 
 async function init(){
   const usuario = await ERP.initLayout('empleados');
@@ -670,6 +671,7 @@ async function cargarSueldos(){
         <td class="mono" style="color:var(--green)">${fmt(r.monto_neto)}</td>
         <td><span class="tag ${r.pagado?'pagado':'pendiente'}">${r.pagado?'Pagado':'Pendiente'}</span></td>
         <td><div style="display:flex;gap:6px">
+          <button class="btn btn-sm btn-ghost" onclick="editarSueldo('${r.id}')">Editar</button>
           ${!r.pagado?`<button class="btn btn-sm btn-ghost" onclick="pagarSueldo('${r.id}')">✓ Pagar</button>`:''}
           <button class="btn btn-sm btn-danger" onclick="borrarSueldo('${r.id}')">Borrar</button>
         </div></td>
@@ -678,9 +680,33 @@ async function cargarSueldos(){
 }
 
 function abrirNuevoSueldo(){
+  sueldoEditId=null;
   document.getElementById('ns-bruto').value='';
   document.getElementById('ns-deducciones').value='';
   document.getElementById('ns-neto').value='';
+  document.getElementById('ns-pagado').value='false';
+  document.getElementById('ns-fecha-pago').value=hoy();
+  document.getElementById('modal-sueldo').querySelector('h3').textContent='Registrar sueldo';
+  document.getElementById('modal-sueldo').classList.add('show');
+}
+
+async function editarSueldo(id){
+  // Cargar datos del sueldo desde los rows renderizados
+  const sueldo = (await EmpleadosAPI.getSueldos({})).find(r=>r.id===id);
+  if(!sueldo){toast('No se encontró el registro.','error');return;}
+  sueldoEditId=id;
+  document.getElementById('modal-sueldo').querySelector('h3').textContent='Editar sueldo';
+  document.getElementById('ns-empresa').value=sueldo.empresa_id;
+  await cargarEmpleadosModal();
+  await new Promise(r=>setTimeout(r,0));
+  document.getElementById('ns-empleado').value=sueldo.empleado_id||'';
+  document.getElementById('ns-periodo').value=sueldo.periodo||'';
+  document.getElementById('ns-tipo').value=sueldo.tipo||'convenio';
+  document.getElementById('ns-bruto').value=sueldo.monto_bruto||'';
+  document.getElementById('ns-deducciones').value=sueldo.deducciones||'';
+  document.getElementById('ns-neto').value=sueldo.monto_neto||'';
+  document.getElementById('ns-pagado').value=sueldo.pagado?'true':'false';
+  document.getElementById('ns-fecha-pago').value=sueldo.fecha_pago||hoy();
   document.getElementById('modal-sueldo').classList.add('show');
 }
 
@@ -689,10 +715,9 @@ async function guardarSueldo(){
   const neto=parseFloat(document.getElementById('ns-neto').value)||0;
   if(!bruto){toast('Ingresá el monto bruto.', 'warn');return;}
   const pagado=document.getElementById('ns-pagado').value==='true';
-  let error;
-  try{ await EmpleadosAPI.registrarSueldo({
+  const payload={
     empresa_id:document.getElementById('ns-empresa').value,
-    empleado_id:document.getElementById('ns-empleado').value,
+    empleado_id:document.getElementById('ns-empleado').value||null,
     periodo:document.getElementById('ns-periodo').value,
     tipo:document.getElementById('ns-tipo').value,
     monto_bruto:bruto,
@@ -700,9 +725,18 @@ async function guardarSueldo(){
     monto_neto:neto||bruto,
     pagado,
     fecha_pago:pagado?document.getElementById('ns-fecha-pago').value:null,
-  });
+  };
+  let error;
+  try{
+    if(sueldoEditId){
+      const {error:e}=await db.from('sueldos').update(payload).eq('id',sueldoEditId);
+      if(e) throw e;
+    } else {
+      await EmpleadosAPI.registrarSueldo(payload);
+    }
   }catch(e){error=e;}
   if(error){toast('Error: '+(error?.message||String(error)), 'error');return;}
+  sueldoEditId=null;
   cerrarModal('modal-sueldo');
   cargarSueldos();
 }
