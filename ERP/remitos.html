@@ -341,34 +341,28 @@ async function init(){
 }
 
 async function verificarCAI(){
-  // Verificar talonarios de ambas empresas y mostrar alertas relevantes
+  const empIdCAI=document.getElementById('f-empresa')?.value||'a1000000-0000-0000-0000-000000000001';
+  caiActual=await RemitosAPI.getTalonarioActivo(empIdCAI);
   const alerta=document.getElementById('alerta-cai');
-  const alertas=[];
-  const hoyStr=hoy();
-  for(const [empId,empNombre] of [
-    ['a1000000-0000-0000-0000-000000000001','Hidromec'],
-    ['a2000000-0000-0000-0000-000000000002','Placemem']
-  ]){
-    const tal=await RemitosAPI.getTalonarioActivo(empId);
-    if(!tal){
-      alertas.push(`⚠ Sin talonario activo para ${empNombre}.`);
-    } else if(tal.fecha_vencimiento<hoyStr){
-      alertas.push(`⚠ CAI ${empNombre} vencido (${fmtF(tal.fecha_vencimiento)}).`);
-    } else {
-      const restantes=tal.nro_hasta-tal.nro_actual+1;
-      if(restantes<=50) alertas.push(`⚠ ${empNombre}: quedan ${restantes} remitos en el talonario.`);
-    }
-  }
-  // caiActual se actualiza dinámicamente en cargarDatosModal() según empresa del modal
-  if(alertas.length){
+  if(!caiActual){
     alerta.style.display='block';
-    alerta.style.background='rgba(239,68,68,0.08)';
-    alerta.style.borderColor='rgba(239,68,68,0.2)';
-    alerta.style.color='var(--red)';
-    alerta.textContent=alertas.join(' ');
-  } else {
-    alerta.style.display='none';
+    alerta.textContent='⚠ No hay talonario CAI activo para Hidromec. Cargá uno antes de emitir remitos.';
+    return;
   }
+  const tal=caiActual;
+  const hoyStr=hoy();
+  const restantes=tal.nro_hasta-tal.nro_actual+1;
+  if(tal.fecha_vencimiento<hoyStr){
+    alerta.style.display='block';
+    alerta.textContent=`⚠ El CAI ${tal.cai} venció el ${fmtF(tal.fecha_vencimiento)}. Cargá un talonario nuevo.`;
+  } else if(restantes<=50){
+    alerta.style.display='block';
+    alerta.style.background='rgba(245,158,11,0.1)';
+    alerta.style.borderColor='rgba(245,158,11,0.3)';
+    alerta.style.color='var(--orange)';
+    alerta.textContent=`⚠ Quedan solo ${restantes} remitos disponibles en el talonario actual (CAI vence ${fmtF(tal.fecha_vencimiento)}).`;
+  }
+  caiActual=tal;
 }
 
 function cambiarTab(tab,btn){
@@ -557,17 +551,15 @@ async function cargarDatosModal(){
   const empId=document.getElementById('nr-empresa').value;
   const clientes=await ClientesAPI.getClientesSelect(empId);
   document.getElementById('nr-cliente').innerHTML='<option value="">Seleccioná cliente</option>'+(clientes||[]).map(c=>`<option value="${c.id}">${c.nombre}</option>`).join('');
-  // Info CAI — SIEMPRE actualizar caiActual según la empresa del modal
+  // Info CAI
   const tal=await RemitosAPI.getTalonarioActivo(empId);
   const infoEl=document.getElementById('cai-info');
   if(tal&&tal.length){
     const t=tal[0];
-    caiActual=t; // ← actualizar variable global con el talonario correcto
     const restantes=t.nro_hasta-t.nro_actual+1;
     infoEl.style.display='block';
     infoEl.innerHTML=`CAI: <strong style="font-family:'DM Mono',monospace">${t.cai}</strong> — Próximo N°: <strong>0001-${t.nro_actual.toString().padStart(8,'0')}</strong> — Vence: ${fmtF(t.fecha_vencimiento)} — Restantes: ${restantes}`;
   } else {
-    caiActual=null; // ← limpiar si no hay talonario para esta empresa
     infoEl.style.display='none';
   }
   // Items iniciales
@@ -844,12 +836,7 @@ async function guardarRemito(estado){
   // Obtener CAI si se emite
   let numero=null, cai=null, caiVto=null, puntoVenta='0001', talonarioId=null;
   if(estado==='emitido'&&!editId){
-    // Refrescar caiActual para asegurar que corresponde a la empresa del modal
-    const talFresh=await RemitosAPI.getTalonarioActivo(empId);
-    if(talFresh) caiActual=talFresh;
-    if(!caiActual||caiActual.empresa_id!==empId){
-      toast('No hay talonario CAI activo para esta empresa. Cargá uno en CAI/Talonarios.', 'warn');return;
-    }
+    if(!caiActual){toast('No hay talonario CAI activo. Cargá uno en CAI/Talonarios.', 'warn');return;}
     if(caiActual.fecha_vencimiento<hoy()){toast('El CAI está vencido. Cargá un talonario nuevo.', 'warn');return;}
     if(caiActual.nro_actual>caiActual.nro_hasta){toast('Se agotaron los números del talonario. Cargá uno nuevo.', 'warn');return;}
     numero=caiActual.nro_actual;
@@ -1012,17 +999,35 @@ async function generarPDF(id){
     doc.setFillColor(245,245,245);
     doc.rect(L+3, T+3, 55, 22, 'F');
     try {
-      doc.addImage('data:image/png;base64,'+LOGO_B64,'PNG', L+3, T+3, 55, 22);
+      if(esPlacemem){
+        // Logo Placemem — mostrar nombre como texto si no hay logo
+        doc.setFontSize(13); doc.setFont('helvetica','bold'); doc.setTextColor(0,0,0);
+        doc.text('PLACEMEM S.R.L.', L+5, T+12);
+        doc.setFontSize(8); doc.setFont('helvetica','normal'); doc.setTextColor(80,80,80);
+        doc.text('Mantenimiento Industrial', L+5, T+18);
+      } else {
+        doc.addImage('data:image/png;base64,'+LOGO_B64,'PNG', L+3, T+3, 55, 22);
+      }
     } catch(e) {
-      doc.setFontSize(14); doc.setFont('helvetica','bold');
-      doc.text('HIDROMEC S.R.L.', L+5, T+15);
+      doc.setFontSize(13); doc.setFont('helvetica','bold');
+      doc.text(esPlacemem?'PLACEMEM S.R.L.':'HIDROMEC S.R.L.', L+5, T+15);
     }
 
-    // Datos empresa centro-izquierda
+    // Datos empresa dinámica según empresa_id del remito
+    const esPlacemem = r.empresa_id === 'a2000000-0000-0000-0000-000000000002';
+    const EMP = esPlacemem ? {
+      cuit:'30-71232493-3', iibb:'30-71232493-3', inicio:'20/06/2012',
+      dir:'3 de Febrero 353 - Zárate - Bs.As.',
+      tel:'', email:'administracion@placemem.com.ar',
+    } : {
+      cuit:'30-71163249-9', iibb:'30-71163249-9', inicio:'01/01/2011',
+      dir:'Colectora Oeste 1525 - Zárate - Bs.As.',
+      tel:'Tel: 03487-456419', email:'administracion@hidromecsrl.com.ar',
+    };
     doc.setFontSize(7.5); doc.setFont('helvetica','normal'); doc.setTextColor(80,80,80);
-    doc.text('Colectora Oeste 1525 - Zárate - Bs.As.', L+4, T+28);
-    doc.text('Tel: 03487-456419', L+4, T+33);
-    doc.text('administracion@hidromecsrl.com.ar', L+4, T+38);
+    doc.text(EMP.dir, L+4, T+28);
+    if(EMP.tel) doc.text(EMP.tel, L+4, T+33);
+    doc.text(EMP.email, L+4, EMP.tel ? T+38 : T+33);
 
     // Línea vertical divisoria header
     doc.setDrawColor(180,180,180); doc.setLineWidth(0.3);
@@ -1049,11 +1054,11 @@ async function generarPDF(id){
     doc.setFontSize(10);
     doc.text('Fecha: '+fmtF(r.fecha), midX+24, T+30, {align:'center'});
 
-    // Datos empresa derecha — bajados para no superponerse con ORIGINAL/DUPLICADO
+    // Datos empresa derecha dinámicos
     doc.setFontSize(7.5); doc.setTextColor(60,60,60);
-    doc.text('C.U.I.T.: 30-71163249-9', R-5, T+16, {align:'right'});
-    doc.text('I. Brutos: 30-71163249-9', R-5, T+21, {align:'right'});
-    doc.text('Inicio: 01/01/2011', R-5, T+26, {align:'right'});
+    doc.text('C.U.I.T.: '+EMP.cuit, R-5, T+16, {align:'right'});
+    doc.text('I. Brutos: '+EMP.iibb, R-5, T+21, {align:'right'});
+    doc.text('Inicio: '+EMP.inicio, R-5, T+26, {align:'right'});
     doc.setFontSize(8); doc.setFont('helvetica','bold'); doc.setTextColor(0,0,0);
     doc.text('I.V.A. Responsable Inscripto', R-5, T+38, {align:'right'});
 
@@ -1206,7 +1211,7 @@ async function generarPDF(id){
 
     // Código de barras (representación visual con líneas)
     // Estándar AFIP: CUIT(11) + TipoComp(2) + PtoVta(4) + NroComp(8) + FechaVto(8) + CAI(14) + Libre(3)
-    const cuit='3071163249';
+    const cuit=esPlacemem?'3071232493':'3071163249';
     const tipoDoc='91';
     const pv=(r.punto_venta||'0001').replace('-','').padStart(4,'0');
     const nroComp=String(r.numero||0).padStart(8,'0');
