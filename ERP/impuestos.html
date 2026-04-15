@@ -274,58 +274,58 @@
 <div class="modal-overlay" id="modal-plan">
   <div class="modal" style="max-width:620px">
     <h3 id="plan-modal-title">Nuevo plan de pago AFIP</h3>
-    <input type="hidden" id="np-id">
+    <input type="hidden" id="npl-id">
     <div class="form-row">
       <div class="form-group">
         <label>Empresa</label>
-        <select id="np-empresa">
+        <select id="npl-empresa">
           <option value="a1000000-0000-0000-0000-000000000001">Hidromec</option>
           <option value="a2000000-0000-0000-0000-000000000002">Placemem</option>
         </select>
       </div>
       <div class="form-group">
         <label>Nro. Plan ARCA</label>
-        <input type="text" id="np-nro-plan" placeholder="Ej: 168543">
+        <input type="text" id="npl-nro-plan" placeholder="Ej: 168543">
       </div>
     </div>
     <div class="form-row">
       <div class="form-group">
         <label>Titular</label>
-        <input type="text" id="np-titular" placeholder="Ej: Hidromec, Javier, Leonel...">
+        <input type="text" id="npl-titular" placeholder="Ej: Hidromec, Javier, Leonel...">
       </div>
       <div class="form-group">
         <label>Descripción</label>
-        <input type="text" id="np-descripcion" placeholder="Ej: Plan de facilidades IVA 2024">
+        <input type="text" id="npl-descripcion" placeholder="Ej: Plan de facilidades IVA 2024">
       </div>
     </div>
     <div class="form-row">
       <div class="form-group">
         <label>Cuota actual</label>
-        <input type="number" id="np-cuota-actual" min="1" value="1">
+        <input type="number" id="npl-cuota-actual" min="1" value="1">
       </div>
       <div class="form-group">
         <label>Total cuotas</label>
-        <input type="number" id="np-cuotas-total" min="1" value="12">
+        <input type="number" id="npl-cuotas-total" min="1" value="12">
       </div>
     </div>
     <div class="form-row">
       <div class="form-group">
         <label>Monto cuota</label>
-        <input type="number" id="np-monto" min="0" step="0.01" placeholder="0.00">
+        <input type="number" id="npl-monto" min="0" step="0.01" placeholder="0.00">
       </div>
       <div class="form-group">
         <label>Vencimiento</label>
-        <input type="date" id="np-vencimiento">
+        <input type="date" id="npl-vencimiento">
       </div>
     </div>
     <div class="form-row">
       <div class="form-group">
         <label>Período (YYYY-MM)</label>
-        <input type="month" id="np-periodo">
+        <input type="month" id="npl-periodo">
       </div>
       <div class="form-group">
         <label>Estado</label>
-        <select id="np-pagado">
+        <select id="npl-pagado">
           <option value="false">Pendiente</option>
           <option value="true">Pagado</option>
         </select>
@@ -872,17 +872,17 @@ function cerrarModal(id){document.getElementById(id).classList.remove('show');}
 
 function abrirModalPlan(r=null){
   document.getElementById('plan-modal-title').textContent = r ? 'Editar plan de pago' : 'Nuevo plan de pago AFIP';
-  document.getElementById('np-id').value          = r?.id || '';
-  document.getElementById('np-empresa').value     = r?.empresa_id || document.getElementById('f-empresa').value;
-  document.getElementById('np-nro-plan').value    = r?.nro_plan || '';
-  document.getElementById('np-titular').value     = r?.titular || '';
-  document.getElementById('np-descripcion').value = r?.descripcion || '';
-  document.getElementById('np-cuota-actual').value= r?.cuota_actual || 1;
-  document.getElementById('np-cuotas-total').value= r?.cuotas_total || 12;
-  document.getElementById('np-monto').value       = r?.monto_cuota || '';
-  document.getElementById('np-vencimiento').value = r?.fecha_vencimiento || '';
-  document.getElementById('np-periodo').value     = r?.periodo || new Date().toISOString().substring(0,7);
-  document.getElementById('np-pagado').value      = r?.pagado ? 'true' : 'false';
+  document.getElementById('npl-id').value          = r?.id || '';
+  document.getElementById('npl-empresa').value     = r?.empresa_id || document.getElementById('f-empresa').value;
+  document.getElementById('npl-nro-plan').value    = r?.nro_plan || '';
+  document.getElementById('npl-titular').value     = r?.titular || '';
+  document.getElementById('npl-descripcion').value = r?.descripcion || '';
+  document.getElementById('npl-cuota-actual').value= r?.cuota_actual || 1;
+  document.getElementById('npl-cuotas-total').value= r?.cuotas_total || 12;
+  document.getElementById('npl-monto').value       = r?.monto_cuota || '';
+  document.getElementById('npl-vencimiento').value = r?.fecha_vencimiento || '';
+  document.getElementById('npl-periodo').value     = r?.periodo || new Date().toISOString().substring(0,7);
+  document.getElementById('npl-pagado').value      = r?.pagado ? 'true' : 'false';
   document.getElementById('modal-plan').classList.add('show');
 }
 
@@ -1056,22 +1056,22 @@ function togglePlanDetalle(id){
 }
 
 async function guardarPlan(){
-  const id      = document.getElementById('np-id').value;
-  const empId   = document.getElementById('np-empresa').value;
-  const nroPlan = document.getElementById('np-nro-plan').value.trim();
-  const monto   = parseFloat(document.getElementById('np-monto').value)||0;
+  const id      = document.getElementById('npl-id').value;
+  const empId   = document.getElementById('npl-empresa').value;
+  const nroPlan = document.getElementById('npl-nro-plan').value.trim();
+  const monto   = parseFloat(document.getElementById('npl-monto').value)||0;
   if(!nroPlan||!monto){ toast('Completá Nro. Plan y Monto.','warn'); return; }
   const payload={
     empresa_id:     empId,
     nro_plan:       nroPlan,
-    titular:        document.getElementById('np-titular').value.trim()||null,
-    descripcion:    document.getElementById('np-descripcion').value.trim()||null,
-    cuota_actual:   parseInt(document.getElementById('np-cuota-actual').value)||1,
-    cuotas_total:   parseInt(document.getElementById('np-cuotas-total').value)||1,
+    titular:        document.getElementById('npl-titular').value.trim()||null,
+    descripcion:    document.getElementById('npl-descripcion').value.trim()||null,
+    cuota_actual:   parseInt(document.getElementById('npl-cuota-actual').value)||1,
+    cuotas_total:   parseInt(document.getElementById('npl-cuotas-total').value)||1,
     monto_cuota:    monto,
-    fecha_vencimiento: document.getElementById('np-vencimiento').value||null,
-    periodo:        document.getElementById('np-periodo').value||null,
-    pagado:         document.getElementById('np-pagado').value==='true',
+    fecha_vencimiento: document.getElementById('npl-vencimiento').value||null,
+    periodo:        document.getElementById('npl-periodo').value||null,
+    pagado:         document.getElementById('npl-pagado').value==='true',
   };
   try{
     if(id){
