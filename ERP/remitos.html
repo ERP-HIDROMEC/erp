@@ -551,14 +551,14 @@ async function cargarDatosModal(){
   const empId=document.getElementById('nr-empresa').value;
   const clientes=await ClientesAPI.getClientesSelect(empId);
   document.getElementById('nr-cliente').innerHTML='<option value="">Seleccioná cliente</option>'+(clientes||[]).map(c=>`<option value="${c.id}">${c.nombre}</option>`).join('');
-  // Info CAI — actualizar caiActual con la empresa del modal (fix multiempresa)
+  // Info CAI
   const tal=await RemitosAPI.getTalonarioActivo(empId);
-  caiActual=tal||null;
   const infoEl=document.getElementById('cai-info');
-  if(caiActual){
-    const restantes=caiActual.nro_hasta-caiActual.nro_actual+1;
+  if(tal&&tal.length){
+    const t=tal[0];
+    const restantes=t.nro_hasta-t.nro_actual+1;
     infoEl.style.display='block';
-    infoEl.innerHTML=`CAI: <strong style="font-family:'DM Mono',monospace">${caiActual.cai}</strong> — Próximo N°: <strong>0001-${caiActual.nro_actual.toString().padStart(8,'0')}</strong> — Vence: ${fmtF(caiActual.fecha_vencimiento)} — Restantes: ${restantes}`;
+    infoEl.innerHTML=`CAI: <strong style="font-family:'DM Mono',monospace">${t.cai}</strong> — Próximo N°: <strong>0001-${t.nro_actual.toString().padStart(8,'0')}</strong> — Vence: ${fmtF(t.fecha_vencimiento)} — Restantes: ${restantes}`;
   } else {
     infoEl.style.display='none';
   }
@@ -797,14 +797,6 @@ async function editarRemito(id){
 }
 
 async function guardarRemito(estado){
-  // Protección contra doble submit
-  const btns=document.querySelectorAll('#modal-nuevo .btn-primary, #modal-nuevo .btn-ghost[onclick*="borrador"]');
-  btns.forEach(b=>b.disabled=true);
-  const reactivar=()=>btns.forEach(b=>b.disabled=false);
-  try { await _guardarRemitoInterno(estado); } finally { reactivar(); }
-}
-
-async function _guardarRemitoInterno(estado){
   const empId=document.getElementById('nr-empresa').value;
   const clienteId=document.getElementById('nr-cliente').value||null;
   const tipoRemito=document.getElementById('nr-tipo').value;
@@ -880,10 +872,8 @@ async function _guardarRemitoInterno(estado){
     if(error){toast('Error: '+(error?.message||String(error)), 'error');return;}
   } else {
     if(estado==='borrador'){
-      // Para borrador: no asignar numero ni punto_venta para no violar el unique constraint
-      // numero_formateado solo como label visual
-      delete payload.numero;
-      delete payload.punto_venta;
+      // Para borrador no necesita número
+      payload.numero=Date.now();
       payload.numero_formateado='BORRADOR';
     }
     let data=null,error=null; try{ data=await RemitosAPI.crearRemito(payload); }catch(e){error=e;}
