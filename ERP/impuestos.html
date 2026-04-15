@@ -892,11 +892,23 @@ async function cargarPlanes(){
   const {tipo,periodo:perSel,label}=getPeriodo();
   const anio=document.getElementById('f-anio').value;
 
-  // Buscar todos los planes de la empresa (filtramos por periodo en JS para no requerir nuevo endpoint)
+  // Buscar todos los planes de la empresa
   let data;
   try { data = await db.from('planes_pago_afip').select('*,empresas(nombre)').eq('empresa_id',empId).order('fecha_vencimiento',{ascending:true}); }
   catch(e){ manejarError(e,'cargar planes'); return; }
-  if(data.error){ manejarError(data.error,'cargar planes'); return; }
+  if(data.error){
+    // Si la tabla no existe todavía, mostrar mensaje amigable
+    if(data.error.code==='42P01'||data.error.message?.includes('relation')||data.error.message?.includes('does not exist')){
+      document.getElementById('contenido').innerHTML=`
+        <div class="panel"><div class="empty" style="padding:60px">
+          <div style="font-size:32px;margin-bottom:12px">🗂️</div>
+          <div style="font-size:14px;color:var(--text);margin-bottom:8px">Tabla de planes de pago no creada aún</div>
+          <div style="font-size:12px;color:var(--muted)">Ejecutá el archivo <strong>planes_pago_afip.sql</strong> en el SQL Editor de Supabase para habilitar esta sección.</div>
+        </div></div>`;
+      return;
+    }
+    manejarError(data.error,'cargar planes'); return;
+  }
 
   const rows=(data.data||[]);
 
