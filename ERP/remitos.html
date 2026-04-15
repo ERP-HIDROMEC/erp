@@ -551,14 +551,14 @@ async function cargarDatosModal(){
   const empId=document.getElementById('nr-empresa').value;
   const clientes=await ClientesAPI.getClientesSelect(empId);
   document.getElementById('nr-cliente').innerHTML='<option value="">Seleccioná cliente</option>'+(clientes||[]).map(c=>`<option value="${c.id}">${c.nombre}</option>`).join('');
-  // Info CAI
+  // Info CAI — actualizar caiActual con la empresa del modal (fix multiempresa)
   const tal=await RemitosAPI.getTalonarioActivo(empId);
+  caiActual=tal||null;
   const infoEl=document.getElementById('cai-info');
-  if(tal&&tal.length){
-    const t=tal[0];
-    const restantes=t.nro_hasta-t.nro_actual+1;
+  if(caiActual){
+    const restantes=caiActual.nro_hasta-caiActual.nro_actual+1;
     infoEl.style.display='block';
-    infoEl.innerHTML=`CAI: <strong style="font-family:'DM Mono',monospace">${t.cai}</strong> — Próximo N°: <strong>0001-${t.nro_actual.toString().padStart(8,'0')}</strong> — Vence: ${fmtF(t.fecha_vencimiento)} — Restantes: ${restantes}`;
+    infoEl.innerHTML=`CAI: <strong style="font-family:'DM Mono',monospace">${caiActual.cai}</strong> — Próximo N°: <strong>0001-${caiActual.nro_actual.toString().padStart(8,'0')}</strong> — Vence: ${fmtF(caiActual.fecha_vencimiento)} — Restantes: ${restantes}`;
   } else {
     infoEl.style.display='none';
   }
