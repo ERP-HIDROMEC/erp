@@ -963,6 +963,16 @@ const DOC_TIPOS={
     {v:'cert_espacio',l:'Habilitacion espacio confinado'},
     {v:'examen_periodico',l:'Examen medico periodico'},
     {v:'carnet_manejo',l:'Carnet de conducir'},
+    {v:'poliza_acc_personales',l:'Póliza accidentes personales'},
+    {v:'iibb',l:'IIBB'},
+    {v:'pago_monotributo',l:'Pago Monotributo'},
+    {v:'constancia_afip',l:'Constancia de AFIP'},
+    {v:'matricula',l:'Matrícula'},
+    {v:'telegrama',l:'Telegrama'},
+    {v:'baja_afip',l:'Baja AFIP'},
+    {v:'recibo',l:'Recibo'},
+    {v:'poliza_seguro_vida',l:'Póliza Seguro de Vida Obligatorio'},
+    {v:'poliza_resp_civil',l:'Póliza Responsabilidad Civil'},
     {v:'otro_personal',l:'Otro'},
   ],
 };
@@ -1043,7 +1053,7 @@ async function cargarDocumentos(categoria){
     ? [...new Map((data||[]).map(r=>[r.empleado_id,{id:r.empleado_id,nombre:r.empleados?.nombre||'—'}])).values()].sort((a,b)=>a.nombre.localeCompare(b.nombre))
     : [];
   const tiposUnicos = categoria==='personal'
-    ? [...new Set((data||[]).map(r=>r.tipo).filter(Boolean))]
+    ? DOC_TIPOS.personal
     : [];
 
   document.getElementById('contenido').innerHTML=`
@@ -1057,7 +1067,7 @@ async function cargarDocumentos(categoria){
       <select id="filtro-doc-tipo" onchange="_filtroDocTipo=this.value;cargarDocumentos('personal')"
         style="padding:8px 12px;background:var(--bg2);border:1px solid var(--border);border-radius:8px;color:var(--text);font-size:13px;font-family:'DM Sans',sans-serif;outline:none">
         <option value="">Todos los tipos</option>
-        ${tiposUnicos.map(t=>`<option value="${t}" ${t===_filtroDocTipo?'selected':''}>${t}</option>`).join('')}
+        ${tiposUnicos.map(t=>`<option value="${t.v}" ${t.v===_filtroDocTipo?'selected':''}>${t.l}</option>`).join('')}
       </select>
     </div>`:''
     }
