@@ -16,6 +16,7 @@
 <script src="proyectos.api.js"></script>
 <script src="empleados.api.js"></script>
 <script src="clientes.api.js"></script>
+<script src="impuestos.api.js"></script>
 <style>
   :root {
     --bg:#0f1117;--bg2:#181c27;--bg3:#1e2436;
@@ -189,7 +190,7 @@ async function cargarKPIs() {
   const emps = await EmpresasAPI.getEmpresas();
 
   kpiData = await Promise.all((emps||[]).map(async emp => {
-    const [r1,r2,r3,r4,r5,r6,r7,r8] = await Promise.all([
+    const [r1,r2,r3,r4,r5,r6,r7,r8,r9,r10,r11] = await Promise.all([
       FacturasAPI.getFacturas({empresaId:emp.id,excluirAnuladas:true,fechaDesde:ini,fechaHasta:finStr}).then(d=>({data:d})),
       FacturasAPI.getCobrosParaDashboard(emp.id,ini,finStr).then(d=>({data:d})),
       EgresosAPI.getEgresosParaDashboard(emp.id,ini,finStr).then(d=>({data:d})),
@@ -199,12 +200,21 @@ async function cargarKPIs() {
       FacturasAPI.getFacturas({empresaId:emp.id,soloVencidas:true}).then(d=>({data:d})),
       // Sueldos del mes (monto_bruto = gasto real de la empresa)
       EmpleadosAPI.getSueldos({empresaId:emp.id,periodo:mesActivo}).then(d=>({data:d})),
+      // Impuestos varios pagados en el mes
+      ImpuestosAPI.getImpuestosVarios({empresaId:emp.id}).then(d=>({data:(d||[]).filter(x=>x.pagado&&(x.fecha||'').substring(0,7)===mesActivo)})),
+      // Pagos de impuestos del mes
+      ImpuestosAPI.getPagosImpuestos({empresaId:emp.id}).then(d=>({data:(d||[]).filter(x=>(x.fecha||x.created_at||'').substring(0,7)===mesActivo)})),
+      // Cuotas de planes AFIP pagadas en el mes
+      db.from('planes_pago_afip').select('monto_cuota').eq('empresa_id',emp.id).eq('pagado',true).like('periodo', mesActivo+'%').then(d=>({data:d.data||[]})).catch(()=>({data:[]})),
     ]);
     const s = (r,f='monto_total') => (r.data||[]).reduce((a,x)=>a+Number(x[f]||x.monto||0),0);
     const fac = s(r1);
     const egr = s(r3);
     const sueldos = (r8.data||[]).reduce((a,x)=>a+Number(x.monto_bruto||0),0);
-    const gastoTotal = egr + sueldos;
+    const impVarios = (r9.data||[]).reduce((a,x)=>a+Number(x.monto||0),0);
+    const pagosImp  = (r10.data||[]).reduce((a,x)=>a+Number(x.monto||0),0);
+    const planesAfip= (r11.data||[]).reduce((a,x)=>a+Number(x.monto_cuota||0),0);
+    const gastoTotal = egr + sueldos + impVarios + pagosImp + planesAfip;
     return { empresa_id:emp.id, empresa:emp.nombre,
       facturacion_mes:fac, cobrado_mes:s(r2,'monto'),
       egresos_mes:egr, sueldos_mes:sueldos, gastos_mes:gastoTotal,
