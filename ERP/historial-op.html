@@ -353,7 +353,7 @@ function generarPDFOrdenAgrupada(rows, nro, fecha, metodo, operador, lineas=[]) 
 
     doc.setFont('helvetica','normal'); doc.setTextColor(0,0,0);
     lineas.forEach((p, i) => {
-      const tipoLabel = {'cheque':'Cheque','transferencia':'Transferencia','echeq':'E-Cheq','efectivo':'Efectivo','otro':'Otro'}[p.tipo_pago||p.tipo] || (p.tipo_pago||p.tipo||'—');
+      const tipoLabel = {'cheque':'Cheque','cheques':'Cheque','transferencia':'Transferencia','echeq':'E-Cheq','efectivo':'Efectivo','otro':'Otro'}[p.tipo_pago||p.tipo] || (p.tipo_pago||p.tipo||'—');
       const pFecha = p.fecha ? new Date(p.fecha+'T12:00:00').toLocaleDateString('es-AR') : '—';
       if(i%2===0){ doc.setFillColor(252,252,252); doc.rect(L+1,y-3,W-2,8,'F'); }
       doc.setFontSize(8.5);
@@ -565,7 +565,7 @@ function generarPDFOrden(eg,nro,fecha,metodo,operador,pagos=[]){
     doc.setFillColor(...bg);doc.rect(L+1,yRow,W-2,10,'F');
     doc.setFont('helvetica','normal');doc.setFontSize(9);doc.setTextColor(0,0,0);
     doc.text(String(i+1),L+5,yRow+7);
-    const tipoLabel=p.tipo==='cheque'?'Cheque':p.tipo==='transferencia'?'Transf.':'Efectivo';
+    const tipoLabel={'cheque':'Cheque','cheques':'Cheque','transferencia':'Transf.','echeq':'E-Cheq','efectivo':'Efectivo'}[p.tipo_pago||p.tipo]||p.tipo_pago||p.tipo||'—';
     doc.text(tipoLabel,L+18,yRow+7);
     doc.text(String(p.numero||'—').substring(0,20),L+50,yRow+7);
     doc.text(String(p.banco||'—').substring(0,18),midX+10,yRow+7);
