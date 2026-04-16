@@ -205,18 +205,9 @@ async function descargarOrdenPagoAgrupada(primerId, nroOrden){
   const u = await getUsuario();
 
   if (rows.length === 1) {
-    // Una sola factura — usar generarPDFOrden normal
     generarPDFOrden(eg, eg.orden_pago_nro||'OP-???', fecha, metodo, u?.email||'', []);
   } else {
-    // Múltiples — usar generarPDFOrdenMultiple si está disponible, sino generar uno simple
-    if (typeof generarPDFOrdenMultiple === 'function') {
-      const blob = generarPDFOrdenMultiple(rows, nroOrden, fecha, metodo, '', u?.email||'', []);
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a'); a.href = url; a.download = nroOrden+'.pdf'; a.click();
-    } else {
-      // Generar PDF agrupado inline
-      generarPDFOrdenAgrupada(rows, nroOrden, fecha, metodo, u?.email||'');
-    }
+    generarPDFOrdenAgrupada(rows, nroOrden, fecha, metodo, u?.email||'');
   }
 }
 
