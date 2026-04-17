@@ -622,6 +622,12 @@ function agregarItemRow(cant='',desc='',precio=0,readonly=false,contratoItemId='
       const ta=tr.querySelector('[data-detalle]');
       if(ta) ta.value=desc;
     }
+    // Si se pasó un precio explícito, preservarlo (modo edición — no sobreescribir con precio vigente del contrato)
+    if(precio && contratoItemId){
+      const precioHidden=tr.querySelector('[data-precio]');
+      if(precioHidden) precioHidden.value=precio;
+      recalcularTotales();
+    }
   } else {
     // Modo normal: texto libre + precio
     tr.innerHTML=`
@@ -1275,7 +1281,7 @@ async function guardarTalonario(){
   cargarTalonarios();
 }
 
-function cerrarModal(){document.getElementById('modal-remito').classList.remove('show');}
+function cerrarModal(id='modal-remito'){document.getElementById(id).classList.remove('show');}
 function cerrarModal2(){document.getElementById('modal-talonario').classList.remove('show');}
 // logout() → ahora en ERP.logout() (erp-sidebar.js)
 
