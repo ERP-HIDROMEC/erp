@@ -760,25 +760,32 @@ async function editarRemito(id){
   const tbody=document.getElementById('items-body');
   tbody.innerHTML='';
   if(r.tipo==='contrato' && r.contrato_id){
-    // Setear contrato en el select
+    // Setear contrato sin disparar onchange (que borraría los items ya cargados)
     const sel=document.getElementById('nr-contrato');
     await cargarContratos();
-    if(sel) sel.value=r.contrato_id;
-    // Cargar cache de items del contrato
+    if(sel){
+      sel.removeEventListener && (sel._origOnchange = sel.onchange);
+      sel.onchange = null; // desactivar temporalmente
+      sel.value=r.contrato_id;
+      sel.onchange = sel._origOnchange || null; // restaurar
+    }
+    // Cargar cache de items del contrato directamente (sin tocar el tbody)
     try{
       const empId2=document.getElementById('nr-empresa').value;
       const ci=await ContratosAPI.getItemsContrato(r.contrato_id,empId2);
       _itemsContratoCache=ci||[];
     }catch(e){_itemsContratoCache=[];}
-    // Renderizar filas con dropdown preseleccionado
+    // Renderizar filas con los precios GUARDADOS en la BD (no los vigentes del contrato)
     (items||[]).forEach(it=>{
-      const match=_itemsContratoCache.find(ci=>ci.descripcion===it.descripcion)||null;
+      const match=_itemsContratoCache.find(ci=>ci.id===it.contrato_item_id)
+                 ||_itemsContratoCache.find(ci=>ci.descripcion===it.descripcion)
+                 ||null;
       agregarItemRow(
         it.cantidad_num!=null?it.cantidad_num:(it.cantidad||''),
         it.descripcion,
-        it.precio_unitario||0,
+        it.precio_unitario||0,  // precio histórico guardado — NO el vigente
         false,
-        match?.id||''
+        match?.id||it.contrato_item_id||''
       );
     });
     if(!items||items.length<3) for(let i=(items||[]).length;i<3;i++) agregarItemRow();
