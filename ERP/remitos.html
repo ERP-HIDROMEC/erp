@@ -83,7 +83,7 @@
       <option value="anulado">Anulado</option>
     </select>
     <input type="month" id="f-mes" onchange="recargar()">
-    <input type="text" id="f-buscar" placeholder="N° remito o cliente..." oninput="recargar()" style="min-width:200px">
+    <input type="text" id="f-buscar" placeholder="N° remito o cliente..." oninput="filtrarRemitosLocal()" style="min-width:200px">
   </div>
 
   <div class="kpi-grid" id="kpis"></div>
@@ -375,6 +375,41 @@ function cambiarTab(tab,btn){
   recargar();
 }
 
+let _remitosCache = [];
+
+async function filtrarRemitosLocal(){
+  const buscar = document.getElementById('f-buscar').value.toLowerCase().trim();
+  if(!_remitosCache.length){ cargarRemitos(); return; }
+  if(!buscar){ renderRemitos(_remitosCache); return; }
+
+  // 1. Filtrar por campos del remito (número, cliente)
+  const porCabecera = _remitosCache.filter(r =>
+    (r.numero_formateado||'').toLowerCase().includes(buscar) ||
+    (r.clientes?.nombre||'').toLowerCase().includes(buscar) ||
+    (r.orden_compra||'').toLowerCase().includes(buscar)
+  );
+
+  // 2. Buscar en ítems — query a remito_items_v2 buscando la descripción
+  let porItems = [];
+  try {
+    const { data: itemsMatch } = await db
+      .from('remito_items_v2')
+      .select('remito_id')
+      .ilike('descripcion', `%${buscar}%`)
+      .limit(200);
+    if(itemsMatch && itemsMatch.length){
+      const idsConItem = new Set(itemsMatch.map(i => i.remito_id));
+      porItems = _remitosCache.filter(r => idsConItem.has(r.id));
+    }
+  } catch(e){ console.warn('Búsqueda en ítems falló:', e); }
+
+  // 3. Unir sin duplicados
+  const idsYaEncontrados = new Set(porCabecera.map(r => r.id));
+  const rows = [...porCabecera, ...porItems.filter(r => !idsYaEncontrados.has(r.id))];
+
+  renderRemitos(rows);
+}
+
 function recargar(){
   if(tabActual==='todos'||tabActual==='historico') cargarRemitos();
   else if(tabActual==='pendientes') cargarPendientes();
@@ -410,8 +445,19 @@ async function cargarRemitos(){
     const facMap={};(facs||[]).forEach(f=>facMap[f.id]=f.numero_factura);
     rows=rows.map(r=>({...r,_nroFactura:r.factura_id?facMap[r.factura_id]:null}));
   }
-  if(buscar) rows=rows.filter(r=>(r.numero_formateado||'').includes(buscar)||(r.clientes?.nombre||'').toLowerCase().includes(buscar));
+  // Guardar en cache y aplicar filtro de búsqueda local
+  _remitosCache = rows;
+  const buscar2 = document.getElementById('f-buscar').value.toLowerCase();
+  const rowsFilt = buscar2
+    ? rows.filter(r =>
+        (r.numero_formateado||'').toLowerCase().includes(buscar2) ||
+        (r.clientes?.nombre||'').toLowerCase().includes(buscar2) ||
+        (r.descripcion||'').toLowerCase().includes(buscar2))
+    : rows;
+  renderRemitos(rowsFilt);
+}
 
+function renderRemitos(rows){
   const pendFac=rows.filter(r=>['emitido','enviado','aceptado'].includes(r.estado)&&r.tipo!=='interno').length;
   const totalVal=rows.filter(r=>r.estado!=='anulado').reduce((s,r)=>s+Number(r.total_valorizado||0),0);
 
@@ -622,12 +668,6 @@ function agregarItemRow(cant='',desc='',precio=0,readonly=false,contratoItemId='
       const ta=tr.querySelector('[data-detalle]');
       if(ta) ta.value=desc;
     }
-    // Si se pasó un precio explícito, preservarlo (modo edición — no sobreescribir con precio vigente del contrato)
-    if(precio && contratoItemId){
-      const precioHidden=tr.querySelector('[data-precio]');
-      if(precioHidden) precioHidden.value=precio;
-      recalcularTotales();
-    }
   } else {
     // Modo normal: texto libre + precio
     tr.innerHTML=`
@@ -760,32 +800,25 @@ async function editarRemito(id){
   const tbody=document.getElementById('items-body');
   tbody.innerHTML='';
   if(r.tipo==='contrato' && r.contrato_id){
-    // Setear contrato sin disparar onchange (que borraría los items ya cargados)
+    // Setear contrato en el select
     const sel=document.getElementById('nr-contrato');
     await cargarContratos();
-    if(sel){
-      sel.removeEventListener && (sel._origOnchange = sel.onchange);
-      sel.onchange = null; // desactivar temporalmente
-      sel.value=r.contrato_id;
-      sel.onchange = sel._origOnchange || null; // restaurar
-    }
-    // Cargar cache de items del contrato directamente (sin tocar el tbody)
+    if(sel) sel.value=r.contrato_id;
+    // Cargar cache de items del contrato
     try{
       const empId2=document.getElementById('nr-empresa').value;
       const ci=await ContratosAPI.getItemsContrato(r.contrato_id,empId2);
       _itemsContratoCache=ci||[];
     }catch(e){_itemsContratoCache=[];}
-    // Renderizar filas con los precios GUARDADOS en la BD (no los vigentes del contrato)
+    // Renderizar filas con dropdown preseleccionado
     (items||[]).forEach(it=>{
-      const match=_itemsContratoCache.find(ci=>ci.id===it.contrato_item_id)
-                 ||_itemsContratoCache.find(ci=>ci.descripcion===it.descripcion)
-                 ||null;
+      const match=_itemsContratoCache.find(ci=>ci.descripcion===it.descripcion)||null;
       agregarItemRow(
         it.cantidad_num!=null?it.cantidad_num:(it.cantidad||''),
         it.descripcion,
-        it.precio_unitario||0,  // precio histórico guardado — NO el vigente
+        it.precio_unitario||0,
         false,
-        match?.id||it.contrato_item_id||''
+        match?.id||''
       );
     });
     if(!items||items.length<3) for(let i=(items||[]).length;i<3;i++) agregarItemRow();
@@ -1288,7 +1321,7 @@ async function guardarTalonario(){
   cargarTalonarios();
 }
 
-function cerrarModal(id='modal-remito'){document.getElementById(id).classList.remove('show');}
+function cerrarModal(){document.getElementById('modal-remito').classList.remove('show');}
 function cerrarModal2(){document.getElementById('modal-talonario').classList.remove('show');}
 // logout() → ahora en ERP.logout() (erp-sidebar.js)
 
