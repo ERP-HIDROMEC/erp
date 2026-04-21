@@ -450,16 +450,19 @@ async function confirmarOPMultiple(){
   if(!rows.length){toast('Error al cargar los egresos.', 'error');return;}
 
   // Generar número OP correlativo basado en el máximo existente (no count)
+  const empresaIdOP = rows[0]?.empresa_id;
+  if(!empresaIdOP){ toast('No se pudo determinar la empresa del egreso.', 'error'); return; }
+  const anioActual = new Date().getFullYear();
   const {data:opExist} = await db.from('egresos')
     .select('orden_pago_nro')
     .not('orden_pago_nro','is',null)
-    .eq('empresa_id', rows[0]?.empresa_id || '');
-  const anioActual = new Date().getFullYear();
-  // Extraer el número más alto de OPs del año actual
+    .eq('empresa_id', empresaIdOP);
+  // Extraer el número más alto de OPs del año actual para ESTA empresa
   const nrosAnio = (opExist||[])
     .map(r => r.orden_pago_nro)
-    .filter(n => n && n.includes('-'+anioActual))
-    .map(n => parseInt(n.replace('OP-','').split('-')[0])||0);
+    .filter(n => n && n.toUpperCase().endsWith('-'+anioActual))
+    .map(n => { const m = n.match(/OP-0*(\d+)-\d{4}/i); return m ? parseInt(m[1]) : 0; })
+    .filter(n => !isNaN(n) && n > 0);
   const maxNro = nrosAnio.length ? Math.max(...nrosAnio) : 0;
   const nroOrden = 'OP-'+String(maxNro+1).padStart(4,'0')+'-'+anioActual;
   const total=rows.reduce((s,r)=>s+Number(r.monto||0),0);
