@@ -1300,25 +1300,34 @@ async function generarPDF() {
       });
 
       // Alertas
-      const alertaColors = { recomendacion: C_RECOM, falla: C_FALLA, info: C_INFO };
+      const alertaColors  = { recomendacion: C_RECOM, falla: C_FALLA, info: C_INFO };
+      const alertaBgColors = {
+        recomendacion: [253, 245, 220],   // amarillo muy claro
+        falla:         [253, 232, 230],   // rojo muy claro
+        info:          [230, 241, 253],   // azul muy claro
+      };
       const alertaLabels = { recomendacion: '[RECOMENDACIÓN]', falla: '[FALLA DETECTADA]', info: '[INFORMACIÓN]' };
       data.alertas?.filter(a => a.texto).forEach(a => {
-        checkY(8);
-        const col = alertaColors[a.tipo] || C_INFO;
-        // Fondo tenue
-        doc.setFillColor(col[0], col[1], col[2]);
-        doc.setGlobalAlpha(0.07);
-        doc.rect(ML, y - 3, CW, 7, 'F');
-        doc.setGlobalAlpha(1);
+        const col   = alertaColors[a.tipo]   || C_INFO;
+        const bgCol = alertaBgColors[a.tipo] || [230, 241, 253];
+        const lines = doc.splitTextToSize(a.texto, CW - 52);
+        const rowH  = Math.max(7, lines.length * 4.5 + 4);
+        checkY(rowH + 2);
+        // Fondo sin alpha — color plano claro
+        doc.setFillColor(...bgCol);
+        doc.rect(ML, y - 3, CW, rowH, 'F');
+        // Borde izquierdo de color
+        doc.setFillColor(...col);
+        doc.rect(ML, y - 3, 2, rowH, 'F');
+        // Borde exterior
         doc.setDrawColor(...col);
         doc.setLineWidth(0.3);
-        doc.rect(ML, y - 3, CW, 7, 'S');
+        doc.rect(ML, y - 3, CW, rowH, 'S');
         setFont('bold', 8.5, col);
-        doc.text(alertaLabels[a.tipo] || '', ML + 2, y + 1.5);
+        doc.text(alertaLabels[a.tipo] || '', ML + 4, y + 1.5);
         setFont('normal', 8.5, C_DARK);
-        const lines = doc.splitTextToSize(a.texto, CW - 50);
-        doc.text(lines, ML + 40, y + 1.5);
-        y += Math.max(7, lines.length * 4.5) + 2;
+        doc.text(lines, ML + 42, y + 1.5);
+        y += rowH + 2;
       });
 
       // Observaciones
