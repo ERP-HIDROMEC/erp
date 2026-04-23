@@ -14,6 +14,7 @@
 <script src="proyectos.api.js"></script>
 <script src="contratos.api.js"></script>
 <script src="informes.api.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 <style>
   /* ── Layout ── */
   .inf-layout { display: grid; grid-template-columns: 340px 1fr; gap: 20px; }
@@ -483,7 +484,6 @@ let fotoCount       = 0;
 let currentFotoSlot = null;
 let empresaId       = null;
 
-const PDF_API_URL = '/api/generar-informe'; // Endpoint Flask
 
 // ─── INIT ────────────────────────────────────────────────────
 async function init() {
@@ -968,35 +968,360 @@ async function guardarInforme() {
   }
 }
 
-// ─── GENERAR PDF ──────────────────────────────────────────────
+// ─── GENERAR PDF (client-side con jsPDF) ──────────────────────
 async function generarPDF() {
-  const data = collectData();
-  const statusEl = document.getElementById('pdf-status');
-  const btn = document.getElementById('btn-pdf');
+  const data      = collectData();
+  const statusEl  = document.getElementById('pdf-status');
+  const btn       = document.getElementById('btn-pdf');
   statusEl.className = 'pdf-status';
   btn.disabled = true;
   btn.innerHTML = '<span class="spinner"></span>Generando...';
 
   try {
-    const res = await fetch(PDF_API_URL, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(data),
-    });
-    if (!res.ok) {
-      const err = await res.json().catch(() => ({ error: 'Error del servidor' }));
-      throw new Error(err.error || 'Error generando PDF');
+    const { jsPDF } = window.jspdf;
+    const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
+
+    // ── Constantes de layout ──────────────────────────────────
+    const PW   = 210;           // ancho A4
+    const PH   = 297;           // alto A4
+    const ML   = 18;            // margen izquierdo
+    const MR   = 18;            // margen derecho
+    const CW   = PW - ML - MR;  // ancho útil
+    const HEADER_H = 14;
+    const FOOTER_H = 8;
+    const TOP  = ML + HEADER_H + 4;  // y inicial del contenido
+    const BOT  = PH - FOOTER_H - 4;  // y máximo antes del footer
+
+    let y    = TOP;
+    let page = 1;
+
+    // ── Colores ───────────────────────────────────────────────
+    const C_DARK   = [26,  26,  26];
+    const C_MID    = [85,  85,  85];
+    const C_LIGHT  = [136, 136, 136];
+    const C_BORDER = [204, 204, 204];
+    const C_SECT   = [240, 240, 240];
+    const C_WHITE  = [255, 255, 255];
+    const C_FALLA  = [192,  57,  43];
+    const C_RECOM  = [153, 102,   0];
+    const C_INFO   = [24,   94, 165];
+    const C_HEADER = [26,  26,  26];
+
+    // ── Helpers ───────────────────────────────────────────────
+    function setFont(style = 'normal', size = 9, color = C_DARK) {
+      doc.setFont('helvetica', style);
+      doc.setFontSize(size);
+      doc.setTextColor(...color);
     }
-    const blob = await res.blob();
-    const url  = URL.createObjectURL(blob);
-    const a    = document.createElement('a');
-    a.href = url;
-    a.download = (data.titulo || 'informe').replace(/\s+/g,'_') + '_N' + (data.n_informe||'1') + '.pdf';
-    a.click();
-    URL.revokeObjectURL(url);
+
+    function drawHeaderFooter() {
+      // Header bar
+      doc.setFillColor(...C_HEADER);
+      doc.rect(ML, ML, CW, HEADER_H, 'F');
+      setFont('bold', 11, C_WHITE);
+      doc.text((data.titulo || 'INFORME').toUpperCase(), PW / 2, ML + 9, { align: 'center' });
+      setFont('normal', 8, [204, 204, 204]);
+      doc.text((data.empresa_ej || '').toUpperCase(), ML + 2, ML + 9);
+      doc.text((data.empresa || '').toUpperCase(), ML + CW - 2, ML + 9, { align: 'right' });
+
+      // Línea dorada bajo header
+      doc.setDrawColor(200, 168, 75);
+      doc.setLineWidth(0.6);
+      doc.line(ML, ML + HEADER_H, ML + CW, ML + HEADER_H);
+
+      // Footer
+      doc.setFillColor(...C_SECT);
+      doc.rect(ML, PH - FOOTER_H - 2, CW, FOOTER_H, 'F');
+      setFont('normal', 7, C_MID);
+      doc.text('Página ' + page, ML + 2, PH - 4);
+      doc.text((data.titulo || '').toUpperCase(), PW / 2, PH - 4, { align: 'center' });
+      doc.text(data.fecha || '', ML + CW - 2, PH - 4, { align: 'right' });
+    }
+
+    function newPage() {
+      drawHeaderFooter();
+      doc.addPage();
+      page++;
+      y = TOP;
+      drawHeaderFooter(); // header/footer en la nueva página
+    }
+
+    function checkY(needed = 10) {
+      if (y + needed > BOT) newPage();
+    }
+
+    // Texto con wrap y retorno de altura usada
+    function wrappedText(txt, x, yPos, maxW, lineH = 4.5) {
+      const lines = doc.splitTextToSize(String(txt || ''), maxW);
+      doc.text(lines, x, yPos);
+      return lines.length * lineH;
+    }
+
+    // Fila de tabla genérica: array de {text, w, bold?, color?}
+    function tableRow(cells, yPos, rowH = 7, bg = null) {
+      if (bg) { doc.setFillColor(...bg); doc.rect(ML, yPos, CW, rowH, 'F'); }
+      doc.setDrawColor(...C_BORDER);
+      doc.setLineWidth(0.2);
+      doc.rect(ML, yPos, CW, rowH, 'S');
+      let xCur = ML;
+      cells.forEach((cell, i) => {
+        if (i > 0) { doc.setDrawColor(...C_BORDER); doc.line(xCur, yPos, xCur, yPos + rowH); }
+        setFont(cell.bold ? 'bold' : 'normal', cell.size || 8.5, cell.color || C_DARK);
+        const lines = doc.splitTextToSize(String(cell.text || ''), cell.w - 3);
+        doc.text(lines, xCur + 2, yPos + 4.5);
+        xCur += cell.w;
+      });
+    }
+
+    // Título de sección (banda gris)
+    function sectionTitle(label, num) {
+      checkY(8);
+      doc.setFillColor(...C_SECT);
+      doc.rect(ML, y, CW, 7, 'F');
+      doc.setDrawColor(...C_BORDER);
+      doc.setLineWidth(0.2);
+      doc.rect(ML, y, CW, 7, 'S');
+      setFont('bold', 9, [51, 51, 51]);
+      doc.text(`${num}) – ${label}`, ML + 3, y + 5);
+      y += 9;
+    }
+
+    // Ítem de checklist con bullet
+    function checkItem(item, indent = 4) {
+      checkY(6);
+      const tick  = item.done !== false ? '✓' : '○';
+      const color = item.done !== false ? [16, 185, 129] : C_LIGHT;
+      setFont('normal', 8, color);
+      doc.text(tick, ML + indent, y);
+      setFont('normal', 8.5, C_DARK);
+      const lines = doc.splitTextToSize(item.text || '', CW - indent - 4);
+      doc.text(lines, ML + indent + 5, y);
+      y += lines.length * 4.5 + 1.5;
+    }
+
+    // ── INICIO ────────────────────────────────────────────────
+    drawHeaderFooter();
+
+    // ── TABLA DE CABECERA ─────────────────────────────────────
+    const col1 = CW * 0.14, col2 = CW * 0.12, col3 = CW * 0.10;
+    const col4 = CW * 0.22, col5 = CW * 0.10, col6 = CW * 0.32;
+
+    tableRow([
+      { text: 'OC: ' + (data.oc || ''), w: col1, bold: true },
+      { text: 'N: '  + (data.n_informe || ''), w: col2, bold: true },
+      { text: 'Empresa:', w: col3, bold: true, color: C_MID },
+      { text: data.empresa || '', w: col4 },
+      { text: 'Disciplina:', w: col5, bold: true, color: C_MID },
+      { text: data.disciplina || '', w: col6 },
+    ], y, 7);
+    y += 7;
+
+    tableRow([
+      { text: 'Localización/Área:', w: col1, bold: true, color: C_MID },
+      { text: data.localizacion || '', w: col2 + col3 },
+      { text: 'SECTOR:', w: col3, bold: true, color: C_MID },
+      { text: data.sector || '', w: col4 },
+      { text: 'Fecha:', w: col5, bold: true, color: C_MID },
+      { text: data.fecha || '', w: col6 },
+    ], y, 7);
+    y += 10;
+
+    // ── ÓRDENES DE TRABAJO ────────────────────────────────────
+    if (data.ordenes?.length) {
+      setFont('bold', 9, C_DARK);
+      doc.text('ORDEN DE TRABAJO: ' + data.ordenes.join(' – '), ML, y);
+      y += 6;
+    }
+
+    // Cert / avance
+    if (data.tipo === 'avance' && data.cert_num) {
+      setFont('bold', 9, C_DARK);
+      doc.text(`Certificado N°${data.cert_num}  —  Avance: ${data.avance_pct || 0}%`, ML, y);
+      y += 6;
+    }
+
+    // ── 1. OBJETIVOS ──────────────────────────────────────────
+    if (data.objetivos?.length) {
+      sectionTitle('Objetivos de la Tarea', '1.0');
+      data.objetivos.forEach(o => checkItem(o));
+      y += 3;
+    }
+
+    // ── 2. DESARROLLO ─────────────────────────────────────────
+    const tieneDesarrollo = data.equipos?.length || data.alertas?.length || data.observaciones;
+    if (tieneDesarrollo) {
+      sectionTitle('Desarrollo', '2.0');
+
+      // Equipos
+      data.equipos?.forEach(eq => {
+        checkY(10);
+        setFont('bold', 11, C_DARK);
+        doc.text((eq.nombre || '') + ':', ML, y);
+        y += 6;
+        eq.tareas?.forEach(t => checkItem(t, 6));
+        y += 2;
+      });
+
+      // Alertas
+      const alertaColors = { recomendacion: C_RECOM, falla: C_FALLA, info: C_INFO };
+      const alertaLabels = { recomendacion: '[RECOMENDACIÓN]', falla: '[FALLA DETECTADA]', info: '[INFORMACIÓN]' };
+      data.alertas?.filter(a => a.texto).forEach(a => {
+        checkY(8);
+        const col = alertaColors[a.tipo] || C_INFO;
+        // Fondo tenue
+        doc.setFillColor(col[0], col[1], col[2]);
+        doc.setGlobalAlpha(0.07);
+        doc.rect(ML, y - 3, CW, 7, 'F');
+        doc.setGlobalAlpha(1);
+        doc.setDrawColor(...col);
+        doc.setLineWidth(0.3);
+        doc.rect(ML, y - 3, CW, 7, 'S');
+        setFont('bold', 8.5, col);
+        doc.text(alertaLabels[a.tipo] || '', ML + 2, y + 1.5);
+        setFont('normal', 8.5, C_DARK);
+        const lines = doc.splitTextToSize(a.texto, CW - 50);
+        doc.text(lines, ML + 40, y + 1.5);
+        y += Math.max(7, lines.length * 4.5) + 2;
+      });
+
+      // Observaciones
+      if (data.observaciones) {
+        checkY(10);
+        setFont('bold', 9, C_DARK);
+        doc.text('Observaciones:', ML, y);
+        y += 5;
+        data.observaciones.split('\n').filter(l => l.trim()).forEach(line => {
+          checkY(6);
+          setFont('normal', 8.5, C_MID);
+          const lines = doc.splitTextToSize('— ' + line.trim(), CW - 4);
+          doc.text(lines, ML + 2, y);
+          y += lines.length * 4.5 + 1;
+        });
+        y += 3;
+      }
+    }
+
+    // ── 3. FOTOS ──────────────────────────────────────────────
+    if (data.fotos?.length) {
+      doc.addPage(); page++; y = TOP; drawHeaderFooter();
+      sectionTitle('Registro Fotográfico', '3.0');
+      y += 2;
+
+      // Agrupar por sección
+      const grupos = {};
+      data.fotos.forEach(f => {
+        const sec = f.section || 'General';
+        (grupos[sec] = grupos[sec] || []).push(f);
+      });
+
+      for (const [secNombre, secFotos] of Object.entries(grupos)) {
+        // Título de sección de fotos
+        checkY(8);
+        setFont('bold', 10, C_DARK);
+        doc.text(secNombre.toUpperCase(), PW / 2, y, { align: 'center' });
+        y += 6;
+
+        const COLS    = 3;
+        const GAP     = 3;
+        const IMG_W   = (CW - GAP * (COLS - 1)) / COLS;
+        const IMG_H   = IMG_W * 0.75;
+        const CAP_H   = 5;
+        const BLOCK_H = IMG_H + CAP_H + GAP;
+
+        for (let i = 0; i < secFotos.length; i += COLS) {
+          checkY(BLOCK_H + 4);
+          const rowFotos = secFotos.slice(i, i + COLS);
+          rowFotos.forEach((f, ci) => {
+            const x = ML + ci * (IMG_W + GAP);
+            try {
+              // Detectar formato desde base64
+              const b64 = f.base64 || '';
+              const fmt = b64.includes('data:image/png') ? 'PNG' : 'JPEG';
+              const imgData = b64.includes(',') ? b64.split(',')[1] : b64;
+              doc.addImage(imgData, fmt, x, y, IMG_W, IMG_H);
+            } catch(_) {
+              // Placeholder si la imagen falla
+              doc.setFillColor(...C_SECT);
+              doc.rect(x, y, IMG_W, IMG_H, 'F');
+              setFont('normal', 7, C_LIGHT);
+              doc.text('imagen', x + IMG_W / 2, y + IMG_H / 2, { align: 'center' });
+            }
+            // Borde
+            doc.setDrawColor(...C_BORDER);
+            doc.setLineWidth(0.2);
+            doc.rect(x, y, IMG_W, IMG_H, 'S');
+            // Caption
+            if (f.caption) {
+              setFont('normal', 7, C_LIGHT);
+              const capLines = doc.splitTextToSize(f.caption, IMG_W - 2);
+              doc.text(capLines[0], x + IMG_W / 2, y + IMG_H + 3.5, { align: 'center' });
+            }
+          });
+          y += BLOCK_H + 4;
+        }
+        y += 4;
+      }
+    }
+
+    // ── FIRMAS ────────────────────────────────────────────────
+    checkY(40);
+    y += 4;
+
+    const firmaW = CW / 4;
+    const firmas = [
+      { label: 'Elaborado por:', person: data.elaborado },
+      { label: 'Aprobado por:',  person: data.aprobado  },
+    ];
+
+    firmas.forEach(({ label, person }) => {
+      checkY(22);
+      // Banda header
+      doc.setFillColor(...C_SECT);
+      doc.rect(ML, y, CW, 6, 'F');
+      doc.setDrawColor(...C_BORDER); doc.setLineWidth(0.2);
+      doc.rect(ML, y, CW, 6, 'S');
+      setFont('bold', 9, [51,51,51]);
+      doc.text(label, ML + 3, y + 4.5);
+      y += 6;
+
+      // Fila datos
+      const rowH = 12;
+      const cols = [
+        { text: person?.nombre || '', w: firmaW },
+        { text: person?.cargo  || '', w: firmaW },
+        { text: '',                   w: firmaW },   // firma
+        { text: person?.fecha  || '', w: firmaW },
+      ];
+      tableRow(cols, y, rowH, C_WHITE);
+      y += rowH;
+
+      // Labels
+      const labels = ['Nombre:', 'Cargo:', 'Firma:', 'Fecha'];
+      let lx = ML;
+      labels.forEach(lbl => {
+        doc.setFillColor(...C_SECT);
+        doc.rect(lx, y, firmaW, 5.5, 'F');
+        doc.setDrawColor(...C_BORDER); doc.rect(lx, y, firmaW, 5.5, 'S');
+        setFont('bold', 8, C_MID);
+        doc.text(lbl, lx + firmaW / 2, y + 4, { align: 'center' });
+        lx += firmaW;
+      });
+      y += 5.5 + 6;
+    });
+
+    // ── Última pasada de header/footer ────────────────────────
+    drawHeaderFooter();
+
+    // ── DESCARGAR ─────────────────────────────────────────────
+    const filename = (data.titulo || 'informe').replace(/\s+/g, '_') + '_N' + (data.n_informe || '1') + '.pdf';
+    doc.save(filename);
+
     statusEl.className = 'pdf-status ok';
     statusEl.textContent = 'PDF generado correctamente';
+    toast('PDF descargado', 'success');
+
   } catch(e) {
+    console.error(e);
     statusEl.className = 'pdf-status error';
     statusEl.textContent = 'Error: ' + e.message;
     toast('Error generando PDF: ' + e.message, 'error');
