@@ -456,7 +456,7 @@ async function guardarCliente(){
   };
   let error;
   try{ if(clienteEditId){ await ClientesAPI.actualizarCliente(clienteEditId,payload); } else { await ClientesAPI.crearCliente(payload); } }catch(e){error=e;}
-  if(error){ toast('Error: ', 'error'); return; }
+  if(error){ manejarError(error, 'operación'); return; }
   cerrarModal('modal-cliente');
   cargarClientes();
 }
@@ -573,7 +573,7 @@ async function guardarDocCliente(){
     notas: document.getElementById('mdc-notas').value || null,
   });
   }catch(e){error=e;}
-  if(error){ toast('Error: ', 'error'); return; }
+  if(error){ manejarError(error, 'operación'); return; }
   cerrarModal('modal-doc-cliente');
   cargarDocsCliente(_docClienteId);
 }
@@ -599,7 +599,7 @@ async function confirmarRenovar(){
     notas: notas,
     updated_at: new Date().toISOString(),
   }); }catch(e){error=e;}
-  if(error){ toast('Error: ', 'error'); return; }
+  if(error){ manejarError(error, 'operación'); return; }
   cerrarModal('modal-renovar-doc');
   cargarDocsCliente(clienteSelId);
 }
