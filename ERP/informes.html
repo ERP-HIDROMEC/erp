@@ -212,6 +212,30 @@
 
   /* Tabla lista */
   .empty { padding: 40px; text-align: center; color: var(--muted); font-size: 13px; }
+
+  /* Plantillas */
+  .plantilla-card {
+    background: var(--bg2); border: 1px solid var(--border);
+    border-radius: 12px; padding: 16px;
+    display: flex; flex-direction: column; gap: 8px;
+    transition: border-color .15s;
+  }
+  .plantilla-card:hover { border-color: var(--blue); }
+  .plantilla-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+    gap: 12px;
+  }
+  .plantilla-tag {
+    display: inline-block; padding: 2px 8px; border-radius: 4px;
+    font-size: 10px; background: var(--bg3); color: var(--muted);
+  }
+  .sp-card {
+    background: var(--bg3); border: 1px solid var(--border);
+    border-radius: 10px; padding: 14px; cursor: pointer;
+    transition: border-color .15s;
+  }
+  .sp-card:hover { border-color: var(--blue); }
 </style>
 </head>
 <body>
@@ -223,6 +247,7 @@
     <h2>Informes de obra</h2>
     <div style="display:flex;gap:8px">
       <button class="btn btn-ghost" id="btn-exportar" onclick="exportarJSON()" style="display:none">Exportar JSON</button>
+      <button class="btn btn-ghost" onclick="abrirSelectorPlantilla()">📋 Desde plantilla</button>
       <button class="btn btn-primary" onclick="nuevoInforme()">+ Nuevo informe</button>
     </div>
   </div>
@@ -245,7 +270,22 @@
     <input type="text" id="f-buscar" placeholder="Buscar informe..." oninput="cargarLista()" style="min-width:200px">
   </div>
 
-  <div class="inf-layout">
+
+  <!-- Tabs de vista -->
+  <div style="display:flex;gap:4px;margin-bottom:16px">
+    <button class="btn btn-ghost btn-sm" id="tab-lista" onclick="mostrarTabLista()" style="background:var(--blue);color:#fff">Informes</button>
+    <button class="btn btn-ghost btn-sm" id="tab-plantillas" onclick="mostrarTabPlantillas()">📋 Plantillas</button>
+  </div>
+
+  <!-- Tab contenido plantillas (oculto por default) -->
+  <div id="tab-plantillas-content" style="display:none">
+    <div style="display:flex;justify-content:flex-end;margin-bottom:16px">
+      <button class="btn btn-primary" onclick="abrirNuevaPlantilla()">+ Nueva plantilla</button>
+    </div>
+    <div id="plantillas-grid" class="plantilla-grid"></div>
+  </div>
+
+  <div class="inf-layout" id="inf-layout">
     <!-- LISTA -->
     <div>
       <div class="panel">
@@ -471,6 +511,103 @@
     </div>
   </div>
 </main>
+
+<!-- MODAL SELECTOR DE PLANTILLA -->
+<div class="modal-overlay" id="modal-selector-plantilla">
+  <div class="modal" style="max-width:680px">
+    <h3>📋 Elegir plantilla</h3>
+    <div class="filtros" style="margin-bottom:16px;padding:0">
+      <input type="text" id="sp-buscar" placeholder="Buscar plantilla..."
+        oninput="filtrarSelectorPlantilla()"
+        style="flex:1;padding:8px 12px;background:var(--bg3);border:1px solid var(--border);border-radius:8px;color:var(--text);font-size:13px">
+    </div>
+    <div id="sp-lista" style="max-height:420px;overflow-y:auto;display:flex;flex-direction:column;gap:8px"></div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" onclick="cerrarModalPlantilla('modal-selector-plantilla')">Cancelar</button>
+    </div>
+  </div>
+</div>
+
+<!-- MODAL NUEVA/EDITAR PLANTILLA -->
+<div class="modal-overlay" id="modal-plantilla-form">
+  <div class="modal" style="max-width:700px;width:96vw">
+    <h3 id="mp-titulo">Nueva plantilla</h3>
+
+    <div class="form-row" style="margin-bottom:14px">
+      <div class="form-group">
+        <label>Nombre de la plantilla</label>
+        <input type="text" id="mp-nombre" placeholder="ej. Mantenimiento Redler — Arauco">
+      </div>
+      <div class="form-group">
+        <label>Tipo</label>
+        <select id="mp-tipo" onchange="actualizarTituloDesdeSelect()">
+          <option value="avance">Avance de obra</option>
+          <option value="mantenimiento" selected>Mantenimiento</option>
+          <option value="inspeccion">Inspección</option>
+          <option value="montaje">Montaje</option>
+          <option value="otro">Otro</option>
+        </select>
+      </div>
+    </div>
+
+    <div class="form-row" style="grid-template-columns:1fr 1fr 1fr;margin-bottom:14px">
+      <div class="form-group">
+        <label>Empresa contratante</label>
+        <input type="text" id="mp-empresa" placeholder="ej. Arauco">
+      </div>
+      <div class="form-group">
+        <label>Empresa ejecutante</label>
+        <input type="text" id="mp-empresa-ej" placeholder="ej. Hidromec SRL">
+      </div>
+      <div class="form-group">
+        <label>Disciplina</label>
+        <input type="text" id="mp-disciplina" placeholder="ej. Mantenimiento – Mano de obra">
+      </div>
+    </div>
+
+    <div class="form-row" style="margin-bottom:14px">
+      <div class="form-group">
+        <label>Localización / Área</label>
+        <input type="text" id="mp-localizacion" placeholder="ej. Arauco - Zárate">
+      </div>
+      <div class="form-group">
+        <label>Sector</label>
+        <input type="text" id="mp-sector" placeholder="ej. Redler zanella">
+      </div>
+    </div>
+
+    <div class="form-group" style="margin-bottom:14px">
+      <label>Orden de compra (OC)</label>
+      <input type="text" id="mp-oc" placeholder="ej. 4500143701">
+    </div>
+
+    <div style="margin:14px 0 8px;font-size:11px;font-weight:500;color:var(--muted);text-transform:uppercase;letter-spacing:.7px">
+      Objetivos predeterminados
+    </div>
+    <ul class="cl-list" id="mp-obj-list" style="margin-bottom:6px"></ul>
+    <button class="btn-add-dashed" onclick="addMpObj()">+ agregar objetivo</button>
+
+    <div style="margin:14px 0 8px;font-size:11px;font-weight:500;color:var(--muted);text-transform:uppercase;letter-spacing:.7px">
+      Equipos / secciones predeterminados
+    </div>
+    <div id="mp-equipos-container"></div>
+    <button class="btn-add-dashed" onclick="addMpEquipo()" style="margin-bottom:14px">+ agregar equipo</button>
+
+    <div class="form-group" style="margin-bottom:14px">
+      <label>Elaborado por (nombre habitual)</label>
+      <input type="text" id="mp-elab-nombre" placeholder="ej. Matias Gomez">
+    </div>
+    <div class="form-group" style="margin-bottom:14px">
+      <label>Cargo</label>
+      <input type="text" id="mp-elab-cargo" placeholder="ej. Apoderado">
+    </div>
+
+    <div class="modal-footer">
+      <button class="btn btn-ghost" onclick="cerrarModalPlantilla('modal-plantilla-form')">Cancelar</button>
+      <button class="btn btn-primary" onclick="guardarPlantilla()">Guardar plantilla</button>
+    </div>
+  </div>
+</div>
 
 <!-- INPUT OCULTO FOTOS -->
 <input type="file" id="file-input" accept="image/*" multiple style="display:none" onchange="handleFotos(event)">
@@ -1363,6 +1500,422 @@ function tipoLabel(t) {
 function tipoAlertaLabel(t) {
   return { recomendacion: 'Recom.', falla: 'Falla', info: 'Info' }[t] || t;
 }
+
+// ════════════════════════════════════════════════════════════
+// PLANTILLAS DE INFORMES
+// ════════════════════════════════════════════════════════════
+
+let _plantillaEditId  = null;
+let _plantillasData   = [];
+
+// Plantillas pregrabadas para Arauco (hardcoded como base)
+const PLANTILLAS_ARAUCO = [
+  {
+    id: 'tpl-arauco-mant-redler',
+    nombre: 'Mantenimiento Redler — Arauco',
+    tipo: 'mantenimiento',
+    empresa: 'Arauco',
+    empresa_ej: 'Hidromec SRL',
+    localizacion: 'Arauco - Zárate',
+    sector: 'Redler zanella',
+    disciplina: 'Mantenimiento – Mano de obra',
+    oc: '',
+    descripcion: 'Inspección y mantenimiento de transportadoras redler',
+    elab_nombre: 'Matias Gomez',
+    elab_cargo: 'Apoderado',
+    objetivos: [
+      { text: 'Inspección de equipos de transportadoras redler', done: true },
+      { text: 'Detectar fallas en equipo, rodamientos, ruleta, centro de mando, cadenas', done: true },
+      { text: 'Control de tensión de cadenas', done: true },
+    ],
+    equipos: [
+      {
+        nombre: 'Redler 01-0125',
+        tareas: [
+          { text: 'Desmontaje de tapas de inspección de transportadores redler', done: true },
+          { text: 'Control de estado general de equipo', done: true },
+          { text: 'Control de estado de transmisión', done: true },
+          { text: 'Control de estado de rueda de conducido, desarmar cajeras, revisar eje, engrasar', done: true },
+          { text: 'Control de estado de ruleta de mando, centrar, desarmar manguitos, engrasar y montar', done: true },
+          { text: 'Control de corona, piñón y cadena de mando', done: true },
+          { text: 'Control de pernos fusibles y colocar nuevo', done: true },
+          { text: 'Control de cajeras de tensores', done: true },
+          { text: 'Control de cadena, control de paso, muñecos y seguers', done: true },
+        ],
+      },
+    ],
+  },
+  {
+    id: 'tpl-arauco-insp-general',
+    nombre: 'Inspección general — Arauco',
+    tipo: 'inspeccion',
+    empresa: 'Arauco',
+    empresa_ej: 'Hidromec SRL',
+    localizacion: 'Arauco - Zárate',
+    sector: '',
+    disciplina: 'Inspección – Mano de obra',
+    oc: '',
+    descripcion: 'Inspección general de equipos y sistemas',
+    elab_nombre: 'Matias Gomez',
+    elab_cargo: 'Apoderado',
+    objetivos: [
+      { text: 'Inspección visual general de equipos', done: true },
+      { text: 'Detección de anomalías y fallas potenciales', done: true },
+      { text: 'Registro fotográfico del estado actual', done: true },
+    ],
+    equipos: [],
+  },
+  {
+    id: 'tpl-arauco-avance',
+    nombre: 'Avance de obra — Arauco',
+    tipo: 'avance',
+    empresa: 'Arauco',
+    empresa_ej: 'Hidromec SRL',
+    localizacion: 'Arauco - Zárate',
+    sector: '',
+    disciplina: 'Construcción civil - Mecánico',
+    oc: '',
+    descripcion: 'Certificado de avance de obra mensual',
+    elab_nombre: 'Matias Gomez',
+    elab_cargo: 'Apoderado',
+    objetivos: [
+      { text: 'Documentación según requerimiento de pliego', done: true },
+      { text: 'Ejecución de trabajos preliminares en sector de obra', done: true },
+      { text: 'Ejecución de trabajos según planificación', done: true },
+    ],
+    equipos: [
+      {
+        nombre: 'Trabajos preliminares',
+        tareas: [
+          { text: 'Delimitación y señalización del área de trabajo', done: true },
+          { text: 'Verificación de interferencias y coordinación con planta', done: true },
+          { text: 'Implantación de obra', done: true },
+        ],
+      },
+    ],
+  },
+];
+
+// ── Tabs lista vs plantillas ──────────────────────────────────
+function mostrarTabLista() {
+  document.getElementById('inf-layout').style.display = '';
+  document.getElementById('tab-plantillas-content').style.display = 'none';
+  document.getElementById('tab-lista').style.background = 'var(--blue)';
+  document.getElementById('tab-lista').style.color = '#fff';
+  document.getElementById('tab-plantillas').style.background = '';
+  document.getElementById('tab-plantillas').style.color = '';
+}
+
+function mostrarTabPlantillas() {
+  document.getElementById('inf-layout').style.display = 'none';
+  document.getElementById('tab-plantillas-content').style.display = 'block';
+  document.getElementById('tab-lista').style.background = '';
+  document.getElementById('tab-lista').style.color = '';
+  document.getElementById('tab-plantillas').style.background = 'var(--blue)';
+  document.getElementById('tab-plantillas').style.color = '#fff';
+  renderTabPlantillas();
+}
+
+// ── Render tab plantillas ─────────────────────────────────────
+function renderTabPlantillas() {
+  const todas = [...PLANTILLAS_ARAUCO, ..._plantillasData];
+  const grid = document.getElementById('plantillas-grid');
+  if (!todas.length) {
+    grid.innerHTML = '<div class="empty">No hay plantillas. Creá una nueva.</div>';
+    return;
+  }
+  grid.innerHTML = todas.map(p => `
+    <div class="plantilla-card">
+      <div style="display:flex;justify-content:space-between;align-items:flex-start">
+        <div>
+          <div style="font-weight:600;font-size:14px">${p.nombre}</div>
+          <div style="font-size:12px;color:var(--muted);margin-top:2px">
+            ${p.empresa || '—'} · ${p.localizacion || '—'}
+          </div>
+        </div>
+        <span class="plantilla-tag tipo-pill tipo-${p.tipo}">${tipoLabel(p.tipo)}</span>
+      </div>
+      ${p.descripcion ? `<div style="font-size:12px;color:var(--muted)">${p.descripcion}</div>` : ''}
+      <div style="font-size:11px;color:var(--muted)">
+        ${p.objetivos?.length || 0} objetivo/s · ${p.equipos?.length || 0} equipo/s
+      </div>
+      <div style="display:flex;gap:6px;margin-top:4px">
+        <button class="btn btn-sm btn-primary" onclick="usarPlantilla('${p.id}')">▶ Usar</button>
+        ${!p.id.startsWith('tpl-arauco') ? `
+          <button class="btn btn-sm btn-ghost" onclick="editarPlantilla('${p.id}')">Editar</button>
+          <button class="btn btn-sm btn-danger" onclick="eliminarPlantilla('${p.id}')">Borrar</button>
+        ` : '<span style="font-size:11px;color:var(--muted);line-height:28px">Pregrabada</span>'}
+      </div>
+    </div>
+  `).join('');
+}
+
+// ── Selector rápido (modal) ───────────────────────────────────
+async function abrirSelectorPlantilla() {
+  await cargarPlantillasDB();
+  const todas = [...PLANTILLAS_ARAUCO, ..._plantillasData];
+  renderSelectorPlantilla(todas);
+  document.getElementById('modal-selector-plantilla').classList.add('show');
+}
+
+function filtrarSelectorPlantilla() {
+  const q = (document.getElementById('sp-buscar').value || '').toLowerCase();
+  const todas = [...PLANTILLAS_ARAUCO, ..._plantillasData];
+  const filtradas = todas.filter(p =>
+    !q ||
+    p.nombre.toLowerCase().includes(q) ||
+    (p.empresa || '').toLowerCase().includes(q) ||
+    (p.localizacion || '').toLowerCase().includes(q)
+  );
+  renderSelectorPlantilla(filtradas);
+}
+
+function renderSelectorPlantilla(rows) {
+  const lista = document.getElementById('sp-lista');
+  if (!rows.length) {
+    lista.innerHTML = '<div style="text-align:center;padding:30px;color:var(--muted)">No hay plantillas que coincidan</div>';
+    return;
+  }
+  lista.innerHTML = rows.map(p => `
+    <div class="sp-card" onclick="usarPlantilla('${p.id}')"
+      onmouseover="this.style.borderColor='var(--blue)'"
+      onmouseout="this.style.borderColor='var(--border)'">
+      <div style="display:flex;justify-content:space-between;align-items:center">
+        <div>
+          <div style="font-weight:600;font-size:14px">${p.nombre}</div>
+          <div style="font-size:12px;color:var(--muted);margin-top:2px">
+            ${p.empresa || '—'} · ${p.localizacion || '—'}
+            ${p.sector ? ' · ' + p.sector : ''}
+          </div>
+        </div>
+        <span style="font-size:11px;padding:2px 10px;border-radius:4px;background:rgba(59,130,246,.1);color:var(--blue)">Usar →</span>
+      </div>
+      ${p.descripcion ? `<div style="font-size:12px;color:var(--muted);margin-top:6px">${p.descripcion}</div>` : ''}
+    </div>
+  `).join('');
+}
+
+// ── Usar plantilla → precarga el formulario ───────────────────
+async function usarPlantilla(plantillaId) {
+  cerrarModalPlantilla('modal-selector-plantilla');
+
+  const todas = [...PLANTILLAS_ARAUCO, ..._plantillasData];
+  const p = todas.find(x => x.id === plantillaId);
+  if (!p) { toast('Plantilla no encontrada', 'error'); return; }
+
+  // Limpiar y preparar formulario nuevo
+  informeActualId = null;
+  limpiarForm();
+  mostrarPanel(true);
+  irStep(1);
+  mostrarTabLista();
+  document.getElementById('btn-eliminar').style.display = 'none';
+  document.getElementById('btn-exportar').style.display = 'none';
+
+  // Poblar campos de cabecera
+  document.getElementById('f-empresa-nombre').value = p.empresa || '';
+  document.getElementById('f-empresa-ej').value     = p.empresa_ej || '';
+  document.getElementById('f-localizacion').value   = p.localizacion || '';
+  document.getElementById('f-sector').value         = p.sector || '';
+  document.getElementById('f-disciplina').value     = p.disciplina || '';
+  document.getElementById('f-oc').value             = p.oc || '';
+  document.getElementById('f-elab-nombre').value    = p.elab_nombre || '';
+  document.getElementById('f-elab-cargo').value     = p.elab_cargo || '';
+
+  // Tipo
+  currentTipo = p.tipo || 'avance';
+  document.querySelectorAll('.tipo-btn').forEach(b => {
+    b.classList.toggle('btn-primary', b.dataset.tipo === currentTipo);
+    b.classList.toggle('btn-ghost',   b.dataset.tipo !== currentTipo);
+  });
+  actualizarCamposTipo();
+
+  // Título sugerido (editable)
+  const mapTitulo = {
+    avance: 'Informe Avance de Obra',
+    mantenimiento: 'Informe Mantenimiento',
+    inspeccion: 'Informe de Inspección',
+    montaje: 'Informe de Montaje',
+    otro: 'Informe de Trabajo',
+  };
+  document.getElementById('f-titulo').value = p.nombre || mapTitulo[currentTipo] || '';
+
+  // Objetivos
+  document.getElementById('obj-list').innerHTML = '';
+  (p.objetivos || []).forEach(o => addItem('obj-list', o.text, o.done !== false));
+
+  // Equipos
+  document.getElementById('equipos-container').innerHTML = '';
+  eqCount = 0;
+  (p.equipos || []).forEach(eq => addEquipo(eq.nombre, eq.tareas || []));
+
+  toast('✓ Plantilla "' + p.nombre + '" cargada', 'success');
+}
+
+// ── Cargar plantillas desde Supabase ─────────────────────────
+async function cargarPlantillasDB() {
+  try {
+    const { data, error } = await db.from('informe_plantillas')
+      .select('*')
+      .eq('activa', true)
+      .order('nombre');
+    if (error) throw error;
+    _plantillasData = (data || []).map(p => ({
+      ...p,
+      objetivos: p.objetivos_json || [],
+      equipos:   p.equipos_json   || [],
+    }));
+  } catch(_) {
+    _plantillasData = []; // tabla puede no existir aún, no romper
+  }
+}
+
+// ── Modal nueva/editar plantilla ─────────────────────────────
+function abrirNuevaPlantilla() {
+  _plantillaEditId = null;
+  document.getElementById('mp-titulo').textContent = 'Nueva plantilla';
+  ['mp-nombre','mp-empresa','mp-empresa-ej','mp-localizacion',
+   'mp-sector','mp-disciplina','mp-oc','mp-elab-nombre','mp-elab-cargo'
+  ].forEach(id => { document.getElementById(id).value = ''; });
+  document.getElementById('mp-tipo').value = 'mantenimiento';
+  document.getElementById('mp-obj-list').innerHTML = '';
+  document.getElementById('mp-equipos-container').innerHTML = '';
+  addMpObj('');
+  addMpEquipo('');
+  document.getElementById('modal-plantilla-form').classList.add('show');
+}
+
+async function editarPlantilla(id) {
+  _plantillaEditId = id;
+  const todas = [...PLANTILLAS_ARAUCO, ..._plantillasData];
+  const p = todas.find(x => x.id === id);
+  if (!p) return;
+  document.getElementById('mp-titulo').textContent = 'Editar plantilla';
+  document.getElementById('mp-nombre').value      = p.nombre || '';
+  document.getElementById('mp-tipo').value        = p.tipo || 'mantenimiento';
+  document.getElementById('mp-empresa').value     = p.empresa || '';
+  document.getElementById('mp-empresa-ej').value  = p.empresa_ej || '';
+  document.getElementById('mp-localizacion').value= p.localizacion || '';
+  document.getElementById('mp-sector').value      = p.sector || '';
+  document.getElementById('mp-disciplina').value  = p.disciplina || '';
+  document.getElementById('mp-oc').value          = p.oc || '';
+  document.getElementById('mp-elab-nombre').value = p.elab_nombre || '';
+  document.getElementById('mp-elab-cargo').value  = p.elab_cargo || '';
+  document.getElementById('mp-obj-list').innerHTML = '';
+  (p.objetivos || []).forEach(o => addMpObj(o.text));
+  document.getElementById('mp-equipos-container').innerHTML = '';
+  (p.equipos || []).forEach(eq => addMpEquipo(eq.nombre, eq.tareas || []));
+  document.getElementById('modal-plantilla-form').classList.add('show');
+}
+
+// Items en modal plantilla
+let mpEqCount = 0;
+function addMpObj(texto = '') {
+  const li = document.createElement('li');
+  li.className = 'cl-item';
+  li.innerHTML = `<input type="checkbox" checked>
+    <textarea class="cl-ta" rows="1">${texto}</textarea>
+    <button class="cl-del" onclick="this.parentElement.remove()">×</button>`;
+  const ta = li.querySelector('textarea');
+  ta.addEventListener('input', () => { ta.style.height='auto'; ta.style.height=ta.scrollHeight+'px'; });
+  document.getElementById('mp-obj-list').appendChild(li);
+  if (!texto) ta.focus();
+}
+
+function addMpEquipo(nombre = '', tareasInit = []) {
+  mpEqCount++;
+  const id = 'mpeq-' + mpEqCount;
+  const div = document.createElement('div');
+  div.className = 'equipo-bloque'; div.id = id;
+  div.innerHTML = `
+    <div class="equipo-head">
+      <input value="${nombre}" placeholder="Nombre del equipo (ej. Redler 01-0125)">
+      <button class="equipo-del" onclick="document.getElementById('${id}').remove()">✕</button>
+    </div>
+    <div class="equipo-body">
+      <ul class="cl-list" id="mpcl-${id}"></ul>
+      <button class="btn-add-dashed" onclick="addMpTarea('mpcl-${id}')">+ tarea</button>
+    </div>`;
+  document.getElementById('mp-equipos-container').appendChild(div);
+  if (tareasInit.length) tareasInit.forEach(t => addMpTarea('mpcl-' + id, t.text));
+  else addMpTarea('mpcl-' + id, '');
+}
+
+function addMpTarea(listId, texto = '') {
+  const li = document.createElement('li');
+  li.className = 'cl-item';
+  li.innerHTML = `<input type="checkbox" checked>
+    <textarea class="cl-ta" rows="1">${texto}</textarea>
+    <button class="cl-del" onclick="this.parentElement.remove()">×</button>`;
+  const ta = li.querySelector('textarea');
+  ta.addEventListener('input', () => { ta.style.height='auto'; ta.style.height=ta.scrollHeight+'px'; });
+  document.getElementById(listId).appendChild(li);
+}
+
+function getMpObjetivos() {
+  return [...document.querySelectorAll('#mp-obj-list .cl-item')].map(li => ({
+    text: li.querySelector('textarea').value.trim(),
+    done: true,
+  })).filter(o => o.text);
+}
+
+function getMpEquipos() {
+  return [...document.querySelectorAll('#mp-equipos-container .equipo-bloque')].map(div => ({
+    nombre: div.querySelector('.equipo-head input').value.trim(),
+    tareas: [...div.querySelectorAll('.cl-item')].map(li => ({
+      text: li.querySelector('textarea').value.trim(), done: true,
+    })).filter(t => t.text),
+  })).filter(e => e.nombre || e.tareas.length);
+}
+
+async function guardarPlantilla() {
+  const nombre = document.getElementById('mp-nombre').value.trim();
+  if (!nombre) { toast('Ingresá un nombre para la plantilla', 'warn'); return; }
+
+  const payload = {
+    nombre,
+    tipo:          document.getElementById('mp-tipo').value,
+    empresa:       document.getElementById('mp-empresa').value.trim(),
+    empresa_ej:    document.getElementById('mp-empresa-ej').value.trim(),
+    localizacion:  document.getElementById('mp-localizacion').value.trim(),
+    sector:        document.getElementById('mp-sector').value.trim(),
+    disciplina:    document.getElementById('mp-disciplina').value.trim(),
+    oc:            document.getElementById('mp-oc').value.trim(),
+    elab_nombre:   document.getElementById('mp-elab-nombre').value.trim(),
+    elab_cargo:    document.getElementById('mp-elab-cargo').value.trim(),
+    descripcion:   '',
+    objetivos_json: getMpObjetivos(),
+    equipos_json:   getMpEquipos(),
+    activa:        true,
+  };
+
+  try {
+    if (_plantillaEditId && !_plantillaEditId.startsWith('tpl-arauco')) {
+      await db.from('informe_plantillas').update(payload).eq('id', _plantillaEditId);
+    } else {
+      await db.from('informe_plantillas').insert(payload);
+    }
+    await cargarPlantillasDB();
+    cerrarModalPlantilla('modal-plantilla-form');
+    renderTabPlantillas();
+    toast('Plantilla guardada', 'success');
+  } catch(e) { manejarError(e, 'guardar plantilla'); }
+}
+
+async function eliminarPlantilla(id) {
+  if (!await confirmar('¿Eliminar esta plantilla?')) return;
+  try {
+    await db.from('informe_plantillas').delete().eq('id', id);
+    await cargarPlantillasDB();
+    renderTabPlantillas();
+    toast('Plantilla eliminada', 'success');
+  } catch(e) { manejarError(e, 'eliminar plantilla'); }
+}
+
+function cerrarModalPlantilla(modalId) {
+  document.getElementById(modalId).classList.remove('show');
+}
+
 
 init();
 </script>
