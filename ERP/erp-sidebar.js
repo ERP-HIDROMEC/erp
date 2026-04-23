@@ -1,5 +1,5 @@
 // ============================================================
-// ERP HIDROMEC — Componente de Sidebar  v1.1
+// ERP HIDROMEC — Componente de Sidebar  v1.2
 // erp-sidebar.js
 //
 // Incluir en TODOS los HTML después de erp-utils.js:
@@ -12,6 +12,8 @@
 // En init() de cada página:
 //   await ERP.initLayout('facturas');
 //
+// CAMBIOS v1.2:
+//   - Agrega módulo 'informes' (Informes de obra) en Operaciones
 // CAMBIOS v1.1:
 //   - Sobreescribe initSidebar/initBuscadorGlobal/initInactividad de erp-utils
 //     para evitar que corran antes de que el sidebar esté en el DOM
@@ -39,7 +41,7 @@ ERP._MENU = [
     ],
   },
   {
-    seccion: 'Operaciones', data: 'proyectos,contratos,remitos,presupuestos',
+    seccion: 'Operaciones', data: 'proyectos,contratos,remitos,presupuestos,informes',
     items: [
       { modulo: 'proyectos',    label: 'Proyectos',        href: 'proyectos.html',
         icon: '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"/>' },
@@ -51,6 +53,8 @@ ERP._MENU = [
         icon: '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 7h6m0 10v-3m-3 3h.01M9 17h.01M9 14h.01M12 14h.01M15 11h.01M12 11h.01M9 11h.01M7 21h10a2 2 0 002-2V5a2 2 0 00-2-2H7a2 2 0 00-2 2v14a2 2 0 002 2z"/>' },
       { modulo: 'proyectos',    label: 'Horas trabajadas', href: 'proyectos.html#horas',
         icon: '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/>' },
+      { modulo: 'informes',     label: 'Informes de obra', href: 'informes.html',
+        icon: '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 17v-2m3 2v-4m3 4v-6m2 10H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>' },
     ],
   },
   {
