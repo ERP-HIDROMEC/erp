@@ -1,0 +1,1045 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Hidromec ERP — Informes</title>
+<link rel="stylesheet" href="erp-layout.css">
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="erp-utils.js"></script>
+<script src="erp-sidebar.js"></script>
+<script src="empresas.api.js"></script>
+<script src="clientes.api.js"></script>
+<script src="proyectos.api.js"></script>
+<script src="contratos.api.js"></script>
+<script src="informes.api.js"></script>
+<style>
+  /* ── Layout ── */
+  .inf-layout { display: grid; grid-template-columns: 340px 1fr; gap: 20px; }
+  @media (max-width: 1100px) { .inf-layout { grid-template-columns: 1fr; } }
+
+  /* ── Lista de informes ── */
+  .inf-item {
+    padding: 14px 16px;
+    border-bottom: 1px solid var(--border);
+    cursor: pointer;
+    transition: background .12s;
+    position: relative;
+  }
+  .inf-item:last-child { border-bottom: none; }
+  .inf-item:hover { background: var(--bg3); }
+  .inf-item.selected { background: rgba(59,130,246,0.08); border-left: 3px solid var(--blue); }
+  .inf-item-titulo { font-size: 13px; font-weight: 500; color: var(--text); margin-bottom: 3px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .inf-item-meta { font-size: 11px; color: var(--muted); display: flex; gap: 8px; flex-wrap: wrap; }
+  .tipo-pill {
+    display: inline-block; padding: 2px 8px; border-radius: 12px;
+    font-size: 10px; font-weight: 500; letter-spacing: .03em;
+  }
+  .tipo-avance      { background: rgba(59,130,246,.13);  color: var(--blue); }
+  .tipo-mantenimiento { background: rgba(245,158,11,.13); color: var(--orange); }
+  .tipo-inspeccion  { background: rgba(139,92,246,.13);  color: var(--purple); }
+  .tipo-montaje     { background: rgba(20,184,166,.13);  color: var(--teal); }
+  .tipo-otro        { background: rgba(122,128,153,.13); color: var(--muted); }
+
+  /* ── Formulario en el panel derecho ── */
+  .inf-panel { background: var(--bg2); border: 1px solid var(--border); border-radius: 12px; overflow: hidden; }
+  .inf-panel-head {
+    padding: 14px 20px;
+    border-bottom: 1px solid var(--border);
+    display: flex; align-items: center; justify-content: space-between;
+    background: var(--bg3);
+  }
+  .inf-panel-head h3 { font-size: 14px; font-weight: 500; }
+  .inf-panel-body { padding: 20px; }
+
+  /* Steps nav */
+  .steps-nav {
+    display: flex; gap: 2px;
+    background: var(--bg3); border: 1px solid var(--border);
+    border-radius: 10px; padding: 3px;
+    margin-bottom: 20px; overflow-x: auto;
+  }
+  .step-btn {
+    flex: 1; min-width: 90px;
+    padding: 7px 10px;
+    border: none; border-radius: 8px; background: none;
+    font-size: 12px; font-family: 'DM Sans', sans-serif;
+    color: var(--muted); cursor: pointer; transition: all .15s;
+    white-space: nowrap;
+  }
+  .step-btn.active { background: var(--blue); color: #fff; }
+  .step-btn.done   { color: var(--green); }
+
+  /* Secciones del formulario */
+  .form-section { display: none; }
+  .form-section.active { display: block; }
+
+  /* Checklist */
+  .cl-list { list-style: none; margin-bottom: 8px; }
+  .cl-item {
+    display: flex; align-items: flex-start; gap: 8px;
+    padding: 6px 0; border-bottom: 1px solid var(--border);
+  }
+  .cl-item:last-child { border-bottom: none; }
+  .cl-item input[type=checkbox] { margin-top: 3px; accent-color: var(--blue); flex-shrink: 0; }
+  .cl-item textarea {
+    flex: 1; background: transparent; border: none;
+    color: var(--text); font-size: 13px; font-family: 'DM Sans', sans-serif;
+    resize: none; outline: none; min-height: 20px; line-height: 1.5;
+    padding: 0;
+  }
+  .cl-item textarea:focus { color: var(--blue); }
+  .cl-del { background: none; border: none; color: var(--muted); cursor: pointer; font-size: 16px; flex-shrink: 0; padding: 0 2px; transition: color .12s; }
+  .cl-del:hover { color: var(--red); }
+
+  /* Bloque de equipo */
+  .equipo-bloque {
+    background: var(--bg3); border: 1px solid var(--border);
+    border-radius: 8px; margin-bottom: 10px; overflow: hidden;
+  }
+  .equipo-head {
+    display: flex; align-items: center; gap: 8px;
+    padding: 8px 12px;
+    background: rgba(59,130,246,.06);
+    border-bottom: 1px solid var(--border);
+  }
+  .equipo-head input {
+    flex: 1; background: transparent; border: none;
+    color: var(--blue); font-size: 13px; font-weight: 500;
+    font-family: 'DM Mono', monospace; outline: none;
+  }
+  .equipo-body { padding: 10px 12px; }
+  .equipo-del { background: none; border: none; color: var(--muted); cursor: pointer; font-size: 12px; transition: color .12s; }
+  .equipo-del:hover { color: var(--red); }
+
+  /* Alertas */
+  .alerta-row {
+    display: flex; align-items: flex-start; gap: 8px;
+    padding: 8px 0; border-bottom: 1px solid var(--border);
+  }
+  .alerta-row:last-child { border-bottom: none; }
+  .alerta-tipo-badge {
+    display: inline-block; padding: 2px 7px; border-radius: 3px;
+    font-size: 10px; font-family: 'DM Mono', monospace;
+    flex-shrink: 0; margin-top: 2px;
+  }
+  .ab-recomendacion { background: rgba(245,158,11,.12); color: var(--orange); }
+  .ab-falla         { background: rgba(239,68,68,.12);  color: var(--red); }
+  .ab-info          { background: rgba(59,130,246,.12); color: var(--blue); }
+  .alerta-txt {
+    flex: 1; background: transparent; border: none;
+    color: var(--text); font-size: 13px; font-family: 'DM Sans', sans-serif;
+    resize: none; outline: none; min-height: 20px; line-height: 1.5; padding: 0;
+  }
+  .alerta-txt:focus { color: var(--blue); }
+  .alerta-sel {
+    background: var(--bg3); border: 1px solid var(--border);
+    border-radius: 6px; color: var(--muted); font-size: 11px;
+    padding: 3px 6px; outline: none; flex-shrink: 0;
+    font-family: 'DM Mono', monospace;
+  }
+
+  /* Foto grid */
+  .foto-grid {
+    display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px;
+  }
+  .foto-slot {
+    aspect-ratio: 4/3; border: 1px dashed var(--border);
+    border-radius: 8px; display: flex; flex-direction: column;
+    align-items: center; justify-content: center;
+    cursor: pointer; position: relative; overflow: hidden;
+    background: var(--bg3); transition: border-color .12s;
+    font-size: 11px; color: var(--muted); text-align: center;
+  }
+  .foto-slot:hover { border-color: var(--blue); }
+  .foto-slot img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
+  .foto-slot .foto-cap {
+    position: absolute; bottom: 0; left: 0; right: 0;
+    background: rgba(0,0,0,.6); padding: 3px 6px;
+  }
+  .foto-slot .foto-cap input {
+    background: transparent; border: none; color: #ddd;
+    font-size: 10px; width: 100%; outline: none;
+    font-family: 'DM Sans', sans-serif;
+  }
+  .foto-slot .foto-sec {
+    position: absolute; top: 4px; left: 4px;
+    background: rgba(59,130,246,.7); color: #fff;
+    font-size: 9px; padding: 1px 5px; border-radius: 3px;
+    font-family: 'DM Mono', monospace; max-width: 55%;
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  }
+  .foto-del-btn {
+    position: absolute; top: 4px; right: 4px;
+    background: rgba(0,0,0,.55); border: none; color: #fff;
+    border-radius: 50%; width: 20px; height: 20px;
+    font-size: 12px; cursor: pointer; display: none;
+    align-items: center; justify-content: center;
+  }
+  .foto-slot:hover .foto-del-btn { display: flex; }
+
+  /* btn add dashed */
+  .btn-add-dashed {
+    width: 100%; border: 1px dashed var(--border);
+    background: none; border-radius: 8px; color: var(--muted);
+    font-size: 12px; font-family: 'DM Mono', monospace;
+    padding: 7px; cursor: pointer; transition: color .12s, border-color .12s;
+    margin-top: 8px;
+  }
+  .btn-add-dashed:hover { color: var(--blue); border-color: var(--blue); }
+
+  /* Preview */
+  .preview-kv { font-size: 13px; }
+  .preview-kv td:first-child { color: var(--muted); width: 140px; font-family: 'DM Mono', monospace; font-size: 11px; padding: 5px 0; vertical-align: top; }
+  .preview-kv td:last-child   { color: var(--text); padding: 5px 0; }
+
+  /* Estado generación PDF */
+  .pdf-status { display: none; padding: 10px 14px; border-radius: 8px; font-size: 13px; margin-top: 10px; }
+  .pdf-status.ok    { background: rgba(16,185,129,.1); color: var(--green); display: block; }
+  .pdf-status.error { background: rgba(239,68,68,.1);  color: var(--red);   display: block; }
+
+  /* OT tags */
+  .ot-tag {
+    display: inline-flex; align-items: center; gap: 5px;
+    background: rgba(245,158,11,.08); border: 1px solid rgba(245,158,11,.2);
+    color: var(--orange); font-family: 'DM Mono', monospace; font-size: 11px;
+    padding: 3px 8px; border-radius: 4px; margin: 2px;
+  }
+  .ot-tag button { background: none; border: none; color: inherit; cursor: pointer; font-size: 14px; padding: 0; line-height: 1; }
+  .ot-tag button:hover { color: var(--red); }
+
+  /* Tabla lista */
+  .empty { padding: 40px; text-align: center; color: var(--muted); font-size: 13px; }
+</style>
+</head>
+<body>
+<div id="overlay" class="overlay" onclick="ERP.closeSidebar()"></div>
+<div id="sidebar-root"></div>
+
+<main class="main">
+  <div class="page-header">
+    <h2>Informes de obra</h2>
+    <div style="display:flex;gap:8px">
+      <button class="btn btn-ghost" id="btn-exportar" onclick="exportarJSON()" style="display:none">Exportar JSON</button>
+      <button class="btn btn-primary" onclick="nuevoInforme()">+ Nuevo informe</button>
+    </div>
+  </div>
+
+  <!-- Filtros -->
+  <div class="filtros" style="margin-bottom:16px">
+    <select id="f-empresa" onchange="cargarLista()">
+      <option value="">Todas las empresas</option>
+      <option value="a1000000-0000-0000-0000-000000000001">Hidromec</option>
+      <option value="a2000000-0000-0000-0000-000000000002">Placemem</option>
+    </select>
+    <select id="f-tipo" onchange="cargarLista()">
+      <option value="">Todos los tipos</option>
+      <option value="avance">Avance de obra</option>
+      <option value="mantenimiento">Mantenimiento</option>
+      <option value="inspeccion">Inspección</option>
+      <option value="montaje">Montaje</option>
+      <option value="otro">Otro</option>
+    </select>
+    <input type="text" id="f-buscar" placeholder="Buscar informe..." oninput="cargarLista()" style="min-width:200px">
+  </div>
+
+  <div class="inf-layout">
+    <!-- LISTA -->
+    <div>
+      <div class="panel">
+        <div class="panel-header">
+          <h3>Informes</h3>
+          <span id="lista-count" style="font-size:11px;color:var(--muted)"></span>
+        </div>
+        <div id="lista-informes"><div class="spinner-wrap"><div class="spinner"></div>Cargando...</div></div>
+      </div>
+    </div>
+
+    <!-- FORM / DETALLE -->
+    <div id="panel-derecho" style="display:none">
+      <!-- PASOS -->
+      <div class="steps-nav" id="steps-nav">
+        <button class="step-btn active" data-step="1" onclick="irStep(1)">① Datos</button>
+        <button class="step-btn" data-step="2" onclick="irStep(2)">② Tipo</button>
+        <button class="step-btn" data-step="3" onclick="irStep(3)">③ Desarrollo</button>
+        <button class="step-btn" data-step="4" onclick="irStep(4)">④ Fotos</button>
+        <button class="step-btn" data-step="5" onclick="irStep(5)">⑤ Generar</button>
+      </div>
+
+      <!-- STEP 1: DATOS GENERALES -->
+      <div class="form-section active" id="sec-1">
+        <div class="inf-panel">
+          <div class="inf-panel-head"><h3>Cabecera</h3></div>
+          <div class="inf-panel-body">
+            <div class="form-row" style="grid-template-columns:1fr 1fr 1fr;margin-bottom:14px">
+              <div class="form-group"><label>N° Informe</label><input id="f-n_informe" placeholder="03/2026"></div>
+              <div class="form-group"><label>N° Orden de compra</label><input id="f-oc" placeholder="4500143701"></div>
+              <div class="form-group"><label>Fecha</label><input type="date" id="f-fecha"></div>
+            </div>
+            <div class="form-row" style="margin-bottom:14px">
+              <div class="form-group"><label>Empresa contratante</label><input id="f-empresa-nombre" placeholder="ej. Arauco"></div>
+              <div class="form-group"><label>Empresa ejecutante</label><input id="f-empresa-ej" placeholder="ej. Hidromec SRL"></div>
+            </div>
+            <div class="form-row" style="grid-template-columns:1fr 1fr 1fr;margin-bottom:14px">
+              <div class="form-group"><label>Localización / Área</label><input id="f-localizacion" placeholder="ej. Atucha 1 - Zárate"></div>
+              <div class="form-group"><label>Sector</label><input id="f-sector" placeholder="ej. Redler zanella"></div>
+              <div class="form-group"><label>Disciplina</label><input id="f-disciplina" placeholder="ej. Mantenimiento"></div>
+            </div>
+            <div class="form-row" style="margin-bottom:14px">
+              <div class="form-group">
+                <label>Cliente (opcional)</label>
+                <select id="f-cliente"><option value="">Sin cliente</option></select>
+              </div>
+              <div class="form-group">
+                <label>Proyecto (opcional)</label>
+                <select id="f-proyecto"><option value="">Sin proyecto</option></select>
+              </div>
+            </div>
+            <!-- Órdenes de trabajo -->
+            <div class="form-group" style="margin-bottom:14px">
+              <label>Órdenes de trabajo</label>
+              <div id="ot-container" style="margin-bottom:6px"></div>
+              <div style="display:flex;gap:6px">
+                <input id="ot-input" placeholder="Número de OT" style="flex:1" onkeydown="if(event.key==='Enter')addOT()">
+                <button class="btn btn-ghost btn-sm" onclick="addOT()">+ Agregar</button>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div style="display:flex;justify-content:flex-end;margin-top:12px">
+          <button class="btn btn-primary" onclick="irStep(2)">Siguiente →</button>
+        </div>
+      </div>
+
+      <!-- STEP 2: TIPO -->
+      <div class="form-section" id="sec-2">
+        <div class="inf-panel">
+          <div class="inf-panel-head"><h3>Tipo de informe</h3></div>
+          <div class="inf-panel-body">
+            <div class="form-group" style="margin-bottom:14px">
+              <label>Tipo</label>
+              <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:6px" id="tipo-btns">
+                <button class="btn btn-primary btn-sm tipo-btn" data-tipo="avance" onclick="selTipo(this)">Avance de obra</button>
+                <button class="btn btn-ghost btn-sm tipo-btn" data-tipo="mantenimiento" onclick="selTipo(this)">Mantenimiento</button>
+                <button class="btn btn-ghost btn-sm tipo-btn" data-tipo="inspeccion" onclick="selTipo(this)">Inspección</button>
+                <button class="btn btn-ghost btn-sm tipo-btn" data-tipo="montaje" onclick="selTipo(this)">Montaje</button>
+                <button class="btn btn-ghost btn-sm tipo-btn" data-tipo="otro" onclick="selTipo(this)">Otro</button>
+              </div>
+            </div>
+            <div class="form-group" style="margin-bottom:14px">
+              <label>Título del informe</label>
+              <input id="f-titulo" placeholder="ej. Informe Mantenimiento Redler">
+            </div>
+            <div id="campos-avance" style="display:none">
+              <div class="form-row">
+                <div class="form-group"><label>N° Certificado</label><input type="number" id="f-cert_num" value="1" min="1"></div>
+                <div class="form-group"><label>% Avance</label><input type="number" id="f-avance_pct" value="100" min="0" max="100"></div>
+              </div>
+            </div>
+            <div id="campos-mant" style="display:none">
+              <div class="form-group" style="margin-top:10px">
+                <label>Subtipo</label>
+                <select id="f-subtipo">
+                  <option value="preventivo">Preventivo</option>
+                  <option value="correctivo">Correctivo</option>
+                  <option value="predictivo">Predictivo</option>
+                  <option value="overhaul">Overhaul / Revisión mayor</option>
+                </select>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div style="display:flex;justify-content:space-between;margin-top:12px">
+          <button class="btn btn-ghost" onclick="irStep(1)">← Atrás</button>
+          <button class="btn btn-primary" onclick="irStep(3)">Siguiente →</button>
+        </div>
+      </div>
+
+      <!-- STEP 3: DESARROLLO -->
+      <div class="form-section" id="sec-3">
+        <!-- Objetivos -->
+        <div class="inf-panel" style="margin-bottom:10px">
+          <div class="inf-panel-head"><h3>Objetivos</h3></div>
+          <div class="inf-panel-body">
+            <ul class="cl-list" id="obj-list"></ul>
+            <button class="btn-add-dashed" onclick="addItem('obj-list')">+ agregar objetivo</button>
+          </div>
+        </div>
+        <!-- Equipos -->
+        <div id="equipos-container" style="margin-bottom:8px"></div>
+        <button class="btn-add-dashed" onclick="addEquipo()" style="margin-bottom:10px">+ agregar equipo / sección</button>
+        <!-- Alertas -->
+        <div class="inf-panel" style="margin-bottom:10px">
+          <div class="inf-panel-head">
+            <h3>Alertas y recomendaciones</h3>
+            <button class="btn btn-ghost btn-sm" onclick="addAlerta()">+ nueva</button>
+          </div>
+          <div class="inf-panel-body">
+            <div id="alertas-list"></div>
+          </div>
+        </div>
+        <!-- Observaciones -->
+        <div class="inf-panel" style="margin-bottom:10px">
+          <div class="inf-panel-head"><h3>Observaciones generales</h3></div>
+          <div class="inf-panel-body">
+            <div class="form-group">
+              <textarea id="f-obs" rows="3" placeholder="Observaciones del trabajo..."></textarea>
+            </div>
+          </div>
+        </div>
+        <div style="display:flex;justify-content:space-between;margin-top:12px">
+          <button class="btn btn-ghost" onclick="irStep(2)">← Atrás</button>
+          <button class="btn btn-primary" onclick="irStep(4)">Siguiente →</button>
+        </div>
+      </div>
+
+      <!-- STEP 4: FOTOS -->
+      <div class="form-section" id="sec-4">
+        <div class="inf-panel">
+          <div class="inf-panel-head">
+            <h3>Registro fotográfico</h3>
+            <div style="display:flex;gap:6px;align-items:center">
+              <input id="foto-sec-label" placeholder="Etiqueta sección" style="width:150px;padding:5px 8px;font-size:11px">
+              <button class="btn btn-ghost btn-sm" onclick="addFotoSlot()">+ casilla</button>
+              <button class="btn btn-ghost btn-sm" onclick="addFotoSlotX6()">+ ×6</button>
+            </div>
+          </div>
+          <div class="inf-panel-body">
+            <div class="foto-grid" id="foto-grid"></div>
+          </div>
+        </div>
+        <div style="display:flex;justify-content:space-between;margin-top:12px">
+          <button class="btn btn-ghost" onclick="irStep(3)">← Atrás</button>
+          <button class="btn btn-primary" onclick="irStep(5)">Siguiente →</button>
+        </div>
+      </div>
+
+      <!-- STEP 5: GENERAR -->
+      <div class="form-section" id="sec-5">
+        <!-- Firmas -->
+        <div class="inf-panel" style="margin-bottom:10px">
+          <div class="inf-panel-head"><h3>Elaborado por</h3></div>
+          <div class="inf-panel-body">
+            <div class="form-row" style="grid-template-columns:1fr 1fr 1fr">
+              <div class="form-group"><label>Nombre</label><input id="f-elab-nombre" placeholder="Nombre completo"></div>
+              <div class="form-group"><label>Cargo</label><input id="f-elab-cargo" placeholder="ej. Apoderado"></div>
+              <div class="form-group"><label>Fecha</label><input type="date" id="f-elab-fecha"></div>
+            </div>
+          </div>
+        </div>
+        <div class="inf-panel" style="margin-bottom:10px">
+          <div class="inf-panel-head"><h3>Aprobado por</h3></div>
+          <div class="inf-panel-body">
+            <div class="form-row" style="grid-template-columns:1fr 1fr 1fr">
+              <div class="form-group"><label>Nombre</label><input id="f-apro-nombre" placeholder="Nombre"></div>
+              <div class="form-group"><label>Cargo</label><input id="f-apro-cargo" placeholder="Cargo"></div>
+              <div class="form-group"><label>Fecha</label><input type="date" id="f-apro-fecha"></div>
+            </div>
+          </div>
+        </div>
+        <!-- Preview -->
+        <div class="inf-panel" style="margin-bottom:10px">
+          <div class="inf-panel-head"><h3>Vista previa</h3></div>
+          <div class="inf-panel-body">
+            <table class="preview-kv" id="preview-table" style="width:100%"></table>
+          </div>
+        </div>
+        <!-- Acciones -->
+        <div class="inf-panel" style="margin-bottom:10px">
+          <div class="inf-panel-body" style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
+            <button class="btn btn-success" id="btn-guardar" onclick="guardarInforme()">Guardar en ERP</button>
+            <button class="btn btn-primary" id="btn-pdf" onclick="generarPDF()">Generar PDF</button>
+            <span style="font-size:11px;color:var(--muted)">Guardá primero para preservar el informe</span>
+          </div>
+          <div class="pdf-status" id="pdf-status"></div>
+        </div>
+        <div style="display:flex;justify-content:space-between;margin-top:12px">
+          <button class="btn btn-ghost" onclick="irStep(4)">← Atrás</button>
+          <button class="btn btn-danger btn-sm" onclick="confirmarEliminar()" id="btn-eliminar" style="display:none">Eliminar informe</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- PLACEHOLDER cuando no hay selección -->
+    <div id="panel-vacio" style="display:flex;align-items:center;justify-content:center;min-height:300px">
+      <div style="text-align:center;color:var(--muted)">
+        <svg width="40" height="40" fill="none" stroke="currentColor" viewBox="0 0 24 24" style="margin-bottom:12px;opacity:.4"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>
+        <p style="font-size:13px">Seleccioná un informe o creá uno nuevo</p>
+      </div>
+    </div>
+  </div>
+</main>
+
+<!-- INPUT OCULTO FOTOS -->
+<input type="file" id="file-input" accept="image/*" multiple style="display:none" onchange="handleFotos(event)">
+
+<script>
+// ─── ESTADO ──────────────────────────────────────────────────
+let currentStep     = 1;
+let currentTipo     = 'avance';
+let informeActualId = null;   // null = nuevo
+let fotoCount       = 0;
+let currentFotoSlot = null;
+let empresaId       = null;
+
+const PDF_API_URL = '/api/generar-informe'; // Endpoint Flask
+
+// ─── INIT ────────────────────────────────────────────────────
+async function init() {
+  const usuario = await ERP.initLayout('informes');
+  if (!usuario) return;
+
+  const hoy = new Date().toISOString().split('T')[0];
+  document.getElementById('f-fecha').value       = hoy;
+  document.getElementById('f-elab-fecha').value  = hoy;
+  document.getElementById('f-apro-fecha').value  = hoy;
+
+  // empresa del usuario por defecto
+  empresaId = localStorage.getItem('erp_empresa_id') || '';
+  if (empresaId) document.getElementById('f-empresa').value = empresaId;
+
+  await cargarLista();
+  await cargarSelects();
+  addItem('obj-list', 'Inspección general');
+  addAlerta('info', '');
+  addFotoSlotX6();
+}
+
+// ─── LISTA ───────────────────────────────────────────────────
+async function cargarLista() {
+  const el  = document.getElementById('lista-informes');
+  const emp = document.getElementById('f-empresa').value;
+  const tp  = document.getElementById('f-tipo').value;
+  const bq  = document.getElementById('f-buscar').value.toLowerCase();
+
+  await withLoading('lista-informes', async () => {
+    const data = await InformesAPI.getInformes({
+      empresaId: emp || undefined,
+      tipo:      tp  || undefined,
+    });
+
+    const filtrados = data.filter(inf =>
+      !bq ||
+      (inf.titulo||'').toLowerCase().includes(bq) ||
+      (inf.n_informe||'').toLowerCase().includes(bq) ||
+      (inf.localizacion||'').toLowerCase().includes(bq)
+    );
+
+    document.getElementById('lista-count').textContent = filtrados.length + ' informes';
+
+    if (!filtrados.length) {
+      el.innerHTML = '<div class="empty">Sin informes. Creá uno nuevo.</div>';
+      return;
+    }
+
+    el.innerHTML = filtrados.map(inf => `
+      <div class="inf-item" id="li-${inf.id}" onclick="seleccionarInforme('${inf.id}')">
+        <div class="inf-item-titulo">${inf.titulo || 'Sin título'}</div>
+        <div class="inf-item-meta">
+          <span class="tipo-pill tipo-${inf.tipo}">${tipoLabel(inf.tipo)}</span>
+          <span>${fmtF(inf.fecha)}</span>
+          ${inf.n_informe ? `<span class="mono">N° ${inf.n_informe}</span>` : ''}
+          ${inf.clientes?.nombre ? `<span>${inf.clientes.nombre}</span>` : ''}
+        </div>
+      </div>
+    `).join('');
+  });
+}
+
+// ─── SELECTS ─────────────────────────────────────────────────
+async function cargarSelects() {
+  const emp = document.getElementById('f-empresa').value;
+  if (!emp) return;
+  try {
+    const [clientes, proyectos] = await Promise.all([
+      ClientesAPI.getClientesSelect(emp),
+      ProyectosAPI.getProyectosSelect(emp, ['activo','pausado','finalizado']),
+    ]);
+    const selC = document.getElementById('f-cliente');
+    const selP = document.getElementById('f-proyecto');
+    selC.innerHTML = '<option value="">Sin cliente</option>' +
+      clientes.map(c => `<option value="${c.id}">${c.nombre}</option>`).join('');
+    selP.innerHTML = '<option value="">Sin proyecto</option>' +
+      proyectos.map(p => `<option value="${p.id}">${p.nombre}</option>`).join('');
+  } catch(e) { /* selects opcionales */ }
+}
+
+// ─── SELECCIONAR / ABRIR INFORME ─────────────────────────────
+async function seleccionarInforme(id) {
+  document.querySelectorAll('.inf-item').forEach(el => el.classList.remove('selected'));
+  document.getElementById('li-' + id)?.classList.add('selected');
+
+  informeActualId = id;
+  mostrarPanel(true);
+  irStep(1);
+
+  await withLoading('sec-1', async () => {
+    const inf     = await InformesAPI.getInformeById(id);
+    const equipos = await InformesAPI.getEquiposInforme(id);
+    const alertas = await InformesAPI.getAlertasInforme(id);
+    const fotos   = await InformesAPI.getFotosInforme(id);
+
+    // Cabecera
+    document.getElementById('f-n_informe').value    = inf.n_informe || '';
+    document.getElementById('f-oc').value           = inf.oc || '';
+    document.getElementById('f-fecha').value        = inf.fecha || '';
+    document.getElementById('f-empresa-nombre').value = inf.empresa_nombre || '';
+    document.getElementById('f-empresa-ej').value   = inf.empresa_ej_nombre || '';
+    document.getElementById('f-localizacion').value = inf.localizacion || '';
+    document.getElementById('f-sector').value       = inf.sector || '';
+    document.getElementById('f-disciplina').value   = inf.disciplina || '';
+    document.getElementById('f-obs').value          = inf.observaciones || '';
+    document.getElementById('f-elab-nombre').value  = inf.elab_nombre || '';
+    document.getElementById('f-elab-cargo').value   = inf.elab_cargo || '';
+    document.getElementById('f-elab-fecha').value   = inf.elab_fecha || '';
+    document.getElementById('f-apro-nombre').value  = inf.apro_nombre || '';
+    document.getElementById('f-apro-cargo').value   = inf.apro_cargo || '';
+    document.getElementById('f-apro-fecha').value   = inf.apro_fecha || '';
+
+    // OTs
+    document.getElementById('ot-container').innerHTML = '';
+    (inf.ordenes_trabajo || []).forEach(ot => addOTValor(ot));
+
+    // Tipo
+    currentTipo = inf.tipo || 'avance';
+    document.querySelectorAll('.tipo-btn').forEach(b => {
+      b.classList.toggle('btn-primary', b.dataset.tipo === currentTipo);
+      b.classList.toggle('btn-ghost',   b.dataset.tipo !== currentTipo);
+    });
+    actualizarCamposTipo();
+    document.getElementById('f-titulo').value   = inf.titulo || '';
+    document.getElementById('f-cert_num').value = inf.cert_num || '';
+    document.getElementById('f-avance_pct').value = inf.avance_pct || '';
+    document.getElementById('f-subtipo').value  = inf.subtipo || 'preventivo';
+
+    // Objetivos + equipos
+    document.getElementById('obj-list').innerHTML = '';
+    document.getElementById('equipos-container').innerHTML = '';
+
+    equipos.forEach(async eq => {
+      if (eq.nombre === '__objetivos__') {
+        const tareas = await InformesAPI.getTareasEquipo(eq.id);
+        tareas.forEach(t => addItem('obj-list', t.descripcion, t.completado));
+      } else {
+        const tareas = await InformesAPI.getTareasEquipo(eq.id);
+        addEquipo(eq.nombre, tareas.map(t => ({ text: t.descripcion, done: t.completado })));
+      }
+    });
+
+    // Alertas
+    document.getElementById('alertas-list').innerHTML = '';
+    alertas.forEach(a => addAlerta(a.tipo, a.texto));
+
+    // Fotos — mostramos las guardadas como previews
+    document.getElementById('foto-grid').innerHTML = '';
+    fotoCount = 0;
+    fotos.forEach(f => {
+      fotoCount++;
+      const id = 'foto-' + fotoCount;
+      const div = document.createElement('div');
+      div.className = 'foto-slot'; div.id = id;
+      div.innerHTML = `
+        <img src="${f.url}">
+        ${f.seccion ? `<div class="foto-sec">${f.seccion}</div>` : ''}
+        <div class="foto-cap"><input class="cap-inp" placeholder="Descripción" value="${f.caption || ''}" onclick="event.stopPropagation()"></div>
+        <button class="foto-del-btn" onclick="event.stopPropagation();this.closest('.foto-slot').remove()">×</button>
+      `;
+      document.getElementById('foto-grid').appendChild(div);
+    });
+    if (!fotos.length) addFotoSlotX6();
+
+    document.getElementById('btn-eliminar').style.display = 'inline-flex';
+    document.getElementById('btn-exportar').style.display = 'inline-flex';
+  });
+}
+
+// ─── NUEVO INFORME ───────────────────────────────────────────
+function nuevoInforme() {
+  informeActualId = null;
+  document.querySelectorAll('.inf-item').forEach(el => el.classList.remove('selected'));
+  limpiarForm();
+  mostrarPanel(true);
+  irStep(1);
+  document.getElementById('btn-eliminar').style.display = 'none';
+  document.getElementById('btn-exportar').style.display = 'none';
+}
+
+function limpiarForm() {
+  const hoy = new Date().toISOString().split('T')[0];
+  ['f-n_informe','f-oc','f-empresa-nombre','f-empresa-ej','f-localizacion','f-sector','f-disciplina','f-titulo','f-obs','f-elab-nombre','f-elab-cargo','f-apro-nombre','f-apro-cargo'].forEach(id => { const el = document.getElementById(id); if(el) el.value = ''; });
+  document.getElementById('f-fecha').value      = hoy;
+  document.getElementById('f-elab-fecha').value = hoy;
+  document.getElementById('f-apro-fecha').value = hoy;
+  document.getElementById('f-cert_num').value   = '1';
+  document.getElementById('f-avance_pct').value = '100';
+  document.getElementById('ot-container').innerHTML   = '';
+  document.getElementById('obj-list').innerHTML       = '';
+  document.getElementById('equipos-container').innerHTML = '';
+  document.getElementById('alertas-list').innerHTML   = '';
+  document.getElementById('foto-grid').innerHTML      = '';
+  fotoCount = 0;
+
+  currentTipo = 'avance';
+  document.querySelectorAll('.tipo-btn').forEach(b => {
+    b.classList.toggle('btn-primary', b.dataset.tipo === 'avance');
+    b.classList.toggle('btn-ghost',   b.dataset.tipo !== 'avance');
+  });
+  actualizarCamposTipo();
+
+  addItem('obj-list', 'Inspección general');
+  addAlerta('info', '');
+  addFotoSlotX6();
+}
+
+function mostrarPanel(show) {
+  document.getElementById('panel-derecho').style.display = show ? 'block' : 'none';
+  document.getElementById('panel-vacio').style.display   = show ? 'none'  : 'flex';
+}
+
+// ─── STEPS ───────────────────────────────────────────────────
+function irStep(n) {
+  currentStep = n;
+  document.querySelectorAll('.form-section').forEach(s => s.classList.remove('active'));
+  document.getElementById('sec-' + n).classList.add('active');
+  document.querySelectorAll('.step-btn').forEach(b => {
+    const bn = Number(b.dataset.step);
+    b.classList.remove('active', 'done');
+    if (bn === n) b.classList.add('active');
+    else if (bn < n) b.classList.add('done');
+  });
+  if (n === 5) buildPreview();
+}
+
+// ─── TIPO ────────────────────────────────────────────────────
+function selTipo(btn) {
+  currentTipo = btn.dataset.tipo;
+  document.querySelectorAll('.tipo-btn').forEach(b => {
+    b.classList.toggle('btn-primary', b === btn);
+    b.classList.toggle('btn-ghost',   b !== btn);
+  });
+  actualizarCamposTipo();
+  const map = { avance: 'Informe Avance de Obra', mantenimiento: 'Informe Mantenimiento', inspeccion: 'Informe de Inspección', montaje: 'Informe de Montaje', otro: 'Informe de Trabajo' };
+  if (!document.getElementById('f-titulo').value) document.getElementById('f-titulo').placeholder = map[currentTipo] || '';
+}
+
+function actualizarCamposTipo() {
+  document.getElementById('campos-avance').style.display = currentTipo === 'avance'       ? 'block' : 'none';
+  document.getElementById('campos-mant').style.display   = currentTipo === 'mantenimiento'? 'block' : 'none';
+}
+
+// ─── OTs ─────────────────────────────────────────────────────
+function addOT() {
+  const v = document.getElementById('ot-input').value.trim();
+  if (!v) return;
+  addOTValor(v);
+  document.getElementById('ot-input').value = '';
+}
+
+function addOTValor(v) {
+  const span = document.createElement('span');
+  span.className = 'ot-tag'; span.dataset.value = v;
+  span.innerHTML = `OT: ${v} <button onclick="this.parentElement.remove()">×</button>`;
+  document.getElementById('ot-container').appendChild(span);
+}
+
+function getOTs() {
+  return [...document.querySelectorAll('.ot-tag')].map(t => t.dataset.value);
+}
+
+// ─── CHECKLIST ───────────────────────────────────────────────
+function addItem(listId, texto = '', done = true) {
+  const li = document.createElement('li');
+  li.className = 'cl-item';
+  li.innerHTML = `
+    <input type="checkbox" ${done ? 'checked' : ''}>
+    <textarea class="cl-ta" rows="1">${texto}</textarea>
+    <button class="cl-del" onclick="this.parentElement.remove()">×</button>
+  `;
+  const ta = li.querySelector('textarea');
+  ta.addEventListener('input', () => { ta.style.height = 'auto'; ta.style.height = ta.scrollHeight + 'px'; });
+  document.getElementById(listId).appendChild(li);
+  if (!texto) ta.focus();
+}
+
+function getCL(listId) {
+  return [...document.querySelectorAll('#' + listId + ' .cl-item')].map(li => ({
+    text: li.querySelector('textarea').value.trim(),
+    done: li.querySelector('input[type=checkbox]').checked,
+  })).filter(i => i.text);
+}
+
+// ─── EQUIPOS ─────────────────────────────────────────────────
+let eqCount = 0;
+function addEquipo(nombre = '', tareasInit = []) {
+  eqCount++;
+  const id = 'eq-' + eqCount;
+  const div = document.createElement('div');
+  div.className = 'equipo-bloque'; div.id = id;
+  div.innerHTML = `
+    <div class="equipo-head">
+      <input value="${nombre}" placeholder="Nombre del equipo / sección (ej. Redler 01-0125)">
+      <button class="equipo-del" onclick="document.getElementById('${id}').remove()">✕ quitar</button>
+    </div>
+    <div class="equipo-body">
+      <ul class="cl-list" id="cl-${id}"></ul>
+      <button class="btn-add-dashed" onclick="addItem('cl-${id}')">+ agregar tarea</button>
+    </div>
+  `;
+  document.getElementById('equipos-container').appendChild(div);
+  if (tareasInit.length) tareasInit.forEach(t => addItem('cl-' + id, t.text, t.done !== false));
+  else { addItem('cl-' + id, 'Inspección general del equipo'); }
+}
+
+function getEquipos() {
+  return [...document.querySelectorAll('.equipo-bloque')].map(div => ({
+    nombre: div.querySelector('.equipo-head input').value.trim(),
+    tareas: getCL('cl-' + div.id),
+  }));
+}
+
+// ─── ALERTAS ─────────────────────────────────────────────────
+function addAlerta(tipo = 'info', texto = '') {
+  const div = document.createElement('div');
+  div.className = 'alerta-row';
+  div.innerHTML = `
+    <select class="alerta-sel" onchange="syncAlertaBadge(this)">
+      <option value="recomendacion" ${tipo==='recomendacion'?'selected':''}>Recomendación</option>
+      <option value="falla"         ${tipo==='falla'?'selected':''}>Falla</option>
+      <option value="info"          ${tipo==='info'?'selected':''}>Info</option>
+    </select>
+    <span class="alerta-tipo-badge ab-${tipo}">${tipoAlertaLabel(tipo)}</span>
+    <textarea class="alerta-txt" rows="1" placeholder="Describí la alerta...">${texto}</textarea>
+    <button class="cl-del" onclick="this.parentElement.remove()">×</button>
+  `;
+  const ta = div.querySelector('textarea');
+  ta.addEventListener('input', () => { ta.style.height = 'auto'; ta.style.height = ta.scrollHeight + 'px'; });
+  document.getElementById('alertas-list').appendChild(div);
+}
+
+function syncAlertaBadge(sel) {
+  const badge = sel.nextElementSibling;
+  badge.className = 'alerta-tipo-badge ab-' + sel.value;
+  badge.textContent = tipoAlertaLabel(sel.value);
+}
+
+function getAlertas() {
+  return [...document.querySelectorAll('.alerta-row')].map(row => ({
+    tipo:  row.querySelector('select').value,
+    texto: row.querySelector('textarea').value.trim(),
+  })).filter(a => a.texto);
+}
+
+// ─── FOTOS ───────────────────────────────────────────────────
+function addFotoSlot(label) {
+  fotoCount++;
+  const id = 'foto-' + fotoCount;
+  const sec = label || document.getElementById('foto-sec-label').value.trim();
+  const div = document.createElement('div');
+  div.className = 'foto-slot'; div.id = id;
+  div.innerHTML = `
+    <div style="text-align:center;z-index:1"><div style="font-size:22px;color:var(--muted)">+</div><div style="font-size:10px;color:var(--muted);font-family:'DM Mono',monospace">foto ${fotoCount}</div></div>
+    ${sec ? `<div class="foto-sec">${sec}</div>` : ''}
+    <button class="foto-del-btn" onclick="event.stopPropagation();document.getElementById('${id}').remove()">×</button>
+  `;
+  div.addEventListener('click', e => {
+    if (e.target.classList.contains('foto-del-btn') || e.target.classList.contains('cap-inp')) return;
+    currentFotoSlot = id;
+    document.getElementById('file-input').click();
+  });
+  document.getElementById('foto-grid').appendChild(div);
+}
+
+function addFotoSlotX6() { for (let i = 0; i < 6; i++) addFotoSlot(); }
+
+function handleFotos(e) {
+  const files = [...e.target.files];
+  files.forEach((file, idx) => {
+    const reader = new FileReader();
+    reader.onload = ev => {
+      let slotId;
+      if (idx === 0 && currentFotoSlot) { slotId = currentFotoSlot; }
+      else { addFotoSlot(); slotId = 'foto-' + fotoCount; }
+      const slot = document.getElementById(slotId);
+      if (!slot) return;
+      const sec = slot.querySelector('.foto-sec');
+      slot.innerHTML = `
+        <img src="${ev.target.result}" data-b64="${ev.target.result}">
+        ${sec ? sec.outerHTML : ''}
+        <div class="foto-cap"><input class="cap-inp" placeholder="Descripción" onclick="event.stopPropagation()"></div>
+        <button class="foto-del-btn" onclick="event.stopPropagation();this.closest('.foto-slot').remove()">×</button>
+      `;
+      slot.addEventListener('click', ev2 => {
+        if (ev2.target.classList.contains('foto-del-btn') || ev2.target.classList.contains('cap-inp')) return;
+        currentFotoSlot = slot.id;
+        document.getElementById('file-input').click();
+      });
+    };
+    reader.readAsDataURL(file);
+  });
+  e.target.value = '';
+}
+
+function getFotos() {
+  return [...document.querySelectorAll('.foto-slot')].map(slot => {
+    const img = slot.querySelector('img');
+    if (!img) return null;
+    return {
+      base64:  img.dataset.b64 || img.src,
+      caption: slot.querySelector('.cap-inp')?.value || '',
+      section: slot.querySelector('.foto-sec')?.textContent || '',
+    };
+  }).filter(Boolean);
+}
+
+// ─── COLLECT DATA ─────────────────────────────────────────────
+function collectData() {
+  return {
+    id:           informeActualId,
+    tipo:         currentTipo,
+    titulo:       document.getElementById('f-titulo').value,
+    n_informe:    document.getElementById('f-n_informe').value,
+    oc:           document.getElementById('f-oc').value,
+    fecha:        document.getElementById('f-fecha').value,
+    empresa:      document.getElementById('f-empresa-nombre').value,
+    empresa_ej:   document.getElementById('f-empresa-ej').value,
+    localizacion: document.getElementById('f-localizacion').value,
+    sector:       document.getElementById('f-sector').value,
+    disciplina:   document.getElementById('f-disciplina').value,
+    ordenes:      getOTs(),
+    cert_num:     document.getElementById('f-cert_num').value,
+    avance_pct:   document.getElementById('f-avance_pct').value,
+    subtipo:      document.getElementById('f-subtipo').value,
+    cliente_id:   document.getElementById('f-cliente').value || null,
+    proyecto_id:  document.getElementById('f-proyecto').value || null,
+    objetivos:    getCL('obj-list'),
+    equipos:      getEquipos(),
+    alertas:      getAlertas(),
+    observaciones: document.getElementById('f-obs').value,
+    fotos:        getFotos(),
+    elaborado: {
+      nombre: document.getElementById('f-elab-nombre').value,
+      cargo:  document.getElementById('f-elab-cargo').value,
+      fecha:  document.getElementById('f-elab-fecha').value,
+    },
+    aprobado: {
+      nombre: document.getElementById('f-apro-nombre').value,
+      cargo:  document.getElementById('f-apro-cargo').value,
+      fecha:  document.getElementById('f-apro-fecha').value,
+    },
+  };
+}
+
+// ─── PREVIEW ─────────────────────────────────────────────────
+function buildPreview() {
+  const d = collectData();
+  const rows = [
+    ['Tipo',         tipoLabel(d.tipo)],
+    ['Título',       d.titulo || '—'],
+    ['N° Informe',   d.n_informe || '—'],
+    ['OC',           d.oc || '—'],
+    ['Empresa',      d.empresa || '—'],
+    ['Localización', d.localizacion + (d.sector ? ' / ' + d.sector : '')],
+    ['Fecha',        fmtF(d.fecha)],
+    ['OTs',          d.ordenes.join(' – ') || '—'],
+    ['Equipos',      d.equipos.map(e => e.nombre).filter(Boolean).join(', ') || '—'],
+    ['Fotos',        d.fotos.length + ' imagen/es'],
+    ['Elaborado',    d.elaborado.nombre || '—'],
+    ['Aprobado',     d.aprobado.nombre  || '—'],
+  ];
+  document.getElementById('preview-table').innerHTML = rows.map(([k,v]) =>
+    `<tr><td>${k}</td><td>${v}</td></tr>`).join('');
+}
+
+// ─── GUARDAR EN ERP ───────────────────────────────────────────
+async function guardarInforme() {
+  const emp = document.getElementById('f-empresa').value;
+  if (!emp) { toast('Seleccioná una empresa primero', 'warn'); return; }
+  const data = collectData();
+  const id = await withSave('btn-guardar', async () => {
+    const infId = await InformesAPI.guardarInformeCompleto(emp, data);
+    informeActualId = infId;
+    return infId;
+  }, 'Informe guardado correctamente');
+  if (id) {
+    document.getElementById('btn-eliminar').style.display = 'inline-flex';
+    document.getElementById('btn-exportar').style.display = 'inline-flex';
+    await cargarLista();
+  }
+}
+
+// ─── GENERAR PDF ──────────────────────────────────────────────
+async function generarPDF() {
+  const data = collectData();
+  const statusEl = document.getElementById('pdf-status');
+  const btn = document.getElementById('btn-pdf');
+  statusEl.className = 'pdf-status';
+  btn.disabled = true;
+  btn.innerHTML = '<span class="spinner"></span>Generando...';
+
+  try {
+    const res = await fetch(PDF_API_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data),
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({ error: 'Error del servidor' }));
+      throw new Error(err.error || 'Error generando PDF');
+    }
+    const blob = await res.blob();
+    const url  = URL.createObjectURL(blob);
+    const a    = document.createElement('a');
+    a.href = url;
+    a.download = (data.titulo || 'informe').replace(/\s+/g,'_') + '_N' + (data.n_informe||'1') + '.pdf';
+    a.click();
+    URL.revokeObjectURL(url);
+    statusEl.className = 'pdf-status ok';
+    statusEl.textContent = 'PDF generado correctamente';
+  } catch(e) {
+    statusEl.className = 'pdf-status error';
+    statusEl.textContent = 'Error: ' + e.message;
+    toast('Error generando PDF: ' + e.message, 'error');
+  } finally {
+    btn.disabled = false;
+    btn.innerHTML = 'Generar PDF';
+  }
+}
+
+// ─── EXPORTAR JSON ────────────────────────────────────────────
+function exportarJSON() {
+  const data = collectData();
+  const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = 'informe_' + (data.n_informe||'draft') + '.json';
+  a.click();
+  toast('JSON exportado', 'success');
+}
+
+// ─── ELIMINAR ────────────────────────────────────────────────
+async function confirmarEliminar() {
+  if (!informeActualId) return;
+  const ok = await confirmar('¿Eliminar este informe? Esta acción no se puede deshacer.');
+  if (!ok) return;
+  try {
+    await InformesAPI.eliminarInforme(informeActualId);
+    informeActualId = null;
+    mostrarPanel(false);
+    toast('Informe eliminado', 'success');
+    await cargarLista();
+  } catch(e) { manejarError(e, 'eliminar informe'); }
+}
+
+// ─── UTILS ───────────────────────────────────────────────────
+function tipoLabel(t) {
+  return { avance: 'Avance de obra', mantenimiento: 'Mantenimiento', inspeccion: 'Inspección', montaje: 'Montaje', otro: 'Otro' }[t] || t || '—';
+}
+function tipoAlertaLabel(t) {
+  return { recomendacion: 'Recom.', falla: 'Falla', info: 'Info' }[t] || t;
+}
+
+init();
+</script>
+</body>
+</html>
