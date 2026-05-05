@@ -457,43 +457,42 @@ async function confirmarOPMultiple(){
   // Buscar el máximo número de OP del año para ESTA empresa.
   // Usamos RPC para traer solo los order_pago_nro distintos y evitar
   // el límite de 1000 filas de Supabase y problemas de case en LIKE.
+  // Obtener el máximo número de OP del año para esta empresa.
+  // Usamos una RPC dedicada para evitar problemas con ilike/like y límites de filas.
   let maxNro = 0;
   try {
-    const {data:opExist, error:opErr} = await db.from('egresos')
-      .select('orden_pago_nro')
-      .eq('empresa_id', empresaIdOP)
-      .not('orden_pago_nro','is',null)
-      .ilike('orden_pago_nro', 'OP-%-' + anioStr)
-      .limit(1000);
-    if(opErr) console.warn('[OP] Error consultando OPs:', opErr);
-    const nros = (opExist||[])
-      .map(r => { const m = r.orden_pago_nro && r.orden_pago_nro.match(/OP-0*(\d+)-\d{4}/i); return m ? parseInt(m[1]) : 0; })
-      .filter(n => n > 0);
-    maxNro = nros.length ? Math.max(...nros) : 0;
-    console.log('[OP] empresa=' + empresaIdOP + ' año=' + anioStr + ' registros=' + (opExist||[]).length + ' max=' + maxNro);
-    // Guardia extra: si maxNro es 0 pero hay OPs en la BD, algo falló — abortamos
-    if(maxNro === 0 && (opExist||[]).length === 0){
-      // Verificar con query alternativa por si ilike falló
-      const {data:check} = await db.from('egresos')
+    const { data: maxData, error: maxErr } = await db.rpc('get_max_op_nro', {
+      p_empresa_id: empresaIdOP,
+      p_anio: anioStr
+    });
+    if(maxErr) throw maxErr;
+    maxNro = maxData || 0;
+    console.log('[OP] empresa=' + empresaIdOP + ' año=' + anioStr + ' maxNro=' + maxNro);
+  } catch(rpcErr) {
+    console.warn('[OP] RPC falló, usando fallback JS:', rpcErr.message);
+    // Fallback: traer orden_pago_nro distintos directo de la tabla
+    try {
+      const { data: fallback } = await db
+        .from('egresos')
         .select('orden_pago_nro')
         .eq('empresa_id', empresaIdOP)
-        .not('orden_pago_nro','is',null)
-        .order('orden_pago_at', {ascending:false})
-        .limit(50);
-      const nros2 = (check||[])
-        .map(r => { const m = r.orden_pago_nro && r.orden_pago_nro.match(/OP-0*(\d+)-2026/i); return m ? parseInt(m[1]) : 0; })
+        .not('orden_pago_nro', 'is', null)
+        .gte('orden_pago_at', anioStr + '-01-01')
+        .lte('orden_pago_at', anioStr + '-12-31T23:59:59')
+        .limit(500);
+      const nros = (fallback || [])
+        .map(r => { const m = r.orden_pago_nro && r.orden_pago_nro.match(/OP-0*(\d+)-\d{4}/i); return m ? parseInt(m[1]) : 0; })
         .filter(n => n > 0);
-      maxNro = nros2.length ? Math.max(...nros2) : 0;
-      console.log('[OP] fallback maxNro=' + maxNro);
+      maxNro = nros.length ? Math.max(...nros) : 0;
+      console.log('[OP] fallback por fecha: registros=' + (fallback||[]).length + ' max=' + maxNro);
+    } catch(fbErr) {
+      console.error('[OP] Fallback también falló:', fbErr);
+      toast('Error al calcular número de OP. Intentá de nuevo.', 'error');
+      return;
     }
-  } catch(e) {
-    console.error('[OP] Excepcion al calcular maxNro:', e);
-    toast('Error al calcular número de OP. Intentá de nuevo.', 'error');
-    return;
   }
   if(maxNro === 0){
-    const confirmar = await window.confirmar('No se pudo determinar el último número de OP. ¿Querés continuar de todas formas? (Se generará un número provisorio)');
-    if(!confirmar) return;
+    if(!(await confirmar('No se pudo determinar el último número de OP.\n¿Querés continuar de todas formas?'))) return;
   }
 
   // Recopilar cheques si aplica
