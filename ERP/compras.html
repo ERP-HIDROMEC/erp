@@ -452,18 +452,21 @@ async function confirmarOPMultiple(){
   const empresaIdOP = rows[0]?.empresa_id;
   if(!empresaIdOP){ toast('No se pudo determinar la empresa del egreso.', 'error'); return; }
   const anioActual = new Date().getFullYear();
+  const anioStr = String(anioActual);
 
-  // Obtener el número máximo actual de OPs de esta empresa
-  const {data:opExist} = await db.from('egresos')
+  // Buscar el máximo número de OP del año para ESTA empresa
+  // Usamos .like() directo en Supabase para no depender de filtros JS
+  const {data:opExist, error:opErr} = await db.from('egresos')
     .select('orden_pago_nro')
+    .eq('empresa_id', empresaIdOP)
     .not('orden_pago_nro','is',null)
-    .eq('empresa_id', empresaIdOP);
+    .like('orden_pago_nro', 'OP-%-' + anioStr);
+  if(opErr) console.warn('[OP] Error consultando OPs existentes:', opErr);
   const nrosAnio = (opExist||[])
-    .map(r => r.orden_pago_nro)
-    .filter(n => n && n.toUpperCase().endsWith('-'+anioActual))
-    .map(n => { const m = n.match(/OP-0*(\d+)-\d{4}/i); return m ? parseInt(m[1]) : 0; })
-    .filter(n => !isNaN(n) && n > 0);
+    .map(r => { const m = r.orden_pago_nro && r.orden_pago_nro.match(/OP-0*(\d+)-\d{4}/i); return m ? parseInt(m[1]) : 0; })
+    .filter(n => n > 0);
   let maxNro = nrosAnio.length ? Math.max(...nrosAnio) : 0;
+  console.log('[OP] empresa=' + empresaIdOP + ' año=' + anioStr + ' nros=' + JSON.stringify(nrosAnio) + ' max=' + maxNro);
 
   // Recopilar cheques si aplica
   let chequesData=[];
@@ -486,7 +489,7 @@ async function confirmarOPMultiple(){
     ?'cuentasporpagar@placemem.com.ar'
     :'cuentasporpagar@hidromecsrl.com';
 
-  // Agrupar por proveedor: cada proveedor recibe su propia OP
+  // Agrupar por proveedor: cada proveedor recibe su propia OP correlativa
   const gruposPorProveedor = {};
   rows.forEach(r => {
     const provId = r.proveedor_id || '__sin_proveedor__';
@@ -497,10 +500,10 @@ async function confirmarOPMultiple(){
 
   for(const grupo of grupos){
     maxNro++;
-    const nroOrden = 'OP-'+String(maxNro).padStart(4,'0')+'-'+anioActual;
+    const nroOrden = 'OP-'+String(maxNro).padStart(4,'0')+'-'+anioStr;
     const totalGrupo = grupo.reduce((s,r)=>s+Number(r.monto||0),0);
+    console.log('[OP] generando ' + nroOrden + ' para ' + (grupo[0]?.proveedores?.nombre||'?') + ' (' + grupo.length + ' fc)');
 
-    // Pagar todos los egresos de este proveedor con su propia OP
     for(const r of grupo){
       try{
         await EgresosAPI.pagarEgreso(r.id,{
@@ -514,7 +517,6 @@ async function confirmarOPMultiple(){
       }catch(e){ console.warn('Error pagando egreso:',e); }
     }
 
-    // Registrar cheques para este grupo si aplica
     if(chequesData.length){
       const empId=grupo[0]?.empresas?.id||grupo[0]?.empresa_id;
       for(const ch of chequesData){
@@ -527,7 +529,6 @@ async function confirmarOPMultiple(){
       }
     }
 
-    // PDF y mail por cada OP
     const pdfBlob=generarPDFOrdenMultiple(grupo,nroOrden,fecha,metodo,obsFinal,u?.email||'',chequesData);
     await enviarOPporMail(pdfBlob,nroOrden,totalGrupo,mailDest,grupo,empresaNombre);
   }
@@ -535,13 +536,11 @@ async function confirmarOPMultiple(){
   cerrarModal('modal-op-multiple');
   seleccionadosOP.clear();
   actualizarBadgeLiberar();
-
-  toast(`Orden${grupos.length>1?'es':''} de Pago generada${grupos.length>1?'s':''}: ${grupos.length} (una por proveedor).`, 'success');
+  toast(`Orden${grupos.length>1?'es':''} de Pago generada${grupos.length>1?'s':''}: ${grupos.map((_,i)=>'OP-'+String(maxNro-grupos.length+1+i).padStart(4,'0')+'-'+anioStr).join(', ')}`, 'success');
 
   if(tabActual==='liberar') cargarParaLiberar();
   else cargarEgresos();
 }
-
 
 async function enviarOPporMail(pdfBlob,nroOrden,total,mailDest,rows,empresa){
   // ══════════════════════════════════════════════════════════
