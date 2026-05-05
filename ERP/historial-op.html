@@ -120,7 +120,9 @@ function filtrar() {
   }
   const grupos = {};
   rows.forEach(r => {
-    const key = normalizarNroOP(r.orden_pago_nro) || r.id; // si no tiene nro OP, cada uno es su propio grupo
+    // La key incluye empresa_id para evitar mezclar OP con mismo número de empresas distintas
+    const nroNorm = normalizarNroOP(r.orden_pago_nro);
+    const key = nroNorm ? (nroNorm + '_' + r.empresa_id) : r.id;
     if (!grupos[key]) {
       grupos[key] = {
         orden_pago_nro: normalizarNroOP(r.orden_pago_nro)||r.orden_pago_nro,
@@ -187,12 +189,19 @@ function filtrar() {
 }
 
 async function descargarOrdenPagoAgrupada(primerId, nroOrden){
-  // Cargar todos los egresos con el mismo orden_pago_nro
+  // Cargar todos los egresos con el mismo orden_pago_nro Y empresa_id
   let rows = [];
-  if (nroOrden) {
+  // Primero obtener el empresa_id del egreso raíz
+  const { data: base } = await db.from('egresos')
+    .select('empresa_id')
+    .eq('id', primerId)
+    .single();
+
+  if (nroOrden && base?.empresa_id) {
     const { data } = await db.from('egresos')
       .select('*,proveedores(nombre,cuit),empresas(nombre,cuit)')
-      .eq('orden_pago_nro', nroOrden);
+      .eq('orden_pago_nro', nroOrden)
+      .eq('empresa_id', base.empresa_id);
     rows = data || [];
   }
   if (!rows.length) {
