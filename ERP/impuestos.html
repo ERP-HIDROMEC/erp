@@ -380,13 +380,11 @@ function cambiarTab(tab,btn){
 }
 
 function abrirNuevo(){
-  // Sincronizar empresa del filtro principal a todos los modales
+  // Sincronizar empresa del filtro a todos los modales
   const empId = document.getElementById('f-empresa').value;
-  document.getElementById('nr-empresa').value = empId;
-  document.getElementById('np-empresa').value = empId;
-  document.getElementById('nv-empresa').value = empId;
-  document.getElementById('npl-empresa').value = empId;
-  cargarClientesRet(); // recargar clientes según empresa actual
+  const ids = ['nr-empresa','np-empresa','nv-empresa','npl-empresa'];
+  ids.forEach(id => { const el=document.getElementById(id); if(el) el.value=empId; });
+  cargarClientesRet();
   if(tabActual==='pagos') document.getElementById('modal-pago').classList.add('show');
   else if(tabActual==='varios') document.getElementById('modal-varios').classList.add('show');
   else if(tabActual==='planes') abrirModalPlan();
@@ -736,7 +734,7 @@ async function guardarRetencion(){
     nro_certificado:document.getElementById('nr-cert').value||null,
   });
   }catch(e){error=e;}
-  if(error){manejarError(error,'guardar retención');return;}
+  if(error){toast('Error: ', 'error');return;}
   cerrarModal('modal-ret');
   recargar();
 }
@@ -767,7 +765,7 @@ async function guardarPago(){
     observaciones:document.getElementById('np-obs').value||null,
   });
   }catch(e){error=e;}
-  if(error){manejarError(error,'guardar pago');return;}
+  if(error){manejarError(error,'guardar pago de impuesto');return;}
   cerrarModal('modal-pago');
   recargar();
 }
@@ -868,7 +866,7 @@ async function guardarVarios(){
     comprobante:document.getElementById('nv-comprobante').value||null,
   });
   }catch(e){error=e;}
-  if(error){manejarError(error,'guardar impuesto varios');return;}
+  if(error){toast('Error: ', 'error');return;}
   cerrarModal('modal-varios');
   cargarVarios();
 }
