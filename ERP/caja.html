@@ -1280,7 +1280,18 @@ async function confirmarOrdenPago(){
 
   const totalPagos=lineasPago.reduce((s,p)=>s+Number(p.monto||0),0);
   const metodoPrincipal=lineasPago[0]?.tipo||'transferencia';
-  const empId2=document.getElementById('sel-empresa')?.value||'';
+  // Obtener empresa: primero del selector, si está vacío tomarlo del egreso
+  let empId2=document.getElementById('sel-empresa')?.value||'';
+  if(!empId2){
+    // Intentar obtenerlo del egreso seleccionado
+    const _rows=window._ordenesRows||[];
+    if(ordenesSeleccionadas && ordenesSeleccionadas.length > 0){
+      const _r=_rows.find(r=>r.id===ordenesSeleccionadas[0]);
+      empId2=_r?.empresa_id||'';
+    }
+    if(!empId2 && _rows.length>0) empId2=_rows[0]?.empresa_id||'';
+  }
+  if(!empId2){ toast('Seleccioná una empresa antes de generar la OP.','warn'); return; }
   const u=await getUsuario();
 
   // Obtener número de OP consecutivo
