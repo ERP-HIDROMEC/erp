@@ -497,40 +497,50 @@
 </main>
 
 <script>
-// ─── Estado global ────────────────────────────────────────────
+// ══════════════════════════════════════════════════════════════
+// DASHBOARD — JS limpio y revisado
+// Reglas:
+//   1. Todas las queries directas a Supabase usan await {data,error}
+//   2. Nunca se usa empId vacío '' — siempre null o el uuid
+//   3. getCobros usa FacturasAPI que ya funciona
+//   4. sueldos, pagos_impuestos, impuestos_varios, planes → helpers seguros
+//   5. Sin conflictos de nombre de variables en callbacks
+// ══════════════════════════════════════════════════════════════
+
+// ── Estado global ─────────────────────────────────────────────
 let periodoActivo = 'general';
 let empresaActiva = 'todas';
-let _fechaDesde   = null;
-let _fechaHasta   = null;
 
-// ─── Helpers de fechas ────────────────────────────────────────
+// ── Helpers de fechas ──────────────────────────────────────────
 function getFechas() {
-  const hoyD = new Date();
-  const y = hoyD.getFullYear(), m = hoyD.getMonth(), d = hoyD.getDate();
+  const now = new Date();
+  const y = now.getFullYear();
+  const mo = now.getMonth(); // 0-based
+
+  const mesStr = (yr, mn) => {
+    // mn es 1-based
+    const last = new Date(yr, mn, 0).getDate();
+    const m2 = String(mn).padStart(2,'0');
+    return { ini: `${yr}-${m2}-01`, fin: `${yr}-${m2}-${String(last).padStart(2,'0')}` };
+  };
 
   if (periodoActivo === 'mes') {
-    const ini = `${y}-${String(m+1).padStart(2,'0')}-01`;
-    const fin = `${y}-${String(m+1).padStart(2,'0')}-${String(new Date(y,m+1,0).getDate()).padStart(2,'0')}`;
-    return { ini, fin };
+    return { ...mesStr(y, mo+1), anioIni:`${y}-01-01`, anioFin:`${y}-12-31` };
   }
   if (periodoActivo === 'mes_ant') {
-    const pm = m === 0 ? 12 : m;
-    const py = m === 0 ? y-1 : y;
-    const ini = `${py}-${String(pm).padStart(2,'0')}-01`;
-    const fin = `${py}-${String(pm).padStart(2,'0')}-${String(new Date(py,pm,0).getDate()).padStart(2,'0')}`;
-    return { ini, fin };
+    const mn = mo === 0 ? 12 : mo;
+    const yr = mo === 0 ? y-1 : y;
+    return mesStr(yr, mn);
   }
   if (periodoActivo === 'trim') {
-    const ini3 = new Date(y, m-2, 1);
-    const ini = `${ini3.getFullYear()}-${String(ini3.getMonth()+1).padStart(2,'0')}-01`;
-    const fin = `${y}-${String(m+1).padStart(2,'0')}-${String(new Date(y,m+1,0).getDate()).padStart(2,'0')}`;
-    return { ini, fin };
+    const start = new Date(y, mo-2, 1);
+    const { fin } = mesStr(y, mo+1);
+    return { ini: `${start.getFullYear()}-${String(start.getMonth()+1).padStart(2,'0')}-01`, fin };
   }
   if (periodoActivo === 'sem') {
-    const ini6 = new Date(y, m-5, 1);
-    const ini = `${ini6.getFullYear()}-${String(ini6.getMonth()+1).padStart(2,'0')}-01`;
-    const fin = `${y}-${String(m+1).padStart(2,'0')}-${String(new Date(y,m+1,0).getDate()).padStart(2,'0')}`;
-    return { ini, fin };
+    const start = new Date(y, mo-5, 1);
+    const { fin } = mesStr(y, mo+1);
+    return { ini: `${start.getFullYear()}-${String(start.getMonth()+1).padStart(2,'0')}-01`, fin };
   }
   if (periodoActivo === 'anio') {
     return { ini: `${y}-01-01`, fin: `${y}-12-31` };
@@ -541,35 +551,34 @@ function getFechas() {
     if (!desde || !hasta) return null;
     return { ini: desde, fin: hasta };
   }
-  // general: mes en curso para KPIs generales
-  const ini = `${y}-${String(m+1).padStart(2,'0')}-01`;
-  const fin = `${y}-${String(m+1).padStart(2,'0')}-${String(new Date(y,m+1,0).getDate()).padStart(2,'0')}`;
-  return { ini, fin, anioIni: `${y}-01-01`, anioFin: `${y}-12-31` };
+  // 'general' → mes en curso + año completo para KPIs anuales
+  return { ...mesStr(y, mo+1), anioIni:`${y}-01-01`, anioFin:`${y}-12-31` };
 }
 
-function getEmpresaFiltro() {
+function getEmpId() {
   return empresaActiva === 'todas' ? null : empresaActiva;
 }
 
 function labelPeriodo() {
   const f = getFechas();
   if (!f) return 'Sin rango';
-  if (periodoActivo === 'general')  return 'Vista general · ' + new Date().toLocaleDateString('es-AR',{month:'long',year:'numeric'});
-  if (periodoActivo === 'mes')      return new Date(f.ini+'T12:00:00').toLocaleDateString('es-AR',{month:'long',year:'numeric'});
-  if (periodoActivo === 'mes_ant')  return 'Mes ant: ' + new Date(f.ini+'T12:00:00').toLocaleDateString('es-AR',{month:'long',year:'numeric'});
+  const opts = { month:'long', year:'numeric' };
+  if (periodoActivo === 'general')  return 'Vista general · ' + new Date(f.ini+'T12:00:00').toLocaleDateString('es-AR', opts);
+  if (periodoActivo === 'mes')      return new Date(f.ini+'T12:00:00').toLocaleDateString('es-AR', opts);
+  if (periodoActivo === 'mes_ant')  return 'Mes ant: ' + new Date(f.ini+'T12:00:00').toLocaleDateString('es-AR', opts);
   if (periodoActivo === 'trim')     return 'Trim: ' + fmtF(f.ini) + ' — ' + fmtF(f.fin);
-  if (periodoActivo === 'sem')      return 'Sem: ' + fmtF(f.ini) + ' — ' + fmtF(f.fin);
+  if (periodoActivo === 'sem')      return 'Sem: '  + fmtF(f.ini) + ' — ' + fmtF(f.fin);
   if (periodoActivo === 'anio')     return 'Año ' + new Date().getFullYear();
   if (periodoActivo === 'custom')   return fmtF(f.ini) + ' — ' + fmtF(f.fin);
   return '';
 }
 
-// ─── Navegación de vistas ─────────────────────────────────────
+// ── Navegación ─────────────────────────────────────────────────
 function setPeriodo(p, btn) {
   periodoActivo = p;
   document.querySelectorAll('.period-btn').forEach(b => b.classList.remove('active'));
   if (btn) btn.classList.add('active');
-  document.getElementById('custom-range').style.display = p === 'custom' ? 'flex' : 'none';
+  document.getElementById('custom-range').style.display = (p === 'custom') ? 'flex' : 'none';
   recargar();
 }
 
@@ -582,189 +591,280 @@ function setEmpresa(id, btn) {
 
 function recargar() {
   document.getElementById('periodo-label').textContent = labelPeriodo();
-  if (periodoActivo === 'general') {
-    document.getElementById('vista-general').style.display  = '';
-    document.getElementById('vista-periodo').style.display  = 'none';
-    cargarGeneral();
-  } else {
-    document.getElementById('vista-general').style.display  = 'none';
-    document.getElementById('vista-periodo').style.display  = '';
-    cargarPeriodo();
-  }
+  const esGeneral = periodoActivo === 'general';
+  document.getElementById('vista-general').style.display = esGeneral ? '' : 'none';
+  document.getElementById('vista-periodo').style.display = esGeneral ? 'none' : '';
+  if (esGeneral) cargarGeneral();
+  else           cargarPeriodo();
 }
 
-// ─────────────────────────────────────────────────────────────
+// ── Helper suma ────────────────────────────────────────────────
+function sumArr(arr, campo) {
+  return (arr||[]).reduce((s, r) => s + Number(r[campo] || 0), 0);
+}
+
+function setText(id, val) {
+  const el = document.getElementById(id);
+  if (el) el.textContent = val;
+}
+
+// ══════════════════════════════════════════════════════════════
+// QUERIES SEGURAS — todas manejan {data,error} correctamente
+// ══════════════════════════════════════════════════════════════
+
+async function qCobros(empId, ini, fin) {
+  try {
+    const { data, error } = await db.from('cobros')
+      .select('monto,fecha,empresa_id')
+      .gte('fecha', ini).lte('fecha', fin);
+    if (error) { console.warn('cobros:', error.message); return []; }
+    const rows = data || [];
+    return empId ? rows.filter(r => r.empresa_id === empId) : rows;
+  } catch(e) { return []; }
+}
+
+async function qSueldos(empId, mesIni, mesFin, extraCols) {
+  try {
+    const cols = extraCols ? `monto_bruto,periodo,tipo,empresa_id` : `monto_bruto,periodo,empresa_id`;
+    const { data, error } = await db.from('sueldos')
+      .select(cols)
+      .gte('periodo', mesIni).lte('periodo', mesFin);
+    if (error) { console.warn('sueldos:', error.message); return []; }
+    const rows = data || [];
+    return empId ? rows.filter(r => r.empresa_id === empId) : rows;
+  } catch(e) { return []; }
+}
+
+async function qPagosImp(empId, ini, fin, extraCols) {
+  try {
+    const cols = extraCols ? `monto,tipo,fecha_pago,empresa_id` : `monto,fecha_pago,empresa_id`;
+    const { data, error } = await db.from('pagos_impuestos')
+      .select(cols)
+      .gte('fecha_pago', ini).lte('fecha_pago', fin);
+    if (error) { console.warn('pagos_impuestos:', error.message); return []; }
+    const rows = data || [];
+    return empId ? rows.filter(r => r.empresa_id === empId) : rows;
+  } catch(e) { return []; }
+}
+
+async function qImpVarios(empId, ini, fin, extraCols) {
+  try {
+    const cols = extraCols ? `monto,tipo,fecha,empresa_id` : `monto,fecha,empresa_id`;
+    const { data, error } = await db.from('impuestos_varios')
+      .select(cols)
+      .eq('pagado', true)
+      .gte('fecha', ini).lte('fecha', fin);
+    if (error) { console.warn('impuestos_varios:', error.message); return []; }
+    const rows = data || [];
+    return empId ? rows.filter(r => r.empresa_id === empId) : rows;
+  } catch(e) { return []; }
+}
+
+async function qPlanes(empId, mesIni, mesFin) {
+  try {
+    const { data, error } = await db.from('planes_pago_afip')
+      .select('monto_cuota,periodo,empresa_id')
+      .eq('pagado', true)
+      .gte('periodo', mesIni).lte('periodo', mesFin);
+    if (error) { console.warn('planes_pago_afip:', error.message); return []; }
+    const rows = data || [];
+    return empId ? rows.filter(r => r.empresa_id === empId) : rows;
+  } catch(e) { return []; }
+}
+
+async function qEgresos(empId, ini, fin) {
+  try {
+    const { data, error } = await db.from('egresos')
+      .select('monto,fecha_egreso,empresa_id')
+      .eq('pagado', true)
+      .gte('fecha_egreso', ini).lte('fecha_egreso', fin);
+    if (error) { console.warn('egresos grafico:', error.message); return []; }
+    const rows = data || [];
+    return empId ? rows.filter(r => r.empresa_id === empId) : rows;
+  } catch(e) { return []; }
+}
+
+// ══════════════════════════════════════════════════════════════
 // VISTA GENERAL
-// ─────────────────────────────────────────────────────────────
+// ══════════════════════════════════════════════════════════════
+
 async function cargarGeneral() {
-  const f = getFechas();
-  if (!f) return;
-  await Promise.all([
-    cargarKPIsGenerales(f),
+  const fechas = getFechas();
+  if (!fechas) return;
+  // Cargar en paralelo — cada función maneja su propio error
+  Promise.all([
+    cargarKPIsGeneral(fechas),
     cargarGraficoGeneral(),
-    cargarCobrarPorCliente(null, null, 'cobrar-lista', 'g-cobrar-total'),
-    cargarTopClientes(f.anioIni||f.ini, f.anioFin||f.fin, 'top-clientes-general', 'top-anio-label'),
+    cargarCobrarCliente(null, null, 'cobrar-lista', 'g-cobrar-total'),
+    cargarTopClientes(fechas.anioIni, fechas.anioFin, 'top-clientes-general', 'top-anio-label'),
     cargarProyectos(),
     cargarAlertas(),
   ]);
 }
 
-async function cargarKPIsGenerales(f) {
+async function cargarKPIsGeneral(fechas) {
   try {
-    const empId = getEmpresaFiltro();
-    const ini = f.ini, fin = f.fin;
-    const anioIni = f.anioIni || (new Date().getFullYear() + '-01-01');
-    const anioFin = f.anioFin || (new Date().getFullYear() + '-12-31');
-    const mesActivo = ini.substring(0,7);
+    const empId  = getEmpId();
+    const { ini, fin, anioIni, anioFin } = fechas;
+    const mesIni = ini.substring(0, 7);
+    const hoyStr = hoy();
 
-    const [facMes, cobMes, egrMes, facAnio, porCobrar, vencidas, xPagar, remitosP, sueldos, impPagos, impVarios, planes] = await Promise.all([
-      FacturasAPI.getFacturas({empresaId:empId||undefined, excluirAnuladas:true, fechaDesde:ini, fechaHasta:fin}),
-      _qCobros(empId, ini, fin),
-      EgresosAPI.getEgresos({empresaId:empId||undefined, pagado:true, fechaDesde:ini, fechaHasta:fin}),
-      FacturasAPI.getFacturas({empresaId:empId||undefined, excluirAnuladas:true, fechaDesde:anioIni, fechaHasta:anioFin}),
-      FacturasAPI.getFacturas({empresaId:empId||undefined, excluirAnuladas:true}).then(d=>d.filter(f=>f.estado!=='cobrada'&&f.estado!=='anulada'&&(f.fecha_cobro_estimada||'')>=(new Date().toISOString().split('T')[0]))),
+    const [
+      facMes, cobMes, egrMes, facAnio,
+      vencidas, xPagar, remitosP,
+      sueldos, pagosImp, impVarios, planes
+    ] = await Promise.all([
+      FacturasAPI.getFacturas({ empresaId: empId||undefined, excluirAnuladas:true, fechaDesde:ini, fechaHasta:fin }),
+      qCobros(empId, ini, fin),
+      EgresosAPI.getEgresos({ empresaId: empId||undefined, pagado:true, fechaDesde:ini, fechaHasta:fin }),
+      FacturasAPI.getFacturas({ empresaId: empId||undefined, excluirAnuladas:true, fechaDesde:anioIni, fechaHasta:anioFin }),
       FacturasAPI.getFacturasVencidasDetalle(200),
-      EgresosAPI.getEgresos({empresaId:empId||undefined, pagado:false}),
+      EgresosAPI.getEgresos({ empresaId: empId||undefined, pagado:false }),
       RemitosAPI.getRemitoPendienteDashboard(100),
-      _getSueldosMes(empId, mesActivo),
-      ImpuestosAPI.getPagosImpuestos(empId ? {empresaId:empId} : {}).then(d=>(d||[]).filter(x=>(x.fecha_pago||x.created_at||'').substring(0,7)===mesActivo)),
-      ImpuestosAPI.getImpuestosVarios(empId ? {empresaId:empId, pagado:true} : {pagado:true}).then(d=>(d||[]).filter(x=>(x.fecha||'').substring(0,7)===mesActivo)),
-      db.from('planes_pago_afip').select('monto_cuota,empresa_id').eq('pagado',true).like('periodo',mesActivo+'%').then(r=>(empId?(r.data||[]).filter(x=>x.empresa_id===empId):(r.data||[]))).catch(()=>[]),
+      qSueldos(empId, mesIni, mesIni),
+      qPagosImp(empId, ini, fin),
+      qImpVarios(empId, ini, fin),
+      qPlanes(empId, mesIni, mesIni),
     ]);
 
-    const sum = (arr, k='monto_total') => (arr||[]).reduce((s,r)=>s+Number(r[k]||r.monto||0),0);
-    const sumEmpresa = (arr, k='monto_total') => {
-      const filtered = empId ? arr : arr;
-      return sum(filtered, k);
-    };
+    // Filtrar vencidas / x pagar / remitos si hay empresa seleccionada
+    const vencFilt  = empId ? (vencidas||[]).filter(r => r.empresa_id === empId) : (vencidas||[]);
+    const xPagFilt  = empId ? (xPagar||[]).filter(r => r.empresa_id === empId)   : (xPagar||[]);
+    const remFilt   = empId ? (remitosP||[]).filter(r => r.empresa_id === empId) : (remitosP||[]);
 
-    const totalFac = sum(facMes, 'monto_total');
-    const totalCob = sum(cobMes, 'monto');
-    const totalEgr = sum(egrMes, 'monto');
-    const totalSue = sum(sueldos, 'monto_bruto');
-    const totalImpP = sum(impPagos, 'monto');
-    const totalImpV = sum(impVarios, 'monto');
-    const totalPlan = sum(planes, 'monto_cuota');
-    const gastos = totalEgr + totalSue + totalImpP + totalImpV + totalPlan;
-    const resultado = totalCob - gastos;
+    // FC pendientes de cobro (no vencidas) — de facAnio filtramos en memoria
+    const facPend = (facAnio||[]).filter(r =>
+      r.estado !== 'cobrada' && r.estado !== 'anulada' &&
+      (r.fecha_cobro_estimada || '9999') >= hoyStr
+    );
 
-    const vencFiltradas = empId ? (vencidas||[]).filter(r=>r.empresa_id===empId) : (vencidas||[]);
-    const remFiltrados  = empId ? (remitosP||[]).filter(r=>r.empresa_id===empId) : (remitosP||[]);
-    const xPagarFilt   = empId ? (xPagar||[]).filter(r=>r.empresa_id===empId) : (xPagar||[]);
-    const xCobrarFilt  = empId ? (porCobrar||[]).filter(r=>r.empresa_id===empId) : (porCobrar||[]);
+    const totalFac   = sumArr(facMes,    'monto_total');
+    const totalCob   = sumArr(cobMes,    'monto');
+    const totalEgr   = sumArr(egrMes,    'monto');
+    const totalSue   = sumArr(sueldos,   'monto_bruto');
+    const totalImpP  = sumArr(pagosImp,  'monto');
+    const totalImpV  = sumArr(impVarios, 'monto');
+    const totalPlan  = sumArr(planes,    'monto_cuota');
+    const totalGasto = totalEgr + totalSue + totalImpP + totalImpV + totalPlan;
+    const resultado  = totalCob - totalGasto;
 
+    // Renderizar KPIs fila 1
     setText('g-fac-mes', fmt(totalFac));
-    setText('g-fac-mes-sub', totalFac > 0 ? (facMes||[]).length + ' facturas' : '');
+    setText('g-fac-mes-sub', (facMes||[]).length + ' facturas');
     setText('g-cob-mes', fmt(totalCob));
-    setText('g-egr-mes', fmt(gastos));
-    const subEgr = [];
-    if (totalEgr > 0) subEgr.push('Compras ' + fmt(totalEgr));
-    if (totalSue > 0) subEgr.push('Sueldos ' + fmt(totalSue));
-    if (totalImpP+totalImpV+totalPlan > 0) subEgr.push('Imp. ' + fmt(totalImpP+totalImpV+totalPlan));
-    setText('g-egr-sub', subEgr.join(' · '));
+    setText('g-egr-mes', fmt(totalGasto));
+    const sub = [];
+    if (totalEgr  > 0) sub.push('Compras '  + fmt(totalEgr));
+    if (totalSue  > 0) sub.push('Sueldos '  + fmt(totalSue));
+    if (totalImpP + totalImpV + totalPlan > 0)
+      sub.push('Imp. ' + fmt(totalImpP + totalImpV + totalPlan));
+    setText('g-egr-sub', sub.join(' · '));
 
     const resEl = document.getElementById('g-res-mes');
-    resEl.textContent = fmt(resultado);
-    resEl.className = 'kpi-value ' + (resultado >= 0 ? 'pos' : 'neg');
+    if (resEl) {
+      resEl.textContent = fmt(resultado);
+      resEl.className   = 'kpi-value ' + (resultado >= 0 ? 'pos' : 'neg');
+    }
 
-    setText('g-fac-anio', fmt(sum(facAnio)));
+    // Facturación año
+    setText('g-fac-anio', fmt(sumArr(facAnio, 'monto_total')));
     setText('g-anio-sub', 'Año ' + new Date().getFullYear());
-    setText('g-proy', '—'); // se carga aparte
 
-    setText('g-x-cob', fmt(sum(xCobrarFilt)));
-    setText('g-venc-monto', fmt(sum(vencFiltradas)));
-    setText('g-venc-count', vencFiltradas.length + ' facturas vencidas');
-    setText('g-x-pag', fmt(sum(xPagarFilt, 'monto')));
-    setText('g-remitos', remFiltrados.length + ' remitos');
+    // Fila 2 — cuentas
+    setText('g-x-cob',      fmt(sumArr(facPend,  'monto_total')));
+    setText('g-venc-monto',  fmt(sumArr(vencFilt, 'monto_total')));
+    setText('g-venc-count',  vencFilt.length + ' facturas vencidas');
+    setText('g-x-pag',       fmt(sumArr(xPagFilt, 'monto')));
+    setText('g-remitos',     remFilt.length + ' remitos');
 
-  } catch(e) { manejarError(e, 'KPIs generales'); }
-}
-
-async function _getSueldosMes(empId, mesActivo) {
-  try {
-    const { data, error } = await db.from('sueldos')
-      .select('monto_bruto, empresa_id')
-      .eq('periodo', mesActivo);
-    if (error) return [];
-    return empId ? (data||[]).filter(r=>r.empresa_id===empId) : (data||[]);
-  } catch(e) { return []; }
+  } catch(e) {
+    console.error('cargarKPIsGeneral:', e);
+    manejarError(e, 'KPIs generales');
+  }
 }
 
 async function cargarGraficoGeneral() {
+  const el = document.getElementById('chart-general');
   try {
-    const hoy = new Date();
-    let bkY = hoy.getFullYear(), bkM = hoy.getMonth()+1-5;
-    if (bkM <= 0) { bkM += 12; bkY -= 1; }
-    const desde = `${bkY}-${String(bkM).padStart(2,'0')}-01`;
-    const empId = getEmpresaFiltro();
-    const data = await FacturasAPI.getFacturaMensual(empId, desde, hoy.toISOString().split('T')[0]);
+    const now = new Date();
+    let yr = now.getFullYear(), mn = now.getMonth() + 1 - 5;
+    if (mn <= 0) { mn += 12; yr -= 1; }
+    const desde = `${yr}-${String(mn).padStart(2,'0')}-01`;
+    const empId = getEmpId();
+    const data  = await FacturasAPI.getFacturaMensual(empId, desde, hoy());
 
     const agg = {};
-    (data||[]).forEach(r=>{
-      const mes = r.fecha_emision.substring(0,7);
-      const emp = r.empresas?.nombre||'—';
-      const k = mes+'|'+emp;
-      if (!agg[k]) agg[k] = {mes, empresa:emp, total:0};
-      agg[k].total += Number(r.monto_total||0);
+    (data||[]).forEach(r => {
+      const mes = r.fecha_emision.substring(0, 7);
+      const emp = r.empresas?.nombre || '—';
+      const k   = mes + '|' + emp;
+      if (!agg[k]) agg[k] = { mes, empresa: emp, total: 0 };
+      agg[k].total += Number(r.monto_total || 0);
     });
-    const mensData = Object.values(agg);
-    const meses = [...new Set(mensData.map(r=>r.mes))].sort().slice(-6);
-    const maxV = Math.max(...mensData.map(r=>r.total), 1);
-    const H = 130;
 
-    document.getElementById('chart-general').innerHTML = meses.map(m=>{
-      const h = mensData.find(r=>r.mes===m&&r.empresa==='Hidromec');
-      const p = mensData.find(r=>r.mes===m&&r.empresa==='Placemem');
-      const hH = Math.round(((h?.total||0)/maxV)*H);
-      const pH = Math.round(((p?.total||0)/maxV)*H);
-      const total = (h?.total||0)+(p?.total||0);
+    const rows  = Object.values(agg);
+    const meses = [...new Set(rows.map(r => r.mes))].sort().slice(-6);
+    const maxV  = Math.max(...rows.map(r => r.total), 1);
+    const H     = 130;
+
+    el.innerHTML = meses.map(m => {
+      const hidro = rows.find(r => r.mes === m && r.empresa === 'Hidromec');
+      const place = rows.find(r => r.mes === m && r.empresa === 'Placemem');
+      const hH    = Math.round(((hidro?.total||0) / maxV) * H);
+      const pH    = Math.round(((place?.total||0) / maxV) * H);
+      const total = (hidro?.total||0) + (place?.total||0);
       const label = new Date(m+'-01T12:00:00').toLocaleDateString('es-AR',{month:'short'});
+      const mostH = empresaActiva !== 'a2000000-0000-0000-0000-000000000002';
+      const mostP = empresaActiva !== 'a1000000-0000-0000-0000-000000000001';
       return `<div class="chart-col">
         <div style="font-size:9px;color:var(--muted);font-family:'DM Mono',monospace;margin-bottom:4px">${total>0?fmt(total).replace('$','').trim():''}</div>
         <div style="display:flex;gap:3px;align-items:flex-end;height:${H}px;width:100%">
-          ${empresaActiva!=='a2000000-0000-0000-0000-000000000002'&&hH>0?`<div class="bar-single" style="flex:1;height:${hH}px;background:var(--blue)" title="Hidromec: ${fmt(h?.total||0)}"></div>`:''}
-          ${empresaActiva!=='a1000000-0000-0000-0000-000000000001'&&pH>0?`<div class="bar-single" style="flex:1;height:${pH}px;background:var(--teal)" title="Placemem: ${fmt(p?.total||0)}"></div>`:''}
-          ${(hH===0&&pH===0)?`<div style="flex:1;height:4px;background:var(--border);border-radius:2px;align-self:flex-end"></div>`:''}
+          ${mostH&&hH>0?`<div style="flex:1;height:${hH}px;background:var(--blue);border-radius:3px 3px 0 0" title="Hidromec: ${fmt(hidro?.total||0)}"></div>`:''}
+          ${mostP&&pH>0?`<div style="flex:1;height:${pH}px;background:var(--teal);border-radius:3px 3px 0 0" title="Placemem: ${fmt(place?.total||0)}"></div>`:''}
+          ${!hH&&!pH?`<div style="flex:1;height:4px;background:var(--border);border-radius:2px;align-self:flex-end"></div>`:''}
         </div>
         <div class="chart-mes-label">${label}</div>
       </div>`;
     }).join('');
-  } catch(e) { document.getElementById('chart-general').innerHTML = '<div class="empty">Sin datos</div>'; }
+  } catch(e) {
+    console.error('grafico general:', e);
+    el.innerHTML = '<div class="empty">Sin datos</div>';
+  }
 }
 
-async function cargarCobrarPorCliente(fechaDesde, fechaHasta, elId, totalElId) {
+async function cargarCobrarCliente(fechaDesde, fechaHasta, elId, totalElId) {
+  const el = document.getElementById(elId);
   try {
-    const empId = getEmpresaFiltro();
-    const filtros = { excluirAnuladas: true };
-    if (empId) filtros.empresaId = empId;
-    const facturas = await FacturasAPI.getFacturas(filtros);
-    const pendientes = (facturas||[]).filter(f => f.estado !== 'cobrada' && f.estado !== 'anulada');
+    const empId = getEmpId();
+    const todasFac = await FacturasAPI.getFacturas({
+      empresaId: empId||undefined,
+      excluirAnuladas: true,
+    });
+    let pendientes = (todasFac||[]).filter(r => r.estado !== 'cobrada' && r.estado !== 'anulada');
 
-    // Filtrar por período si se pasó
-    const pend = fechaDesde
-      ? pendientes.filter(f => (f.fecha_emision||'') >= fechaDesde && (f.fecha_emision||'') <= fechaHasta)
-      : pendientes;
+    // Si se pasó rango, filtrar por fecha de emisión
+    if (fechaDesde && fechaHasta) {
+      pendientes = pendientes.filter(r =>
+        (r.fecha_emision||'') >= fechaDesde && (r.fecha_emision||'') <= fechaHasta
+      );
+    }
 
-    const hoy = new Date().toISOString().split('T')[0];
-    // Agrupar por cliente
-    const por = {};
-    pend.forEach(f => {
-      const k = (f.clientes?.nombre||'Sin cliente') + '|' + (f.empresa_id||'');
-      if (!por[k]) por[k] = { cliente: f.clientes?.nombre||'Sin cliente', empresa: f.empresas?.nombre||'', total:0, vencidas:0, normales:0, montoVencido:0 };
-      por[k].total += Number(f.monto_total||0);
-      if ((f.fecha_cobro_estimada||'9999') < hoy) {
-        por[k].vencidas++;
-        por[k].montoVencido += Number(f.monto_total||0);
-      } else {
-        por[k].normales++;
-      }
+    const hoyStr = hoy();
+    const por    = {};
+    pendientes.forEach(r => {
+      const nombre = r.clientes?.nombre || 'Sin cliente';
+      const emp    = r.empresas?.nombre || '';
+      const k      = nombre + '|' + (r.empresa_id||'');
+      if (!por[k]) por[k] = { cliente:nombre, empresa:emp, total:0, vencidas:0, normales:0 };
+      por[k].total += Number(r.monto_total || 0);
+      if ((r.fecha_cobro_estimada||'9999') < hoyStr) por[k].vencidas++;
+      else                                            por[k].normales++;
     });
 
-    const rows = Object.values(por).sort((a,b)=>b.total-a.total);
-    const totalGral = rows.reduce((s,r)=>s+r.total, 0);
-    if (totalElId) setText(totalElId, fmt(totalGral));
+    const rows    = Object.values(por).sort((a, b) => b.total - a.total);
+    const totalG  = sumArr(rows, 'total');
+    if (totalElId) setText(totalElId, fmt(totalG));
 
-    const el = document.getElementById(elId);
     if (!rows.length) { el.innerHTML = '<div class="empty">Sin facturas pendientes</div>'; return; }
 
     el.innerHTML = rows.map(r => `
@@ -776,31 +876,34 @@ async function cargarCobrarPorCliente(fechaDesde, fechaHasta, elId, totalElId) {
         <div class="cobrar-chips">
           ${r.vencidas > 0 ? `<span class="cobrar-chip vencida">${r.vencidas} vencida${r.vencidas>1?'s':''}</span>` : ''}
           ${r.normales > 0 ? `<span class="cobrar-chip normal">${r.normales} pendiente${r.normales>1?'s':''}</span>` : ''}
-          <div class="cobrar-total" style="color:${r.montoVencido>0?'var(--red)':'var(--text)'}">${fmt(r.total)}</div>
+          <div class="cobrar-total" style="color:${r.vencidas>0?'var(--red)':'var(--text)'}">${fmt(r.total)}</div>
         </div>
       </div>`).join('');
-  } catch(e) { document.getElementById(elId).innerHTML = '<div class="empty">Error al cargar</div>'; }
+  } catch(e) {
+    console.error('cobrar cliente:', e);
+    el.innerHTML = '<div class="empty">Error al cargar</div>';
+  }
 }
 
 async function cargarTopClientes(desde, hasta, elId, labelId) {
+  const el = document.getElementById(elId);
   try {
-    const empId = getEmpresaFiltro();
-    const data = await FacturasAPI.getFacturasPorCliente(empId, desde, hasta);
-    const agg = {};
+    const empId = getEmpId();
+    const data  = await FacturasAPI.getFacturasPorCliente(empId, desde, hasta);
+    const agg   = {};
     (data||[]).forEach(r => {
-      const k = r.clientes?.nombre||'—';
-      if (!agg[k]) agg[k] = { cliente:k, empresa:r.empresas?.nombre||'—', total:0, cant:0 };
-      agg[k].total += Number(r.monto_total||0);
+      const k = (r.clientes?.nombre||'—') + '|' + (r.empresa_id||'');
+      if (!agg[k]) agg[k] = { cliente: r.clientes?.nombre||'—', empresa: r.empresas?.nombre||'—', total:0, cant:0 };
+      agg[k].total += Number(r.monto_total || 0);
       agg[k].cant++;
     });
-    const top = Object.values(agg).sort((a,b)=>b.total-a.total).slice(0,7);
+    const top  = Object.values(agg).sort((a, b) => b.total - a.total).slice(0, 7);
     const maxV = top[0]?.total || 1;
 
     if (labelId) setText(labelId, fmtF(desde) + ' – ' + fmtF(hasta));
-    const el = document.getElementById(elId);
     if (!top.length) { el.innerHTML = '<div class="empty">Sin datos</div>'; return; }
 
-    el.innerHTML = top.map((r,i) => `
+    el.innerHTML = top.map((r, i) => `
       <div class="top-cli-row">
         <div class="top-cli-num">${i+1}</div>
         <div style="flex:1;min-width:0">
@@ -812,469 +915,363 @@ async function cargarTopClientes(desde, hasta, elId, labelId) {
         </div>
         <div class="top-cli-monto">${fmt(r.total)}</div>
       </div>`).join('');
-  } catch(e) { document.getElementById(elId).innerHTML = '<div class="empty">Error al cargar</div>'; }
+  } catch(e) {
+    console.error('top clientes:', e);
+    el.innerHTML = '<div class="empty">Error al cargar</div>';
+  }
 }
 
 async function cargarProyectos() {
+  const el = document.getElementById('proy-lista');
   try {
-    const empId = getEmpresaFiltro();
+    const empId  = getEmpId();
     const filtros = { estados: ['activo', 'pausado'] };
     if (empId) filtros.empresaId = empId;
     const data = await ProyectosAPI.getProyectos(filtros);
-    setText('g-proy', (data||[]).length + '');
-    const el = document.getElementById('proy-lista');
+    setText('g-proy', String((data||[]).length));
     if (!data.length) { el.innerHTML = '<div class="empty">Sin proyectos activos</div>'; return; }
-    el.innerHTML = `<div style="max-height:280px;overflow-y:auto">` + data.slice(0,10).map(p=>`
-      <div class="proy-row">
-        <div>
-          <div style="font-size:13px;font-weight:500">${p.nombre}</div>
-          <div style="font-size:11px;color:var(--muted)">${p.clientes?.nombre||'—'} · ${p.empresas?.nombre||'—'}</div>
-        </div>
-        <span class="estado ${p.estado}">${p.estado}</span>
-      </div>`).join('') + '</div>';
-  } catch(e) { document.getElementById('proy-lista').innerHTML = '<div class="empty">Error</div>'; }
+    el.innerHTML = '<div style="max-height:280px;overflow-y:auto">' +
+      data.slice(0, 10).map(p => `
+        <div class="proy-row">
+          <div>
+            <div style="font-size:13px;font-weight:500">${p.nombre}</div>
+            <div style="font-size:11px;color:var(--muted)">${p.clientes?.nombre||'—'} · ${p.empresas?.nombre||'—'}</div>
+          </div>
+          <span class="estado ${p.estado}">${p.estado}</span>
+        </div>`).join('') + '</div>';
+  } catch(e) {
+    console.error('proyectos:', e);
+    el.innerHTML = '<div class="empty">Error</div>';
+  }
 }
 
-// ─────────────────────────────────────────────────────────────
+// ══════════════════════════════════════════════════════════════
 // VISTA PERÍODO
-// ─────────────────────────────────────────────────────────────
-async function cargarPeriodo() {
-  const f = getFechas();
-  if (!f) return;
-  const { ini, fin } = f;
+// ══════════════════════════════════════════════════════════════
 
-  await Promise.all([
+async function cargarPeriodo() {
+  const fechas = getFechas();
+  if (!fechas) { toast('Seleccioná un rango de fechas', 'warn'); return; }
+  const { ini, fin } = fechas;
+
+  Promise.all([
     cargarKPIsPeriodo(ini, fin),
-    cargarBalanceDetalle(ini, fin),
+    cargarBalance(ini, fin),
     cargarGraficoPeriodo(ini, fin),
     cargarTopClientes(ini, fin, 'top-clientes-periodo', 'top-periodo-label'),
-    cargarCobrarPorCliente(ini, fin, 'cobrar-lista-periodo', 'p-cobrar-total'),
+    cargarCobrarCliente(ini, fin, 'cobrar-lista-periodo', 'p-cobrar-total'),
   ]);
 }
 
 async function cargarKPIsPeriodo(ini, fin) {
   try {
-    const empId = getEmpresaFiltro();
-    const mesIni = ini.substring(0,7), mesFin = fin.substring(0,7);
+    const empId  = getEmpId();
+    const mesIni = ini.substring(0, 7);
+    const mesFin = fin.substring(0, 7);
 
-    const [facData, cobData, egrData, sueldosData, impPagosData, impVarData, planesData] = await Promise.all([
-      FacturasAPI.getFacturas({empresaId:empId||undefined, excluirAnuladas:true, fechaDesde:ini, fechaHasta:fin}),
-      _qCobros(empId, ini, fin),
-      EgresosAPI.getEgresos({empresaId:empId||undefined, pagado:true, fechaDesde:ini, fechaHasta:fin}),
-      _qSueldos(empId, mesIni, mesFin),
-      _qPagosImp(empId, ini, fin),
-      _qImpVarios(empId, ini, fin),
-      _qPlanes(empId, mesIni, mesFin),
+    const [facData, cobData, egrData, sueldosData, pagosImpData, impVarData, planesData] = await Promise.all([
+      FacturasAPI.getFacturas({ empresaId: empId||undefined, excluirAnuladas:true, fechaDesde:ini, fechaHasta:fin }),
+      qCobros(empId, ini, fin),
+      EgresosAPI.getEgresos({ empresaId: empId||undefined, pagado:true, fechaDesde:ini, fechaHasta:fin }),
+      qSueldos(empId, mesIni, mesFin),
+      qPagosImp(empId, ini, fin),
+      qImpVarios(empId, ini, fin),
+      qPlanes(empId, mesIni, mesFin),
     ]);
 
-    const sum = (arr, k='monto') => (arr||[]).reduce((s,r)=>s+Number(r[k]||0),0);
+    const totalFac  = sumArr(facData,      'monto_total');
+    const totalCob  = sumArr(cobData,      'monto');
+    const totalEgr  = sumArr(egrData,      'monto');
+    const totalSue  = sumArr(sueldosData,  'monto_bruto');
+    const totalImp  = sumArr(pagosImpData, 'monto') + sumArr(impVarData, 'monto') + sumArr(planesData, 'monto_cuota');
+    const totalEgrT = totalEgr + totalSue + totalImp;
+    const resultado = totalCob - totalEgrT;
 
-    const totalFac = sum(facData, 'monto_total');
-    const totalCob = sum(cobData, 'monto');
-    const totalEgr = sum(egrData, 'monto');
-    const totalSue = sum(sueldosData, 'monto_bruto');
-    const totalImp = sum(impPagosData, 'monto') + sum(impVarData, 'monto') + sum(planesData, 'monto_cuota');
-    const totalEgrTotal = totalEgr + totalSue + totalImp;
-    const resultado = totalCob - totalEgrTotal;
-
-    setText('p-fac', fmt(totalFac));
-    setText('p-fac-sub', (facData||[]).length + ' facturas emitidas');
-    setText('p-cob', fmt(totalCob));
-    setText('p-egr-total', fmt(totalEgrTotal));
-    const subParts = [];
-    if(totalEgr>0) subParts.push('Compras '+fmt(totalEgr));
-    if(totalSue>0) subParts.push('Sueldos '+fmt(totalSue));
-    if(totalImp>0) subParts.push('Imp. '+fmt(totalImp));
-    setText('p-egr-total-sub', subParts.join(' · '));
+    setText('p-fac',      fmt(totalFac));
+    setText('p-fac-sub',  (facData||[]).length + ' facturas emitidas');
+    setText('p-cob',      fmt(totalCob));
+    setText('p-egr-total', fmt(totalEgrT));
+    const sub = [];
+    if (totalEgr > 0) sub.push('Compras ' + fmt(totalEgr));
+    if (totalSue > 0) sub.push('Sueldos ' + fmt(totalSue));
+    if (totalImp > 0) sub.push('Imp. '    + fmt(totalImp));
+    setText('p-egr-total-sub', sub.join(' · '));
 
     const resEl = document.getElementById('p-resultado');
-    resEl.textContent = fmt(Math.abs(resultado));
-    resEl.className = 'kpi-value ' + (resultado >= 0 ? 'pos' : 'neg');
+    if (resEl) {
+      resEl.textContent = fmt(Math.abs(resultado));
+      resEl.className   = 'kpi-value ' + (resultado >= 0 ? 'pos' : 'neg');
+    }
 
     // Barra resultado
     const resMontoEl = document.getElementById('p-res-monto');
-    resMontoEl.textContent = fmt(Math.abs(resultado));
-    resMontoEl.style.color = resultado >= 0 ? 'var(--green)' : 'var(--red)';
+    if (resMontoEl) {
+      resMontoEl.textContent = fmt(Math.abs(resultado));
+      resMontoEl.style.color = resultado >= 0 ? 'var(--green)' : 'var(--red)';
+    }
     setText('p-res-label', resultado >= 0 ? '↑ Ingreso neto del período' : '↓ Pérdida neta del período');
 
-    const maxR = Math.max(totalCob, totalEgrTotal, 1);
-    document.getElementById('bar-ing').style.width = Math.round((totalCob/maxR)*100) + '%';
-    document.getElementById('bar-egr').style.width = Math.round((totalEgrTotal/maxR)*100) + '%';
+    const maxR = Math.max(totalCob, totalEgrT, 1);
+    const elIng = document.getElementById('bar-ing');
+    const elEgr = document.getElementById('bar-egr');
+    if (elIng) elIng.style.width = Math.round((totalCob  / maxR) * 100) + '%';
+    if (elEgr) elEgr.style.width = Math.round((totalEgrT / maxR) * 100) + '%';
     setText('bar-label-ing', 'Ingresos ' + fmt(totalCob));
-    setText('bar-label-egr', 'Egresos ' + fmt(totalEgrTotal));
-
-    // Guardar para el gráfico
-    window._periodoBalance = { totalCob, totalEgr, totalSue, totalImp };
-
-  } catch(e) { manejarError(e, 'KPIs período'); }
-}
-
-async function cargarBalanceDetalle(ini, fin) {
-  try {
-    const empId = getEmpresaFiltro();
-    const mesIni = ini.substring(0,7), mesFin = fin.substring(0,7);
-
-    // Ingresos: cobros agrupados por tipo de comprobante / cliente
-    const [cobros, facPeriodo] = await Promise.all([
-      _qCobrosConMedio(empId, ini, fin),
-      FacturasAPI.getFacturas({empresaId:empId||undefined, excluirAnuladas:true, fechaDesde:ini, fechaHasta:fin}),
-    ]);
-
-    const cobrosFilt = cobros;
-
-    // Egresos por categoría
-    const [egresos, sueldos, impPagos, impVarios, planes] = await Promise.all([
-      EgresosAPI.getEgresos({empresaId:empId||undefined, pagado:true, fechaDesde:ini, fechaHasta:fin}),
-      _qSueldosTipo(empId, mesIni, mesFin),
-      _qPagosImpTipo(empId, ini, fin),
-      _qImpVariosTipo(empId, ini, fin),
-      _qPlanes(empId, mesIni, mesFin),
-    ]);
-
-    const sum = (arr, k='monto') => (arr||[]).reduce((s,r)=>s+Number(r[k]||0), 0);
-
-    // ── Ingresos ──
-    const totalCob = sum(cobrosFilt);
-    const totalFac = sum(facPeriodo, 'monto_total');
-    const ingTotal = totalCob > 0 ? totalCob : totalFac;
-
-    // Agrupar cobros por medio de pago (si existe el campo, si no → "Cobros")
-    const porMedio = {};
-    cobrosFilt.forEach(r=>{ const k=r.medio||r.metodo_pago||'Cobros'; porMedio[k]=(porMedio[k]||0)+Number(r.monto||0); });
-    const ingRows = Object.entries(porMedio).sort((a,b)=>b[1]-a[1]);
-
-    const MEDIO_COLORS = { transferencia:'var(--blue)', cheque:'var(--teal)', efectivo:'var(--green)', debito:'var(--purple)' };
-    document.getElementById('b-ing-total').textContent = fmt(ingTotal);
-    document.getElementById('b-ing-rows').innerHTML = `
-      <div class="balance-row">
-        <div class="balance-row-label">
-          <div class="balance-row-dot" style="background:var(--blue)"></div>
-          Facturas emitidas del período
-        </div>
-        <div><span class="balance-row-value">${fmt(totalFac)}</span><span class="balance-row-pct">${(facPeriodo||[]).length} fc</span></div>
-      </div>
-      <div class="balance-row">
-        <div class="balance-row-label">
-          <div class="balance-row-dot" style="background:var(--green)"></div>
-          Cobros registrados
-        </div>
-        <div><span class="balance-row-value" style="color:var(--green)">${fmt(totalCob)}</span></div>
-      </div>
-      ${ingRows.map(([medio,monto])=>`
-      <div class="balance-row" style="padding-left:32px">
-        <div class="balance-row-label" style="color:var(--muted)">↳ ${medio}</div>
-        <div><span class="balance-row-value" style="font-size:12px">${fmt(monto)}</span></div>
-      </div>`).join('')}`;
-
-    // ── Egresos ──
-    const totalEgr = sum(egresos, 'monto');
-    const totalSue = sum(sueldos, 'monto_bruto');
-    const totalImpP = sum(impPagos);
-    const totalImpV = sum(impVarios);
-    const totalPlan = sum(planes, 'monto_cuota');
-    const totalImp = totalImpP + totalImpV + totalPlan;
-    const egrTotal = totalEgr + totalSue + totalImp;
-
-    // Agrupar impuestos por tipo
-    const impPorTipo = {};
-    [...impPagos, ...impVarios].forEach(r=>{ const k=r.tipo||'otro'; impPorTipo[k]=(impPorTipo[k]||0)+Number(r.monto||0); });
-    if (totalPlan > 0) impPorTipo['planes_afip'] = totalPlan;
-
-    const IMP_LABELS = { iva:'IVA', iibb:'IIBB', f931:'F931', autonomos:'Autónomos', ganancias_anticipo:'Ant.Ganancias', cheque:'Imp.Cheque', anticipo_ganancias:'Ant.Ganancias', sindicato:'Sindicato', ieric:'IERIC', uocra:'UOCRA', sunsal:'SUNSAL', inssjp:'INSSJP', obra_social:'Obra social', art:'ART', seguro_vida:'Seg.vida', planes_afip:'Planes AFIP', otro:'Otros' };
-
-    document.getElementById('b-egr-total').textContent = fmt(egrTotal);
-    document.getElementById('b-egr-rows').innerHTML = `
-      ${totalEgr > 0 ? `
-      <div class="balance-row">
-        <div class="balance-row-label"><div class="balance-row-dot" style="background:var(--orange)"></div>Compras / Proveedores</div>
-        <div><span class="balance-row-value" style="color:var(--orange)">${fmt(totalEgr)}</span><span class="balance-row-pct">${(egresos||[]).length} comp.</span></div>
-      </div>` : ''}
-      ${totalSue > 0 ? `
-      <div class="balance-row">
-        <div class="balance-row-label"><div class="balance-row-dot" style="background:var(--purple)"></div>Sueldos</div>
-        <div><span class="balance-row-value" style="color:var(--purple)">${fmt(totalSue)}</span><span class="balance-row-pct">${(sueldos||[]).length} reg.</span></div>
-      </div>` : ''}
-      ${totalImp > 0 ? `
-      <div class="balance-row">
-        <div class="balance-row-label"><div class="balance-row-dot" style="background:var(--red)"></div>Impuestos y cargas</div>
-        <div><span class="balance-row-value" style="color:var(--red)">${fmt(totalImp)}</span></div>
-      </div>
-      ${Object.entries(impPorTipo).sort((a,b)=>b[1]-a[1]).map(([tipo,monto])=>`
-      <div class="balance-row" style="padding-left:32px">
-        <div class="balance-row-label" style="color:var(--muted)">↳ ${IMP_LABELS[tipo]||tipo}</div>
-        <div><span class="balance-row-value" style="font-size:12px">${fmt(monto)}</span></div>
-      </div>`).join('')}` : ''}
-      ${egrTotal === 0 ? '<div class="empty">Sin egresos registrados en el período</div>' : ''}`;
+    setText('bar-label-egr', 'Egresos '  + fmt(totalEgrT));
 
   } catch(e) {
-    document.getElementById('b-ing-rows').innerHTML = '<div class="empty">Error al cargar</div>';
-    document.getElementById('b-egr-rows').innerHTML = '<div class="empty">Error al cargar</div>';
+    console.error('cargarKPIsPeriodo:', e);
+    manejarError(e, 'KPIs período');
+  }
+}
+
+async function cargarBalance(ini, fin) {
+  const elIng = document.getElementById('b-ing-rows');
+  const elEgr = document.getElementById('b-egr-rows');
+  try {
+    const empId  = getEmpId();
+    const mesIni = ini.substring(0, 7);
+    const mesFin = fin.substring(0, 7);
+
+    const [cobros, facPer, egresos, sueldos, pagosImp, impVarios, planes] = await Promise.all([
+      qCobros(empId, ini, fin),
+      FacturasAPI.getFacturas({ empresaId: empId||undefined, excluirAnuladas:true, fechaDesde:ini, fechaHasta:fin }),
+      EgresosAPI.getEgresos({ empresaId: empId||undefined, pagado:true, fechaDesde:ini, fechaHasta:fin }),
+      qSueldos(empId, mesIni, mesFin, true),
+      qPagosImp(empId, ini, fin, true),
+      qImpVarios(empId, ini, fin, true),
+      qPlanes(empId, mesIni, mesFin),
+    ]);
+
+    const totalCob = sumArr(cobros,  'monto');
+    const totalFac = sumArr(facPer,  'monto_total');
+    const ingTotal = totalCob > 0 ? totalCob : totalFac;
+    setText('b-ing-total', fmt(ingTotal));
+
+    // Agrupar cobros (sin columna medio — no existe)
+    elIng.innerHTML = `
+      <div class="balance-row">
+        <div class="balance-row-label"><div class="balance-row-dot" style="background:var(--blue)"></div>Facturas emitidas</div>
+        <div><span class="balance-row-value">${fmt(totalFac)}</span><span class="balance-row-pct">${(facPer||[]).length} fc</span></div>
+      </div>
+      <div class="balance-row">
+        <div class="balance-row-label"><div class="balance-row-dot" style="background:var(--green)"></div>Cobros registrados</div>
+        <div><span class="balance-row-value" style="color:var(--green)">${fmt(totalCob)}</span><span class="balance-row-pct">${(cobros||[]).length} reg.</span></div>
+      </div>`;
+
+    // Egresos
+    const totalEgr  = sumArr(egresos,  'monto');
+    const totalSue  = sumArr(sueldos,  'monto_bruto');
+    const totalImpP = sumArr(pagosImp, 'monto');
+    const totalImpV = sumArr(impVarios,'monto');
+    const totalPlan = sumArr(planes,   'monto_cuota');
+    const totalImp  = totalImpP + totalImpV + totalPlan;
+    const egrTotal  = totalEgr + totalSue + totalImp;
+    setText('b-egr-total', fmt(egrTotal));
+
+    // Desglose impuestos por tipo
+    const IMP_LABELS = {
+      iva:'IVA', iibb:'IIBB', f931:'F931', autonomos:'Autónomos',
+      ganancias_anticipo:'Ant.Ganancias', ganancias_anual:'Ganancias anual',
+      cheque:'Imp.Cheque', anticipo_ganancias:'Ant.Ganancias',
+      sindicato:'Sindicato', ieric:'IERIC', uocra:'UOCRA', sunsal:'SUNSAL',
+      inssjp:'INSSJP', obra_social:'Obra social', art:'ART',
+      seguro_vida:'Seg.vida', otro:'Otros',
+    };
+    const porTipoImp = {};
+    [...(pagosImp||[]), ...(impVarios||[])].forEach(r => {
+      const k = r.tipo || 'otro';
+      porTipoImp[k] = (porTipoImp[k] || 0) + Number(r.monto || 0);
+    });
+    if (totalPlan > 0) porTipoImp['planes_afip'] = totalPlan;
+    IMP_LABELS['planes_afip'] = 'Planes AFIP';
+
+    elEgr.innerHTML =
+      (totalEgr > 0 ? `
+        <div class="balance-row">
+          <div class="balance-row-label"><div class="balance-row-dot" style="background:var(--orange)"></div>Compras / Proveedores</div>
+          <div><span class="balance-row-value" style="color:var(--orange)">${fmt(totalEgr)}</span><span class="balance-row-pct">${(egresos||[]).length} comp.</span></div>
+        </div>` : '') +
+      (totalSue > 0 ? `
+        <div class="balance-row">
+          <div class="balance-row-label"><div class="balance-row-dot" style="background:var(--purple)"></div>Sueldos</div>
+          <div><span class="balance-row-value" style="color:var(--purple)">${fmt(totalSue)}</span><span class="balance-row-pct">${(sueldos||[]).length} reg.</span></div>
+        </div>` : '') +
+      (totalImp > 0 ? `
+        <div class="balance-row">
+          <div class="balance-row-label"><div class="balance-row-dot" style="background:var(--red)"></div>Impuestos y cargas</div>
+          <div><span class="balance-row-value" style="color:var(--red)">${fmt(totalImp)}</span></div>
+        </div>` +
+        Object.entries(porTipoImp).sort((a,b) => b[1]-a[1]).map(([tipo, monto]) => `
+        <div class="balance-row" style="padding-left:32px">
+          <div class="balance-row-label" style="color:var(--muted)">↳ ${IMP_LABELS[tipo]||tipo}</div>
+          <div><span class="balance-row-value" style="font-size:12px">${fmt(monto)}</span></div>
+        </div>`).join('') : '') +
+      (egrTotal === 0 ? '<div class="empty">Sin egresos en el período</div>' : '');
+
+  } catch(e) {
+    console.error('cargarBalance:', e);
+    elIng.innerHTML = '<div class="empty">Error</div>';
+    elEgr.innerHTML = '<div class="empty">Error</div>';
   }
 }
 
 async function cargarGraficoPeriodo(ini, fin) {
+  const el = document.getElementById('chart-periodo');
   try {
-    const empId = getEmpresaFiltro();
-    const mesIni = ini.substring(0,7), mesFin = fin.substring(0,7);
+    const empId  = getEmpId();
+    const mesIni = ini.substring(0, 7);
+    const mesFin = fin.substring(0, 7);
 
-    // Generar lista de meses del período
+    // Generar lista de meses
     const meses = [];
-    let cur = new Date(ini.substring(0,7)+'-01T12:00:00');
-    const finDate = new Date(fin.substring(0,7)+'-01T12:00:00');
-    while (cur <= finDate) {
-      meses.push(cur.toISOString().substring(0,7));
-      cur.setMonth(cur.getMonth()+1);
+    const cur   = new Date(mesIni + '-01T12:00:00');
+    const finD  = new Date(mesFin + '-01T12:00:00');
+    while (cur <= finD) {
+      meses.push(cur.toISOString().substring(0, 7));
+      cur.setMonth(cur.getMonth() + 1);
     }
-    if (meses.length > 12) { // Si son muchos meses, agrupar por trimestre
-      document.getElementById('chart-periodo').innerHTML = '<div class="empty" style="padding:20px">Rango muy amplio — usá el balance de arriba</div>';
+    if (meses.length > 13) {
+      el.innerHTML = '<div class="empty" style="padding:20px">Rango amplio — usá el balance de arriba</div>';
       return;
     }
 
-    const [facData, cobData, egrData, sueldosData, impData, planesData] = await Promise.all([
+    const [facData, egrData, sueldosData, pagosImpData, planesData] = await Promise.all([
       FacturasAPI.getFacturaMensual(empId, ini, fin),
-      _qCobrosConFecha(empId, ini, fin),
-      _qEgresosGrafico(empId, ini, fin),
-      _qSueldosGrafico(empId, mesIni, mesFin),
-      _qPagosImpGrafico(empId, ini, fin),
-      _qPlanes(empId, mesIni, mesFin),
+      qEgresos(empId, ini, fin),
+      qSueldos(empId, mesIni, mesFin, true),
+      qPagosImp(empId, ini, fin),
+      qPlanes(empId, mesIni, mesFin),
     ]);
 
     const porMes = {};
-    meses.forEach(m => { porMes[m] = { ing:0, cob:0, egr:0 }; });
+    meses.forEach(m => { porMes[m] = { ing: 0, egr: 0 }; });
 
-    (facData||[]).forEach(r=>{ const m=r.fecha_emision?.substring(0,7); if(porMes[m]) porMes[m].ing+=Number(r.monto_total||0); });
-    (cobData||[]).forEach(r=>{ const m=r.fecha?.substring(0,7); if(porMes[m]) porMes[m].cob+=Number(r.monto||0); });
-    (egrData||[]).forEach(r=>{ const m=r.fecha_egreso?.substring(0,7); if(porMes[m]) porMes[m].egr+=Number(r.monto||0); });
-    (sueldosData||[]).forEach(r=>{ const m=r.periodo?.substring(0,7); if(porMes[m]) porMes[m].egr+=Number(r.monto_bruto||0); });
-    (impData||[]).forEach(r=>{ const m=r.fecha_pago?.substring(0,7); if(porMes[m]) porMes[m].egr+=Number(r.monto||0); });
-    (planesData||[]).forEach(r=>{ const m=r.periodo?.substring(0,7); if(porMes[m]) porMes[m].egr+=Number(r.monto_cuota||0); });
+    (facData||[]).forEach(r => {
+      const m = r.fecha_emision?.substring(0, 7);
+      if (porMes[m]) porMes[m].ing += Number(r.monto_total || 0);
+    });
+    (egrData||[]).forEach(r => {
+      const m = r.fecha_egreso?.substring(0, 7);
+      if (porMes[m]) porMes[m].egr += Number(r.monto || 0);
+    });
+    (sueldosData||[]).forEach(r => {
+      const m = r.periodo?.substring(0, 7);
+      if (porMes[m]) porMes[m].egr += Number(r.monto_bruto || 0);
+    });
+    (pagosImpData||[]).forEach(r => {
+      const m = r.fecha_pago?.substring(0, 7);
+      if (porMes[m]) porMes[m].egr += Number(r.monto || 0);
+    });
+    (planesData||[]).forEach(r => {
+      const m = r.periodo?.substring(0, 7);
+      if (porMes[m]) porMes[m].egr += Number(r.monto_cuota || 0);
+    });
 
-    const maxV = Math.max(...Object.values(porMes).map(v=>Math.max(v.ing,v.egr)), 1);
-    const H = 130;
+    const maxV = Math.max(...Object.values(porMes).map(v => Math.max(v.ing, v.egr)), 1);
+    const H    = 130;
 
-    document.getElementById('chart-periodo').innerHTML = meses.map(m=>{
-      const d = porMes[m];
-      const hIng = Math.round((d.ing/maxV)*H);
-      const hEgr = Math.round((d.egr/maxV)*H);
+    el.innerHTML = meses.map(m => {
+      const d    = porMes[m];
+      const hIng = Math.round((d.ing / maxV) * H);
+      const hEgr = Math.round((d.egr / maxV) * H);
       const label = new Date(m+'-01T12:00:00').toLocaleDateString('es-AR',{month:'short'});
       return `<div class="chart-col">
         <div style="display:flex;gap:2px;align-items:flex-end;height:${H}px;width:100%">
-          ${hIng>0?`<div style="flex:1;height:${hIng}px;background:var(--green);border-radius:3px 3px 0 0;min-height:2px" title="Ing: ${fmt(d.ing)}"></div>`:'<div style="flex:1"></div>'}
-          ${hEgr>0?`<div style="flex:1;height:${hEgr}px;background:var(--red);opacity:0.75;border-radius:3px 3px 0 0;min-height:2px" title="Egr: ${fmt(d.egr)}"></div>`:'<div style="flex:1"></div>'}
+          ${hIng>0 ? `<div style="flex:1;height:${hIng}px;background:var(--green);border-radius:3px 3px 0 0" title="Ing: ${fmt(d.ing)}"></div>` : '<div style="flex:1"></div>'}
+          ${hEgr>0 ? `<div style="flex:1;height:${hEgr}px;background:var(--red);opacity:0.75;border-radius:3px 3px 0 0" title="Egr: ${fmt(d.egr)}"></div>` : '<div style="flex:1"></div>'}
         </div>
         <div class="chart-mes-label">${label}</div>
       </div>`;
     }).join('');
-  } catch(e) { document.getElementById('chart-periodo').innerHTML = '<div class="empty">Error al cargar</div>'; }
+
+  } catch(e) {
+    console.error('grafico periodo:', e);
+    el.innerHTML = '<div class="empty">Error</div>';
+  }
 }
 
-// ─────────────────────────────────────────────────────────────
+// ══════════════════════════════════════════════════════════════
 // ALERTAS
-// ─────────────────────────────────────────────────────────────
+// ══════════════════════════════════════════════════════════════
+
 async function cargarAlertas() {
+  const panel = document.getElementById('panel-alertas');
+  const lista  = document.getElementById('alertas-lista');
+  const count  = document.getElementById('alertas-count');
   const alertas = [];
-  const hoyStr = hoy();
 
   try {
-    const [facVenc, egrVenc, remPend, cai, docsVenc, docsProx] = await Promise.all([
+    const [facVenc, egrVenc, remPend, caiData, docsVenc, docsProx] = await Promise.all([
       FacturasAPI.getFacturasVencidasDetalle(50),
       EgresosAPI.getEgresosVencidosDashboard(10),
       RemitosAPI.getRemitoPendienteDashboard(10),
       RemitosAPI.getTalonarioDashboard(),
-      ClientesAPI.getDocsClientesProxVencer(0).catch(()=>[]),
-      ClientesAPI.getDocsClientesProxVencer(30).catch(()=>[]),
+      ClientesAPI.getDocsClientesProxVencer(0).catch(() => []),
+      ClientesAPI.getDocsClientesProxVencer(30).catch(() => []),
     ]);
 
     if (facVenc?.length) {
-      const total = facVenc.reduce((s,r)=>s+Number(r.monto_total||0),0);
-      alertas.push({ nivel:'rojo', icono:'💰', titulo:`${facVenc.length} factura${facVenc.length>1?'s':''} vencidas sin cobrar`, detalle:`Total: ${fmt(total)}`, link:'facturas.html' });
+      const t = sumArr(facVenc, 'monto_total');
+      alertas.push({ nivel:'rojo', icono:'💰', titulo:`${facVenc.length} factura${facVenc.length>1?'s':''} vencidas sin cobrar`, detalle:`Total: ${fmt(t)}`, link:'facturas.html' });
     }
     if (egrVenc?.length) {
-      const total = egrVenc.reduce((s,r)=>s+Number(r.monto||0),0);
-      alertas.push({ nivel:'naranja', icono:'💳', titulo:`${egrVenc.length} egreso${egrVenc.length>1?'s':''} sin pagar vencidos`, detalle:`Total: ${fmt(total)}`, link:'compras.html' });
+      const t = sumArr(egrVenc, 'monto');
+      alertas.push({ nivel:'naranja', icono:'💳', titulo:`${egrVenc.length} egreso${egrVenc.length>1?'s':''} sin pagar vencidos`, detalle:`Total: ${fmt(t)}`, link:'compras.html' });
     }
     if (remPend?.length) {
       alertas.push({ nivel:'naranja', icono:'📋', titulo:`${remPend.length} remito${remPend.length>1?'s':''} pendientes de facturar`, detalle:remPend.map(r=>r.numero_formateado).slice(0,4).join(', '), link:'remitos.html' });
     }
-    (cai||[]).forEach(t => {
+    (caiData||[]).forEach(t => {
       const restantes = t.nro_hasta - t.nro_actual + 1;
-      const diasVto = Math.floor((new Date(t.fecha_vencimiento)-new Date())/86400000);
-      if (restantes < 100) alertas.push({ nivel:'naranja', icono:'🔢', titulo:`CAI ${t.empresas?.nombre} — quedan ${restantes} remitos`, detalle:`Vence: ${fmtF(t.fecha_vencimiento)}`, link:'remitos.html' });
+      const diasVto   = Math.floor((new Date(t.fecha_vencimiento) - new Date()) / 86400000);
+      if (restantes < 100)  alertas.push({ nivel:'naranja', icono:'🔢', titulo:`CAI ${t.empresas?.nombre} — quedan ${restantes} remitos`, detalle:`Vence: ${fmtF(t.fecha_vencimiento)}`, link:'remitos.html' });
       else if (diasVto < 30) alertas.push({ nivel:'naranja', icono:'📅', titulo:`CAI ${t.empresas?.nombre} vence en ${diasVto} días`, detalle:'', link:'remitos.html' });
     });
-    if (docsVenc?.length) alertas.push({ nivel:'rojo', icono:'📋', titulo:`${docsVenc.length} doc${docsVenc.length>1?'s':''} de clientes VENCIDOS`, detalle:docsVenc.slice(0,3).map(d=>`${d.clientes?.nombre||'—'}: ${d.nombre}`).join(' · '), link:'clientes.html' });
+    if (docsVenc?.length) alertas.push({ nivel:'rojo',    icono:'📋', titulo:`${docsVenc.length} doc${docsVenc.length>1?'s':''} de clientes VENCIDOS`,       detalle:docsVenc.slice(0,3).map(d=>`${d.clientes?.nombre||'—'}: ${d.nombre}`).join(' · '), link:'clientes.html' });
     if (docsProx?.length) alertas.push({ nivel:'naranja', icono:'📅', titulo:`${docsProx.length} doc${docsProx.length>1?'s':''} de clientes vencen en 30 días`, detalle:docsProx.slice(0,3).map(d=>d.clientes?.nombre||'—').join(', '), link:'clientes.html' });
-  } catch(e) {}
+  } catch(e) {
+    console.error('alertas:', e);
+  }
 
-  const panel = document.getElementById('panel-alertas');
-  const lista  = document.getElementById('alertas-lista');
-  const count  = document.getElementById('alertas-count');
   if (!alertas.length) { panel.style.display = 'none'; return; }
   panel.style.display = '';
-  count.textContent = alertas.length + ' alerta' + (alertas.length>1?'s':'');
-  const C = { rojo:'var(--red)', naranja:'var(--orange)' };
+  count.textContent   = alertas.length + ' alerta' + (alertas.length > 1 ? 's' : '');
+
+  const C  = { rojo:'var(--red)', naranja:'var(--orange)' };
   const BG = { rojo:'rgba(239,68,68,0.04)', naranja:'rgba(245,158,11,0.04)' };
-  lista.innerHTML = alertas.map(a=>`
+  lista.innerHTML = alertas.map(a => `
     <a href="${a.link}" class="alerta-row" style="background:${BG[a.nivel]}">
       <span style="font-size:16px">${a.icono}</span>
       <div style="flex:1;min-width:0">
         <div style="font-size:12px;font-weight:500;color:${C[a.nivel]}">${a.titulo}</div>
-        ${a.detalle?`<div style="font-size:11px;color:var(--muted);margin-top:1px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${a.detalle}</div>`:''}
+        ${a.detalle ? `<div style="font-size:11px;color:var(--muted);margin-top:1px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${a.detalle}</div>` : ''}
       </div>
       <svg style="color:var(--muted);flex-shrink:0" width="14" height="14" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/></svg>
     </a>`).join('');
 }
 
-// ─────────────────────────────────────────────────────────────
-// HELPERS DE QUERIES — encapsulan las llamadas directas a db
-// para manejar correctamente {data, error} de Supabase
-// ─────────────────────────────────────────────────────────────
+// ══════════════════════════════════════════════════════════════
+// INIT
+// ══════════════════════════════════════════════════════════════
 
-function _filtEmp(arr, empId) {
-  return empId ? (arr||[]).filter(r=>r.empresa_id===empId) : (arr||[]);
-}
-
-async function _qCobros(empId, ini, fin) {
-  try {
-    const data = await FacturasAPI.getCobros(empId ? {empresaId:empId, fechaDesde:ini, fechaHasta:fin} : {fechaDesde:ini, fechaHasta:fin});
-    return data || [];
-  } catch(e) { return []; }
-}
-
-async function _qCobrosConMedio(empId, ini, fin) {
-  // Usa el mismo getCobros — la columna "medio" puede no existir en todas las instancias
-  // La agrupación por medio se hace si el campo viene, si no agrupa todo como "Otros"
-  try {
-    const data = await FacturasAPI.getCobros(empId ? {empresaId:empId, fechaDesde:ini, fechaHasta:fin} : {fechaDesde:ini, fechaHasta:fin});
-    return data || [];
-  } catch(e) { return []; }
-}
-
-async function _qCobrosConFecha(empId, ini, fin) {
-  try {
-    const data = await FacturasAPI.getCobros(empId ? {empresaId:empId, fechaDesde:ini, fechaHasta:fin} : {fechaDesde:ini, fechaHasta:fin});
-    return data || [];
-  } catch(e) { return []; }
-}
-
-async function _qSueldos(empId, mesIni, mesFin) {
-  try {
-    let q = db.from('sueldos').select('monto_bruto,empresa_id').gte('periodo',mesIni).lte('periodo',mesFin);
-    if (empId) q = q.eq('empresa_id', empId);
-    const { data, error } = await q;
-    if (error) return [];
-    return data || [];
-  } catch(e) { return []; }
-}
-
-async function _qSueldosTipo(empId, mesIni, mesFin) {
-  try {
-    let q = db.from('sueldos').select('monto_bruto,tipo,empresa_id').gte('periodo',mesIni).lte('periodo',mesFin);
-    if (empId) q = q.eq('empresa_id', empId);
-    const { data, error } = await q;
-    if (error) return [];
-    return data || [];
-  } catch(e) { return []; }
-}
-
-async function _qSueldosGrafico(empId, mesIni, mesFin) {
-  try {
-    let q = db.from('sueldos').select('monto_bruto,periodo,empresa_id').gte('periodo',mesIni).lte('periodo',mesFin);
-    if (empId) q = q.eq('empresa_id', empId);
-    const { data, error } = await q;
-    if (error) return [];
-    return data || [];
-  } catch(e) { return []; }
-}
-
-async function _qPagosImp(empId, ini, fin) {
-  try {
-    let q = db.from('pagos_impuestos').select('monto,empresa_id').gte('fecha_pago',ini).lte('fecha_pago',fin);
-    if (empId) q = q.eq('empresa_id', empId);
-    const { data, error } = await q;
-    if (error) return [];
-    return data || [];
-  } catch(e) { return []; }
-}
-
-async function _qPagosImpTipo(empId, ini, fin) {
-  try {
-    let q = db.from('pagos_impuestos').select('monto,tipo,empresa_id').gte('fecha_pago',ini).lte('fecha_pago',fin);
-    if (empId) q = q.eq('empresa_id', empId);
-    const { data, error } = await q;
-    if (error) return [];
-    return data || [];
-  } catch(e) { return []; }
-}
-
-async function _qPagosImpGrafico(empId, ini, fin) {
-  try {
-    let q = db.from('pagos_impuestos').select('monto,fecha_pago,empresa_id').gte('fecha_pago',ini).lte('fecha_pago',fin);
-    if (empId) q = q.eq('empresa_id', empId);
-    const { data, error } = await q;
-    if (error) return [];
-    return data || [];
-  } catch(e) { return []; }
-}
-
-async function _qImpVarios(empId, ini, fin) {
-  try {
-    let q = db.from('impuestos_varios').select('monto,empresa_id').eq('pagado',true).gte('fecha',ini).lte('fecha',fin);
-    if (empId) q = q.eq('empresa_id', empId);
-    const { data, error } = await q;
-    if (error) return [];
-    return data || [];
-  } catch(e) { return []; }
-}
-
-async function _qImpVariosTipo(empId, ini, fin) {
-  try {
-    let q = db.from('impuestos_varios').select('monto,tipo,empresa_id').eq('pagado',true).gte('fecha',ini).lte('fecha',fin);
-    if (empId) q = q.eq('empresa_id', empId);
-    const { data, error } = await q;
-    if (error) return [];
-    return data || [];
-  } catch(e) { return []; }
-}
-
-async function _qPlanes(empId, mesIni, mesFin) {
-  try {
-    let q = db.from('planes_pago_afip').select('monto_cuota,empresa_id').eq('pagado',true).gte('periodo',mesIni).lte('periodo',mesFin);
-    if (empId) q = q.eq('empresa_id', empId);
-    const { data, error } = await q;
-    if (error) return [];
-    return data || [];
-  } catch(e) { return []; }
-}
-
-async function _qEgresosGrafico(empId, ini, fin) {
-  try {
-    let q = db.from('egresos').select('monto,fecha_egreso,empresa_id').eq('pagado',true).gte('fecha_egreso',ini).lte('fecha_egreso',fin);
-    if (empId) q = q.eq('empresa_id', empId);
-    const { data, error } = await q;
-    if (error) return [];
-    return data || [];
-  } catch(e) { return []; }
-}
-
-// ─── Helpers ─────────────────────────────────────────────────
-function setText(id, val) { const el = document.getElementById(id); if(el) el.textContent = val; }
-
-// ─── Init ─────────────────────────────────────────────────────
 async function init() {
   const usuario = await ERP.initLayout('dashboard');
   if (!usuario) return;
 
-  const hoyD = new Date();
-  document.getElementById('fecha-texto').textContent = hoyD.toLocaleDateString('es-AR',{weekday:'long',day:'numeric',month:'long',year:'numeric'});
-  if (document.getElementById('fecha-mobile')) document.getElementById('fecha-mobile').textContent = hoyD.toLocaleDateString('es-AR');
-  document.getElementById('top-anio-label').textContent = 'Año ' + hoyD.getFullYear();
+  const ahora = new Date();
+  setText('fecha-texto', ahora.toLocaleDateString('es-AR',{weekday:'long',day:'numeric',month:'long',year:'numeric'}));
+  const fechaMob = document.getElementById('fecha-mobile');
+  if (fechaMob) fechaMob.textContent = ahora.toLocaleDateString('es-AR');
 
-  // Defaults de rango custom
-  const firstDay = `${hoyD.getFullYear()}-${String(hoyD.getMonth()+1).padStart(2,'0')}-01`;
-  const lastDay  = `${hoyD.getFullYear()}-${String(hoyD.getMonth()+1).padStart(2,'0')}-${String(new Date(hoyD.getFullYear(),hoyD.getMonth()+1,0).getDate()).padStart(2,'0')}`;
-  document.getElementById('f-desde').value = firstDay;
-  document.getElementById('f-hasta').value = lastDay;
+  // Defaults rango custom = mes actual
+  const y  = ahora.getFullYear();
+  const mo = String(ahora.getMonth() + 1).padStart(2, '0');
+  const ul = String(new Date(y, ahora.getMonth() + 1, 0).getDate()).padStart(2, '0');
+  const elDesde = document.getElementById('f-desde');
+  const elHasta = document.getElementById('f-hasta');
+  if (elDesde) elDesde.value = `${y}-${mo}-01`;
+  if (elHasta) elHasta.value = `${y}-${mo}-${ul}`;
 
   recargar();
 }
