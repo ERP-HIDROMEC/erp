@@ -938,9 +938,9 @@ async function cargarBalanceDetalle(ini, fin) {
     const totalFac = sum(facPeriodo, 'monto_total');
     const ingTotal = totalCob > 0 ? totalCob : totalFac;
 
-    // Desglose cobros por medio
+    // Agrupar cobros por medio de pago (si existe el campo, si no → "Cobros")
     const porMedio = {};
-    cobrosFilt.forEach(r=>{ const k=r.medio||'Otros'; porMedio[k]=(porMedio[k]||0)+Number(r.monto||0); });
+    cobrosFilt.forEach(r=>{ const k=r.medio||r.metodo_pago||'Cobros'; porMedio[k]=(porMedio[k]||0)+Number(r.monto||0); });
     const ingRows = Object.entries(porMedio).sort((a,b)=>b[1]-a[1]);
 
     const MEDIO_COLORS = { transferencia:'var(--blue)', cheque:'var(--teal)', efectivo:'var(--green)', debito:'var(--purple)' };
@@ -1040,10 +1040,10 @@ async function cargarGraficoPeriodo(ini, fin) {
     ]);
 
     const porMes = {};
-    meses.forEach(m => { porMes[m] = { ing:0, egr:0 }; });
+    meses.forEach(m => { porMes[m] = { ing:0, cob:0, egr:0 }; });
 
     (facData||[]).forEach(r=>{ const m=r.fecha_emision?.substring(0,7); if(porMes[m]) porMes[m].ing+=Number(r.monto_total||0); });
-    (cobData||[]).forEach(r=>{ const m=r.fecha?.substring(0,7); if(porMes[m]) porMes[m].ing=Math.max(porMes[m].ing, Number(r.monto||0)); });
+    (cobData||[]).forEach(r=>{ const m=r.fecha?.substring(0,7); if(porMes[m]) porMes[m].cob+=Number(r.monto||0); });
     (egrData||[]).forEach(r=>{ const m=r.fecha_egreso?.substring(0,7); if(porMes[m]) porMes[m].egr+=Number(r.monto||0); });
     (sueldosData||[]).forEach(r=>{ const m=r.periodo?.substring(0,7); if(porMes[m]) porMes[m].egr+=Number(r.monto_bruto||0); });
     (impData||[]).forEach(r=>{ const m=r.fecha_pago?.substring(0,7); if(porMes[m]) porMes[m].egr+=Number(r.monto||0); });
@@ -1136,30 +1136,23 @@ function _filtEmp(arr, empId) {
 
 async function _qCobros(empId, ini, fin) {
   try {
-    let q = db.from('cobros').select('monto,empresa_id').gte('fecha',ini).lte('fecha',fin);
-    if (empId) q = q.eq('empresa_id', empId);
-    const { data, error } = await q;
-    if (error) return [];
+    const data = await FacturasAPI.getCobros(empId ? {empresaId:empId, fechaDesde:ini, fechaHasta:fin} : {fechaDesde:ini, fechaHasta:fin});
     return data || [];
   } catch(e) { return []; }
 }
 
 async function _qCobrosConMedio(empId, ini, fin) {
+  // Usa el mismo getCobros — la columna "medio" puede no existir en todas las instancias
+  // La agrupación por medio se hace si el campo viene, si no agrupa todo como "Otros"
   try {
-    let q = db.from('cobros').select('monto,medio,empresa_id').gte('fecha',ini).lte('fecha',fin);
-    if (empId) q = q.eq('empresa_id', empId);
-    const { data, error } = await q;
-    if (error) return [];
+    const data = await FacturasAPI.getCobros(empId ? {empresaId:empId, fechaDesde:ini, fechaHasta:fin} : {fechaDesde:ini, fechaHasta:fin});
     return data || [];
   } catch(e) { return []; }
 }
 
 async function _qCobrosConFecha(empId, ini, fin) {
   try {
-    let q = db.from('cobros').select('monto,fecha,empresa_id').gte('fecha',ini).lte('fecha',fin);
-    if (empId) q = q.eq('empresa_id', empId);
-    const { data, error } = await q;
-    if (error) return [];
+    const data = await FacturasAPI.getCobros(empId ? {empresaId:empId, fechaDesde:ini, fechaHasta:fin} : {fechaDesde:ini, fechaHasta:fin});
     return data || [];
   } catch(e) { return []; }
 }
