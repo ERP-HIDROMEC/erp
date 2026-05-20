@@ -619,7 +619,7 @@ async function cargarKPIsGenerales(f) {
 
     const [facMes, cobMes, egrMes, facAnio, porCobrar, vencidas, xPagar, remitosP, sueldos, impPagos, impVarios, planes] = await Promise.all([
       FacturasAPI.getFacturas({empresaId:empId||undefined, excluirAnuladas:true, fechaDesde:ini, fechaHasta:fin}),
-      FacturasAPI.getCobrosParaDashboard(empId||'', ini, fin).catch(()=>[]),
+      _qCobros(empId, ini, fin),
       EgresosAPI.getEgresos({empresaId:empId||undefined, pagado:true, fechaDesde:ini, fechaHasta:fin}),
       FacturasAPI.getFacturas({empresaId:empId||undefined, excluirAnuladas:true, fechaDesde:anioIni, fechaHasta:anioFin}),
       FacturasAPI.getFacturas({empresaId:empId||undefined, excluirAnuladas:true}).then(d=>d.filter(f=>f.estado!=='cobrada'&&f.estado!=='anulada'&&(f.fecha_cobro_estimada||'')>=(new Date().toISOString().split('T')[0]))),
@@ -638,7 +638,7 @@ async function cargarKPIsGenerales(f) {
       return sum(filtered, k);
     };
 
-    const totalFac = sum(facMes);
+    const totalFac = sum(facMes, 'monto_total');
     const totalCob = sum(cobMes, 'monto');
     const totalEgr = sum(egrMes, 'monto');
     const totalSue = sum(sueldos, 'monto_bruto');
@@ -859,12 +859,12 @@ async function cargarKPIsPeriodo(ini, fin) {
 
     const [facData, cobData, egrData, sueldosData, impPagosData, impVarData, planesData] = await Promise.all([
       FacturasAPI.getFacturas({empresaId:empId||undefined, excluirAnuladas:true, fechaDesde:ini, fechaHasta:fin}),
-      db.from('cobros').select('monto,empresa_id').gte('fecha',ini).lte('fecha',fin).then(r=>empId?(r.data||[]).filter(x=>x.empresa_id===empId):(r.data||[])).catch(()=>[]),
+      _qCobros(empId, ini, fin),
       EgresosAPI.getEgresos({empresaId:empId||undefined, pagado:true, fechaDesde:ini, fechaHasta:fin}),
-      db.from('sueldos').select('monto_bruto,empresa_id').gte('periodo',mesIni).lte('periodo',mesFin).then(r=>empId?(r.data||[]).filter(x=>x.empresa_id===empId):(r.data||[])).catch(()=>[]),
-      db.from('pagos_impuestos').select('monto,empresa_id').gte('fecha_pago',ini).lte('fecha_pago',fin).then(r=>empId?(r.data||[]).filter(x=>x.empresa_id===empId):(r.data||[])).catch(()=>[]),
-      db.from('impuestos_varios').select('monto,empresa_id').eq('pagado',true).gte('fecha',ini).lte('fecha',fin).then(r=>empId?(r.data||[]).filter(x=>x.empresa_id===empId):(r.data||[])).catch(()=>[]),
-      db.from('planes_pago_afip').select('monto_cuota,empresa_id').eq('pagado',true).gte('periodo',mesIni).lte('periodo',mesFin).then(r=>empId?(r.data||[]).filter(x=>x.empresa_id===empId):(r.data||[])).catch(()=>[]),
+      _qSueldos(empId, mesIni, mesFin),
+      _qPagosImp(empId, ini, fin),
+      _qImpVarios(empId, ini, fin),
+      _qPlanes(empId, mesIni, mesFin),
     ]);
 
     const sum = (arr, k='monto') => (arr||[]).reduce((s,r)=>s+Number(r[k]||0),0);
@@ -916,19 +916,19 @@ async function cargarBalanceDetalle(ini, fin) {
 
     // Ingresos: cobros agrupados por tipo de comprobante / cliente
     const [cobros, facPeriodo] = await Promise.all([
-      db.from('cobros').select('monto,medio,empresa_id').gte('fecha',ini).lte('fecha',fin).then(r=>r.data||[]).catch(()=>[]),
+      _qCobrosConMedio(empId, ini, fin),
       FacturasAPI.getFacturas({empresaId:empId||undefined, excluirAnuladas:true, fechaDesde:ini, fechaHasta:fin}),
     ]);
 
-    const cobrosFilt = empId ? cobros.filter(r=>r.empresa_id===empId) : cobros;
+    const cobrosFilt = cobros;
 
     // Egresos por categoría
     const [egresos, sueldos, impPagos, impVarios, planes] = await Promise.all([
       EgresosAPI.getEgresos({empresaId:empId||undefined, pagado:true, fechaDesde:ini, fechaHasta:fin}),
-      db.from('sueldos').select('monto_bruto,tipo,empresa_id').gte('periodo',mesIni).lte('periodo',mesFin).then(r=>empId?(r.data||[]).filter(x=>x.empresa_id===empId):(r.data||[])).catch(()=>[]),
-      db.from('pagos_impuestos').select('monto,tipo,empresa_id').gte('fecha_pago',ini).lte('fecha_pago',fin).then(r=>empId?(r.data||[]).filter(x=>x.empresa_id===empId):(r.data||[])).catch(()=>[]),
-      db.from('impuestos_varios').select('monto,tipo,empresa_id').eq('pagado',true).gte('fecha',ini).lte('fecha',fin).then(r=>empId?(r.data||[]).filter(x=>x.empresa_id===empId):(r.data||[])).catch(()=>[]),
-      db.from('planes_pago_afip').select('monto_cuota,empresa_id').eq('pagado',true).gte('periodo',mesIni).lte('periodo',mesFin).then(r=>empId?(r.data||[]).filter(x=>x.empresa_id===empId):(r.data||[])).catch(()=>[]),
+      _qSueldosTipo(empId, mesIni, mesFin),
+      _qPagosImpTipo(empId, ini, fin),
+      _qImpVariosTipo(empId, ini, fin),
+      _qPlanes(empId, mesIni, mesFin),
     ]);
 
     const sum = (arr, k='monto') => (arr||[]).reduce((s,r)=>s+Number(r[k]||0), 0);
@@ -1032,11 +1032,11 @@ async function cargarGraficoPeriodo(ini, fin) {
 
     const [facData, cobData, egrData, sueldosData, impData, planesData] = await Promise.all([
       FacturasAPI.getFacturaMensual(empId, ini, fin),
-      db.from('cobros').select('monto,fecha,empresa_id').gte('fecha',ini).lte('fecha',fin).then(r=>empId?(r.data||[]).filter(x=>x.empresa_id===empId):(r.data||[])).catch(()=>[]),
-      db.from('egresos').select('monto,fecha_egreso,empresa_id').eq('pagado',true).gte('fecha_egreso',ini).lte('fecha_egreso',fin).then(r=>empId?(r.data||[]).filter(x=>x.empresa_id===empId):(r.data||[])).catch(()=>[]),
-      db.from('sueldos').select('monto_bruto,periodo,empresa_id').gte('periodo',mesIni).lte('periodo',mesFin).then(r=>empId?(r.data||[]).filter(x=>x.empresa_id===empId):(r.data||[])).catch(()=>[]),
-      db.from('pagos_impuestos').select('monto,fecha_pago,empresa_id').gte('fecha_pago',ini).lte('fecha_pago',fin).then(r=>empId?(r.data||[]).filter(x=>x.empresa_id===empId):(r.data||[])).catch(()=>[]),
-      db.from('planes_pago_afip').select('monto_cuota,periodo,empresa_id').eq('pagado',true).gte('periodo',mesIni).lte('periodo',mesFin).then(r=>empId?(r.data||[]).filter(x=>x.empresa_id===empId):(r.data||[])).catch(()=>[]),
+      _qCobrosConFecha(empId, ini, fin),
+      _qEgresosGrafico(empId, ini, fin),
+      _qSueldosGrafico(empId, mesIni, mesFin),
+      _qPagosImpGrafico(empId, ini, fin),
+      _qPlanes(empId, mesIni, mesFin),
     ]);
 
     const porMes = {};
@@ -1123,6 +1123,145 @@ async function cargarAlertas() {
       </div>
       <svg style="color:var(--muted);flex-shrink:0" width="14" height="14" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/></svg>
     </a>`).join('');
+}
+
+// ─────────────────────────────────────────────────────────────
+// HELPERS DE QUERIES — encapsulan las llamadas directas a db
+// para manejar correctamente {data, error} de Supabase
+// ─────────────────────────────────────────────────────────────
+
+function _filtEmp(arr, empId) {
+  return empId ? (arr||[]).filter(r=>r.empresa_id===empId) : (arr||[]);
+}
+
+async function _qCobros(empId, ini, fin) {
+  try {
+    let q = db.from('cobros').select('monto,empresa_id').gte('fecha',ini).lte('fecha',fin);
+    if (empId) q = q.eq('empresa_id', empId);
+    const { data, error } = await q;
+    if (error) return [];
+    return data || [];
+  } catch(e) { return []; }
+}
+
+async function _qCobrosConMedio(empId, ini, fin) {
+  try {
+    let q = db.from('cobros').select('monto,medio,empresa_id').gte('fecha',ini).lte('fecha',fin);
+    if (empId) q = q.eq('empresa_id', empId);
+    const { data, error } = await q;
+    if (error) return [];
+    return data || [];
+  } catch(e) { return []; }
+}
+
+async function _qCobrosConFecha(empId, ini, fin) {
+  try {
+    let q = db.from('cobros').select('monto,fecha,empresa_id').gte('fecha',ini).lte('fecha',fin);
+    if (empId) q = q.eq('empresa_id', empId);
+    const { data, error } = await q;
+    if (error) return [];
+    return data || [];
+  } catch(e) { return []; }
+}
+
+async function _qSueldos(empId, mesIni, mesFin) {
+  try {
+    let q = db.from('sueldos').select('monto_bruto,empresa_id').gte('periodo',mesIni).lte('periodo',mesFin);
+    if (empId) q = q.eq('empresa_id', empId);
+    const { data, error } = await q;
+    if (error) return [];
+    return data || [];
+  } catch(e) { return []; }
+}
+
+async function _qSueldosTipo(empId, mesIni, mesFin) {
+  try {
+    let q = db.from('sueldos').select('monto_bruto,tipo,empresa_id').gte('periodo',mesIni).lte('periodo',mesFin);
+    if (empId) q = q.eq('empresa_id', empId);
+    const { data, error } = await q;
+    if (error) return [];
+    return data || [];
+  } catch(e) { return []; }
+}
+
+async function _qSueldosGrafico(empId, mesIni, mesFin) {
+  try {
+    let q = db.from('sueldos').select('monto_bruto,periodo,empresa_id').gte('periodo',mesIni).lte('periodo',mesFin);
+    if (empId) q = q.eq('empresa_id', empId);
+    const { data, error } = await q;
+    if (error) return [];
+    return data || [];
+  } catch(e) { return []; }
+}
+
+async function _qPagosImp(empId, ini, fin) {
+  try {
+    let q = db.from('pagos_impuestos').select('monto,empresa_id').gte('fecha_pago',ini).lte('fecha_pago',fin);
+    if (empId) q = q.eq('empresa_id', empId);
+    const { data, error } = await q;
+    if (error) return [];
+    return data || [];
+  } catch(e) { return []; }
+}
+
+async function _qPagosImpTipo(empId, ini, fin) {
+  try {
+    let q = db.from('pagos_impuestos').select('monto,tipo,empresa_id').gte('fecha_pago',ini).lte('fecha_pago',fin);
+    if (empId) q = q.eq('empresa_id', empId);
+    const { data, error } = await q;
+    if (error) return [];
+    return data || [];
+  } catch(e) { return []; }
+}
+
+async function _qPagosImpGrafico(empId, ini, fin) {
+  try {
+    let q = db.from('pagos_impuestos').select('monto,fecha_pago,empresa_id').gte('fecha_pago',ini).lte('fecha_pago',fin);
+    if (empId) q = q.eq('empresa_id', empId);
+    const { data, error } = await q;
+    if (error) return [];
+    return data || [];
+  } catch(e) { return []; }
+}
+
+async function _qImpVarios(empId, ini, fin) {
+  try {
+    let q = db.from('impuestos_varios').select('monto,empresa_id').eq('pagado',true).gte('fecha',ini).lte('fecha',fin);
+    if (empId) q = q.eq('empresa_id', empId);
+    const { data, error } = await q;
+    if (error) return [];
+    return data || [];
+  } catch(e) { return []; }
+}
+
+async function _qImpVariosTipo(empId, ini, fin) {
+  try {
+    let q = db.from('impuestos_varios').select('monto,tipo,empresa_id').eq('pagado',true).gte('fecha',ini).lte('fecha',fin);
+    if (empId) q = q.eq('empresa_id', empId);
+    const { data, error } = await q;
+    if (error) return [];
+    return data || [];
+  } catch(e) { return []; }
+}
+
+async function _qPlanes(empId, mesIni, mesFin) {
+  try {
+    let q = db.from('planes_pago_afip').select('monto_cuota,empresa_id').eq('pagado',true).gte('periodo',mesIni).lte('periodo',mesFin);
+    if (empId) q = q.eq('empresa_id', empId);
+    const { data, error } = await q;
+    if (error) return [];
+    return data || [];
+  } catch(e) { return []; }
+}
+
+async function _qEgresosGrafico(empId, ini, fin) {
+  try {
+    let q = db.from('egresos').select('monto,fecha_egreso,empresa_id').eq('pagado',true).gte('fecha_egreso',ini).lte('fecha_egreso',fin);
+    if (empId) q = q.eq('empresa_id', empId);
+    const { data, error } = await q;
+    if (error) return [];
+    return data || [];
+  } catch(e) { return []; }
 }
 
 // ─── Helpers ─────────────────────────────────────────────────
