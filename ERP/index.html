@@ -84,7 +84,7 @@
 
 /* ── Sección general vs período ── */
 #vista-general  { }
-#vista-periodo  { display:none; }
+#vista-periodo  { }
 
 /* ── Panel de balance detallado (vista período) ── */
 .balance-grid { display:grid; grid-template-columns:1fr 1fr; gap:14px; margin-bottom:14px; }
@@ -592,8 +592,8 @@ function setEmpresa(id, btn) {
 function recargar() {
   document.getElementById('periodo-label').textContent = labelPeriodo();
   const esGeneral = periodoActivo === 'general';
-  document.getElementById('vista-general').style.display = esGeneral ? '' : 'none';
-  document.getElementById('vista-periodo').style.display = esGeneral ? 'none' : '';
+  document.getElementById('vista-general').style.display = esGeneral ? 'block' : 'none';
+  document.getElementById('vista-periodo').style.display = esGeneral ? 'none' : 'block';
   if (esGeneral) cargarGeneral();
   else           cargarPeriodo();
 }
@@ -1300,6 +1300,10 @@ async function init() {
   const elHasta = document.getElementById('f-hasta');
   if (elDesde) elDesde.value = `${y}-${mo}-01`;
   if (elHasta) elHasta.value = `${y}-${mo}-${ul}`;
+
+  // Asegurar estado inicial correcto antes de primera carga
+  document.getElementById('vista-general').style.display = 'block';
+  document.getElementById('vista-periodo').style.display = 'none';
 
   recargar();
 }
