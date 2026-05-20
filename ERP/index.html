@@ -18,67 +18,206 @@
 <script src="clientes.api.js"></script>
 <script src="impuestos.api.js"></script>
 <style>
-  :root {
-    --bg:#0f1117;--bg2:#181c27;--bg3:#1e2436;
-    --border:rgba(255,255,255,0.07);--text:#e8eaf0;--muted:#7a8099;
-    --blue:#3b82f6;--green:#10b981;--red:#ef4444;
-    --orange:#f59e0b;--purple:#8b5cf6;--teal:#14b8a6;
-  }
-  .header{display:flex;align-items:center;justify-content:space-between;margin-bottom:28px;flex-wrap:wrap;gap:12px;}
-  .header-left h2{font-size:22px;font-weight:600;}
-  .header-left p{font-size:13px;color:var(--muted);margin-top:3px;}
-  .header-right{display:flex;align-items:center;gap:10px;flex-wrap:wrap;}
-  input[type=month]{padding:7px 12px;border-radius:8px;border:1px solid var(--border);background:var(--bg3);color:var(--text);font-size:13px;font-family:'DM Sans',sans-serif;outline:none;cursor:pointer;}
-  input[type=month]:focus{border-color:var(--blue);}
-  .emp-btn{padding:7px 16px;border-radius:8px;border:1px solid var(--border);background:var(--bg2);color:var(--muted);font-size:13px;font-family:'DM Sans',sans-serif;cursor:pointer;transition:all 0.15s;}
-  .emp-btn:hover{border-color:var(--blue);color:var(--text);}
-  .emp-btn.active{background:var(--blue);border-color:var(--blue);color:#fff;}
-  .kpi-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:14px;margin-bottom:14px;}
-  .kpi-card{background:var(--bg2);border:1px solid var(--border);border-radius:12px;padding:20px;position:relative;overflow:hidden;transition:transform 0.15s;}
-  .kpi-card:hover{transform:translateY(-2px);}
-  .kpi-card::before{content:'';position:absolute;top:0;left:0;right:0;height:3px;border-radius:12px 12px 0 0;}
-  .kpi-card.blue::before{background:var(--blue);}
-  .kpi-card.green::before{background:var(--green);}
-  .kpi-card.red::before{background:var(--red);}
-  .kpi-card.orange::before{background:var(--orange);}
-  .kpi-card.purple::before{background:var(--purple);}
-  .kpi-card.teal::before{background:var(--teal);}
-  .kpi-value{font-size:22px;font-weight:600;color:var(--text);font-family:'DM Mono',monospace;letter-spacing:-0.5px;}
-  .kpi-value.pos{color:var(--green);}
-  .kpi-value.neg{color:var(--red);}
-  .kpi-sub{font-size:11px;color:var(--muted);margin-top:6px;}
-  .bottom-grid{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-top:14px;}
-  .badge{font-size:11px;padding:3px 8px;border-radius:20px;background:rgba(239,68,68,0.15);color:var(--red);font-weight:500;}
-  .badge.ok{background:rgba(16,185,129,0.15);color:var(--green);}
-  tr:hover .chart-area{padding:16px 20px 20px;}
-  .chart-bars{display:flex;align-items:flex-end;gap:8px;height:140px;}
-  .bar-group{flex:1;display:flex;gap:3px;align-items:flex-end;}
-  .bar{flex:1;border-radius:4px 4px 0 0;transition:opacity 0.2s;min-height:3px;}
-  .bar:hover{opacity:0.8;}
-  .bar.h{background:var(--blue);}
-  .bar.p{background:var(--teal);}
-  .chart-labels{display:flex;gap:8px;margin-top:8px;}
-  .chart-.chart-legend{display:flex;gap:16px;padding:12px 20px 0;}
-  .legend-item{display:flex;align-items:center;gap:6px;font-size:12px;color:var(--muted);}
-  .legend-dot{width:8px;height:8px;border-radius:50%;}
-  @media(max-width:768px){
-    .sidebar{transform:translateX(-220px);transition:transform 0.3s;}
-    .sidebar.open{transform:translateX(0);}
-    .main{margin-left:0;padding:16px;}
-    .kpi-grid{grid-template-columns:repeat(2,1fr);gap:10px;}
-    .bottom-grid{grid-template-columns:1fr;}
-    .mob-header{display:flex!important;align-items:center;justify-content:space-between;margin-bottom:16px;}
-    }
-  .mob-header{display:none;}
+/* ── Layout ── */
+.dash-header { display:flex; align-items:flex-start; justify-content:space-between; margin-bottom:20px; flex-wrap:wrap; gap:12px; }
+.dash-title h2 { font-size:22px; font-weight:600; }
+.dash-title p  { font-size:13px; color:var(--muted); margin-top:3px; }
+
+/* ── Barra de filtros ── */
+.filtro-bar {
+  background:var(--bg2); border:1px solid var(--border); border-radius:12px;
+  padding:12px 16px; margin-bottom:20px;
+  display:flex; align-items:center; gap:10px; flex-wrap:wrap;
+}
+.filtro-bar .sep { width:1px; height:24px; background:var(--border); flex-shrink:0; }
+.period-btns { display:flex; gap:4px; }
+.period-btn {
+  padding:6px 14px; border-radius:7px; border:1px solid var(--border);
+  background:none; color:var(--muted); font-size:12px; font-weight:500;
+  font-family:'DM Sans',sans-serif; cursor:pointer; transition:all 0.15s;
+  white-space:nowrap;
+}
+.period-btn:hover  { border-color:var(--blue); color:var(--text); }
+.period-btn.active { background:var(--blue); border-color:var(--blue); color:#fff; }
+.custom-range { display:flex; align-items:center; gap:6px; }
+.custom-range input {
+  padding:6px 10px; border-radius:7px; border:1px solid var(--border);
+  background:var(--bg3); color:var(--text); font-size:12px;
+  font-family:'DM Sans',sans-serif; outline:none;
+}
+.custom-range input:focus { border-color:var(--blue); }
+.emp-btns { display:flex; gap:4px; }
+.emp-btn {
+  padding:6px 14px; border-radius:7px; border:1px solid var(--border);
+  background:none; color:var(--muted); font-size:12px; font-weight:500;
+  font-family:'DM Sans',sans-serif; cursor:pointer; transition:all 0.15s;
+}
+.emp-btn:hover  { border-color:var(--blue); color:var(--text); }
+.emp-btn.active { background:rgba(59,130,246,0.15); border-color:var(--blue); color:var(--blue); }
+.periodo-label {
+  margin-left:auto; font-size:12px; color:var(--muted);
+  font-family:'DM Mono',monospace;
+  padding:5px 12px; background:var(--bg3); border-radius:6px;
+  border:1px solid var(--border); white-space:nowrap;
+}
+
+/* ── KPI grid ── */
+.kpi-grid { display:grid; grid-template-columns:repeat(6,1fr); gap:12px; margin-bottom:14px; }
+.kpi-grid-4 { grid-template-columns:repeat(4,1fr); }
+.kpi-card {
+  background:var(--bg2); border:1px solid var(--border); border-radius:12px;
+  padding:16px 18px; position:relative; overflow:hidden; transition:transform 0.15s;
+}
+.kpi-card:hover { transform:translateY(-1px); }
+.kpi-card::before { content:''; position:absolute; top:0; left:0; right:0; height:3px; border-radius:12px 12px 0 0; }
+.kpi-card.blue::before   { background:var(--blue); }
+.kpi-card.green::before  { background:var(--green); }
+.kpi-card.red::before    { background:var(--red); }
+.kpi-card.orange::before { background:var(--orange); }
+.kpi-card.purple::before { background:var(--purple); }
+.kpi-card.teal::before   { background:var(--teal); }
+.kpi-label { font-size:10px; color:var(--muted); text-transform:uppercase; letter-spacing:0.7px; margin-bottom:6px; }
+.kpi-value { font-size:20px; font-weight:600; font-family:'DM Mono',monospace; letter-spacing:-0.5px; }
+.kpi-value.pos { color:var(--green); }
+.kpi-value.neg { color:var(--red); }
+.kpi-sub   { font-size:11px; color:var(--muted); margin-top:5px; line-height:1.4; }
+
+/* ── Sección general vs período ── */
+#vista-general  { }
+#vista-periodo  { display:none; }
+
+/* ── Panel de balance detallado (vista período) ── */
+.balance-grid { display:grid; grid-template-columns:1fr 1fr; gap:14px; margin-bottom:14px; }
+.balance-panel { background:var(--bg2); border:1px solid var(--border); border-radius:12px; overflow:hidden; }
+.balance-panel-header {
+  padding:14px 18px; border-bottom:1px solid var(--border);
+  display:flex; align-items:center; justify-content:space-between;
+}
+.balance-panel-header h3 { font-size:13px; font-weight:600; }
+.balance-total { font-family:'DM Mono',monospace; font-size:16px; font-weight:700; }
+.balance-row {
+  display:flex; align-items:center; justify-content:space-between;
+  padding:10px 18px; border-bottom:1px solid var(--border); font-size:13px;
+}
+.balance-row:last-child { border-bottom:none; }
+.balance-row:hover { background:rgba(255,255,255,0.02); }
+.balance-row-label { display:flex; align-items:center; gap:8px; color:var(--text); }
+.balance-row-dot { width:7px; height:7px; border-radius:50%; flex-shrink:0; }
+.balance-row-value { font-family:'DM Mono',monospace; font-size:13px; font-weight:500; }
+.balance-row-pct { font-size:10px; color:var(--muted); margin-left:6px; }
+
+/* ── Resultado neto del período ── */
+.resultado-bar {
+  background:var(--bg2); border:1px solid var(--border); border-radius:12px;
+  padding:16px 20px; margin-bottom:14px;
+  display:flex; align-items:center; justify-content:space-between; gap:20px;
+  flex-wrap:wrap;
+}
+.resultado-bar-left h3 { font-size:13px; color:var(--muted); font-weight:400; margin-bottom:4px; }
+.resultado-bar-left .monto { font-size:28px; font-weight:700; font-family:'DM Mono',monospace; }
+.resultado-bar-right { flex:1; min-width:200px; }
+.bar-comparativa { height:10px; border-radius:6px; background:var(--bg3); overflow:hidden; position:relative; }
+.bar-comp-ing  { height:100%; border-radius:6px; background:var(--green); }
+.bar-comp-egr  { position:absolute; top:0; right:0; height:100%; border-radius:6px; background:var(--red); opacity:0.7; }
+.bar-comp-labels { display:flex; justify-content:space-between; margin-top:6px; font-size:11px; color:var(--muted); }
+
+/* ── Gráfico barras apiladas ── */
+.chart-panel { background:var(--bg2); border:1px solid var(--border); border-radius:12px; overflow:hidden; }
+.chart-panel-header { padding:14px 20px; border-bottom:1px solid var(--border); display:flex; align-items:center; justify-content:space-between; }
+.chart-panel-header h3 { font-size:14px; font-weight:500; }
+.chart-legend { display:flex; gap:16px; }
+.legend-item { display:flex; align-items:center; gap:6px; font-size:11px; color:var(--muted); }
+.legend-dot { width:8px; height:8px; border-radius:50%; }
+.chart-body { padding:20px 20px 12px; }
+.chart-wrapper { display:flex; gap:6px; align-items:flex-end; height:160px; }
+.chart-col { flex:1; display:flex; flex-direction:column; align-items:center; gap:0; min-width:0; }
+.chart-stack { width:100%; display:flex; flex-direction:column; justify-content:flex-end; gap:2px; }
+.bar-ing { background:var(--green); border-radius:3px 3px 0 0; min-height:2px; transition:height 0.3s; }
+.bar-egr { background:var(--red); opacity:0.7; border-radius:3px 3px 0 0; min-height:2px; transition:height 0.3s; }
+.bar-single { background:var(--blue); border-radius:3px 3px 0 0; min-height:2px; }
+.chart-mes-label { font-size:10px; color:var(--muted); margin-top:6px; text-align:center; }
+.chart-mes-valor { font-size:9px; color:var(--muted); font-family:'DM Mono',monospace; }
+
+/* ── FC por cobrar agrupado por cliente ── */
+.cobrar-panel { background:var(--bg2); border:1px solid var(--border); border-radius:12px; overflow:hidden; }
+.cobrar-scroll { max-height:340px; overflow-y:auto; }
+.cobrar-scroll::-webkit-scrollbar { width:4px; }
+.cobrar-scroll::-webkit-scrollbar-track { background:transparent; }
+.cobrar-scroll::-webkit-scrollbar-thumb { background:var(--border); border-radius:4px; }
+.cobrar-cliente-row {
+  padding:11px 18px; border-bottom:1px solid var(--border);
+  display:flex; align-items:center; justify-content:space-between;
+  cursor:pointer; transition:background 0.12s;
+}
+.cobrar-cliente-row:hover { background:rgba(255,255,255,0.025); }
+.cobrar-cliente-row:last-child { border-bottom:none; }
+.cobrar-cliente-name { font-size:13px; font-weight:500; }
+.cobrar-cliente-empresa { font-size:10px; color:var(--muted); margin-top:1px; }
+.cobrar-chips { display:flex; gap:6px; align-items:center; flex-wrap:wrap; justify-content:flex-end; }
+.cobrar-chip {
+  padding:2px 8px; border-radius:4px; font-size:11px;
+  font-family:'DM Mono',monospace; font-weight:500;
+}
+.cobrar-chip.vencida { background:rgba(239,68,68,0.15); color:var(--red); }
+.cobrar-chip.normal  { background:rgba(59,130,246,0.12); color:var(--blue); }
+.cobrar-total { font-family:'DM Mono',monospace; font-size:14px; font-weight:600; color:var(--text); }
+
+/* ── Alertas ── */
+.alerta-row {
+  display:flex; align-items:flex-start; gap:14px; padding:12px 20px;
+  border-bottom:1px solid var(--border); text-decoration:none; transition:background 0.1s;
+}
+.alerta-row:hover { background:rgba(255,255,255,0.02); }
+.alerta-row:last-child { border-bottom:none; }
+
+/* ── Top clientes ── */
+.top-cli-row {
+  display:flex; align-items:center; gap:12px; padding:10px 18px;
+  border-bottom:1px solid var(--border);
+}
+.top-cli-row:last-child { border-bottom:none; }
+.top-cli-num { font-size:11px; color:var(--muted); font-family:'DM Mono',monospace; width:16px; flex-shrink:0; }
+.top-cli-bar-wrap { flex:1; height:6px; background:var(--bg3); border-radius:4px; overflow:hidden; }
+.top-cli-bar { height:100%; border-radius:4px; background:var(--blue); transition:width 0.5s; }
+.top-cli-monto { font-family:'DM Mono',monospace; font-size:12px; color:var(--text); min-width:90px; text-align:right; }
+
+/* ── Proyectos activos ── */
+.proy-row { padding:10px 18px; border-bottom:1px solid var(--border); display:flex; align-items:center; justify-content:space-between; }
+.proy-row:last-child { border-bottom:none; }
+
+/* ── Grid bottom ── */
+.grid-2 { display:grid; grid-template-columns:1fr 1fr; gap:14px; }
+.grid-3 { display:grid; grid-template-columns:1fr 1fr 1fr; gap:14px; }
+.panel  { background:var(--bg2); border:1px solid var(--border); border-radius:12px; overflow:hidden; }
+.panel-header { padding:14px 18px; border-bottom:1px solid var(--border); display:flex; align-items:center; justify-content:space-between; }
+.panel-header h3 { font-size:14px; font-weight:500; }
+.empty { padding:32px; text-align:center; color:var(--muted); font-size:13px; }
+
+.mob-header { display:none; }
+@media(max-width:900px) {
+  .kpi-grid     { grid-template-columns:repeat(3,1fr); }
+  .kpi-grid-4   { grid-template-columns:repeat(2,1fr); }
+  .balance-grid { grid-template-columns:1fr; }
+  .grid-2       { grid-template-columns:1fr; }
+  .grid-3       { grid-template-columns:1fr; }
+  .filtro-bar   { flex-wrap:wrap; gap:8px; }
+  .periodo-label { margin-left:0; }
+}
+@media(max-width:600px) {
+  .kpi-grid { grid-template-columns:repeat(2,1fr); }
+  .main { margin-left:0; padding:14px; }
+  .mob-header { display:flex!important; align-items:center; justify-content:space-between; margin-bottom:14px; }
+}
 </style>
 </head>
 <body>
 
 <div class="overlay" id="overlay" onclick="ERP.closeSidebar()"></div>
-
 <div id="sidebar-root"></div>
 
 <main class="main">
+
+  <!-- Mobile header -->
   <div class="mob-header">
     <button onclick="ERP.toggleSidebar()" style="background:none;border:none;cursor:pointer;padding:4px">
       <svg width="22" height="22" fill="none" stroke="#e8eaf0" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16"/></svg>
@@ -87,424 +226,926 @@
     <span style="font-size:12px;color:var(--muted)" id="fecha-mobile"></span>
   </div>
 
-  <div class="header">
-    <div class="header-left">
-      <h2>Dashboard general</h2>
+  <!-- Header -->
+  <div class="dash-header">
+    <div class="dash-title">
+      <h2>Dashboard</h2>
       <p id="fecha-texto"></p>
     </div>
-    <div class="header-right">
-      <input type="month" id="sel-mes" onchange="cambiarMes(this.value)">
-      <button class="emp-btn active" onclick="filtrarEmpresa('todas',this)">Todas</button>
-      <button class="emp-btn" onclick="filtrarEmpresa('a1000000-0000-0000-0000-000000000001',this)">Hidromec</button>
-      <button class="emp-btn" onclick="filtrarEmpresa('a2000000-0000-0000-0000-000000000002',this)">Placemem</button>
-    </div>
   </div>
 
-  <div class="kpi-grid">
-    <div class="kpi-card blue"><div class="kpi-label">Facturación del mes</div><div class="kpi-value" id="k-fac-mes">—</div></div>
-    <div class="kpi-card green"><div class="kpi-label">Cobrado este mes</div><div class="kpi-value" id="k-cob-mes">—</div></div>
-    <div class="kpi-card red"><div class="kpi-label">Gastos del mes</div><div class="kpi-value" id="k-egr-mes">—</div><div class="kpi-sub" id="k-egr-sub" style="font-size:11px;color:var(--muted);margin-top:4px"></div></div>
-    <div class="kpi-card orange"><div class="kpi-label">Resultado del mes</div><div class="kpi-value" id="k-res-mes">—</div></div>
-  </div>
-  <div class="kpi-grid">
-    <div class="kpi-card purple"><div class="kpi-label">Cuentas por cobrar</div><div class="kpi-value" id="k-x-cob">—</div><div class="kpi-sub">Facturas pendientes</div></div>
-    <div class="kpi-card red"><div class="kpi-label">Cuentas por pagar</div><div class="kpi-value" id="k-x-pag">—</div><div class="kpi-sub">Egresos sin pagar</div></div>
-    <div class="kpi-card red"><div class="kpi-label">Facturas vencidas</div><div class="kpi-value" id="k-venc">—</div><div class="kpi-sub">Sin cobrar fuera de plazo</div></div>
-    <div class="kpi-card teal"><div class="kpi-label">Facturación del año</div><div class="kpi-value" id="k-fac-anio">—</div><div class="kpi-sub" id="k-anio-label"></div></div>
+  <!-- Barra de filtros -->
+  <div class="filtro-bar">
+    <div class="period-btns">
+      <button class="period-btn active" data-periodo="general" onclick="setPeriodo('general',this)">General</button>
+      <button class="period-btn" data-periodo="mes"   onclick="setPeriodo('mes',this)">Este mes</button>
+      <button class="period-btn" data-periodo="mes_ant" onclick="setPeriodo('mes_ant',this)">Mes anterior</button>
+      <button class="period-btn" data-periodo="trim"  onclick="setPeriodo('trim',this)">Trimestre</button>
+      <button class="period-btn" data-periodo="sem"   onclick="setPeriodo('sem',this)">Semestre</button>
+      <button class="period-btn" data-periodo="anio"  onclick="setPeriodo('anio',this)">Año</button>
+      <button class="period-btn" data-periodo="custom" onclick="setPeriodo('custom',this)">Personalizado</button>
+    </div>
+    <div class="custom-range" id="custom-range" style="display:none">
+      <input type="date" id="f-desde" onchange="recargar()">
+      <span style="color:var(--muted);font-size:12px">→</span>
+      <input type="date" id="f-hasta" onchange="recargar()">
+    </div>
+    <div class="sep"></div>
+    <div class="emp-btns">
+      <button class="emp-btn active" onclick="setEmpresa('todas',this)">Ambas</button>
+      <button class="emp-btn" onclick="setEmpresa('a1000000-0000-0000-0000-000000000001',this)">Hidromec</button>
+      <button class="emp-btn" onclick="setEmpresa('a2000000-0000-0000-0000-000000000002',this)">Placemem</button>
+    </div>
+    <div class="periodo-label" id="periodo-label">Vista general</div>
   </div>
 
-  <div class="bottom-grid">
-    <div class="panel">
-      <div class="panel-header"><h3>Facturas vencidas</h3><span class="badge" id="badge-venc">0</span></div>
-      <div id="tbl-venc"><div class="spinner-wrap"><div class="spinner"></div>Cargando...</div></div>
-    </div>
-    <div class="panel">
-      <div class="panel-header"><h3>Facturación últimos 6 meses</h3></div>
-      <div class="chart-legend">
-        <div class="legend-item"><div class="legend-dot" style="background:var(--blue)"></div>Hidromec</div>
-        <div class="legend-item"><div class="legend-dot" style="background:var(--teal)"></div>Placemem</div>
+  <!-- ═══════════════════════════════════ VISTA GENERAL ═══════════════════════════════════ -->
+  <div id="vista-general">
+
+    <!-- KPIs fila 1: financiero del mes en curso -->
+    <div class="kpi-grid" id="kpi-general-top">
+      <div class="kpi-card blue">
+        <div class="kpi-label">Facturación del mes</div>
+        <div class="kpi-value" id="g-fac-mes">—</div>
+        <div class="kpi-sub" id="g-fac-mes-sub"></div>
       </div>
-      <div class="chart-area">
-        <div class="chart-bars" id="chart-bars"><div class="spinner-wrap"><div class="spinner"></div></div></div>
-        <div class="chart-labels" id="chart-labels"></div>
+      <div class="kpi-card green">
+        <div class="kpi-label">Cobrado el mes</div>
+        <div class="kpi-value" id="g-cob-mes">—</div>
+      </div>
+      <div class="kpi-card red">
+        <div class="kpi-label">Gastos del mes</div>
+        <div class="kpi-value" id="g-egr-mes">—</div>
+        <div class="kpi-sub" id="g-egr-sub"></div>
+      </div>
+      <div class="kpi-card orange">
+        <div class="kpi-label">Resultado del mes</div>
+        <div class="kpi-value" id="g-res-mes">—</div>
+      </div>
+      <div class="kpi-card teal">
+        <div class="kpi-label">Facturación del año</div>
+        <div class="kpi-value" id="g-fac-anio">—</div>
+        <div class="kpi-sub" id="g-anio-sub"></div>
+      </div>
+      <div class="kpi-card purple">
+        <div class="kpi-label">Proyectos activos</div>
+        <div class="kpi-value" id="g-proy">—</div>
       </div>
     </div>
-  </div>
 
-  <!-- PANEL ALERTAS -->
-  <div id="panel-alertas" class="panel" style="margin-top:14px;display:none">
-    <div class="panel-header" style="background:rgba(239,68,68,0.08);border-bottom-color:rgba(239,68,68,0.2)">
-      <h3 style="color:var(--red)">⚠ Alertas activas</h3>
-      <span id="alertas-count" style="font-size:12px;color:var(--muted)"></span>
+    <!-- KPIs fila 2: cuentas -->
+    <div class="kpi-grid kpi-grid-4" style="margin-bottom:20px">
+      <div class="kpi-card purple">
+        <div class="kpi-label">Por cobrar (total)</div>
+        <div class="kpi-value" id="g-x-cob">—</div>
+        <div class="kpi-sub">FC pendientes sin vencer</div>
+      </div>
+      <div class="kpi-card red">
+        <div class="kpi-label">FC vencidas</div>
+        <div class="kpi-value" id="g-venc-monto">—</div>
+        <div class="kpi-sub" id="g-venc-count">Sin cobrar fuera de plazo</div>
+      </div>
+      <div class="kpi-card orange">
+        <div class="kpi-label">Por pagar (egresos)</div>
+        <div class="kpi-value" id="g-x-pag">—</div>
+        <div class="kpi-sub">Compras sin pagar</div>
+      </div>
+      <div class="kpi-card teal">
+        <div class="kpi-label">Remitos sin facturar</div>
+        <div class="kpi-value" id="g-remitos">—</div>
+        <div class="kpi-sub">Emitidos / aceptados</div>
+      </div>
     </div>
-    <div id="alertas-lista"></div>
-  </div>
 
-  <div class="panel" style="margin-top:14px">
-    <div class="panel-header"><h3>Top clientes del año</h3><span class="badge ok" id="badge-anio"></span></div>
-    <div id="tbl-clientes"><div class="spinner-wrap"><div class="spinner"></div>Cargando...</div></div>
-  </div>
+    <!-- Gráfico + FC por cobrar -->
+    <div class="grid-2" style="margin-bottom:14px">
+
+      <!-- Gráfico últimos 6 meses -->
+      <div class="chart-panel">
+        <div class="chart-panel-header">
+          <h3>Facturación últimos 6 meses</h3>
+          <div class="chart-legend">
+            <div class="legend-item"><div class="legend-dot" style="background:var(--blue)"></div>Hidromec</div>
+            <div class="legend-item"><div class="legend-dot" style="background:var(--teal)"></div>Placemem</div>
+          </div>
+        </div>
+        <div class="chart-body">
+          <div class="chart-wrapper" id="chart-general" style="height:140px">
+            <div class="spinner-wrap"><div class="spinner"></div></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- FC por cobrar agrupado por cliente -->
+      <div class="cobrar-panel">
+        <div class="panel-header">
+          <h3>Por cobrar — por cliente</h3>
+          <span id="g-cobrar-total" style="font-family:'DM Mono',monospace;font-size:13px;color:var(--blue)"></span>
+        </div>
+        <div class="cobrar-scroll" id="cobrar-lista">
+          <div class="spinner-wrap"><div class="spinner"></div>Cargando...</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Top clientes + Proyectos activos + Alertas -->
+    <div class="grid-3" style="margin-bottom:14px">
+
+      <div class="panel">
+        <div class="panel-header">
+          <h3>Top clientes del año</h3>
+          <span style="font-size:11px;color:var(--muted)" id="top-anio-label"></span>
+        </div>
+        <div id="top-clientes-general">
+          <div class="spinner-wrap"><div class="spinner"></div></div>
+        </div>
+      </div>
+
+      <div class="panel">
+        <div class="panel-header"><h3>Proyectos activos</h3></div>
+        <div id="proy-lista">
+          <div class="spinner-wrap"><div class="spinner"></div></div>
+        </div>
+      </div>
+
+      <div class="panel" id="panel-alertas" style="display:none">
+        <div class="panel-header" style="background:rgba(239,68,68,0.06);border-bottom-color:rgba(239,68,68,0.15)">
+          <h3 style="color:var(--red)">⚠ Alertas</h3>
+          <span id="alertas-count" style="font-size:11px;color:var(--muted)"></span>
+        </div>
+        <div id="alertas-lista" style="max-height:280px;overflow-y:auto"></div>
+      </div>
+
+    </div>
+
+  </div><!-- /vista-general -->
+
+  <!-- ═══════════════════════════════════ VISTA PERÍODO ═══════════════════════════════════ -->
+  <div id="vista-periodo">
+
+    <!-- KPIs del período -->
+    <div class="kpi-grid kpi-grid-4" style="margin-bottom:14px">
+      <div class="kpi-card blue">
+        <div class="kpi-label">Facturado</div>
+        <div class="kpi-value" id="p-fac">—</div>
+        <div class="kpi-sub" id="p-fac-sub"></div>
+      </div>
+      <div class="kpi-card green">
+        <div class="kpi-label">Cobrado</div>
+        <div class="kpi-value" id="p-cob">—</div>
+      </div>
+      <div class="kpi-card red">
+        <div class="kpi-label">Total egresos</div>
+        <div class="kpi-value" id="p-egr-total">—</div>
+        <div class="kpi-sub" id="p-egr-total-sub"></div>
+      </div>
+      <div class="kpi-card orange">
+        <div class="kpi-label">Resultado neto</div>
+        <div class="kpi-value" id="p-resultado">—</div>
+      </div>
+    </div>
+
+    <!-- Barra resultado -->
+    <div class="resultado-bar" id="resultado-bar">
+      <div class="resultado-bar-left">
+        <h3>Resultado del período</h3>
+        <div class="monto" id="p-res-monto">—</div>
+        <div style="font-size:12px;color:var(--muted);margin-top:4px" id="p-res-label"></div>
+      </div>
+      <div class="resultado-bar-right">
+        <div class="bar-comparativa">
+          <div class="bar-comp-ing" id="bar-ing" style="width:50%"></div>
+          <div class="bar-comp-egr" id="bar-egr" style="width:50%"></div>
+        </div>
+        <div class="bar-comp-labels">
+          <span id="bar-label-ing">Ingresos</span>
+          <span id="bar-label-egr">Egresos</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Balance desglosado -->
+    <div class="balance-grid" style="margin-bottom:14px">
+
+      <!-- Ingresos -->
+      <div class="balance-panel">
+        <div class="balance-panel-header">
+          <h3 style="color:var(--green)">↑ Ingresos del período</h3>
+          <div class="balance-total" style="color:var(--green)" id="b-ing-total">—</div>
+        </div>
+        <div id="b-ing-rows">
+          <div class="spinner-wrap"><div class="spinner"></div></div>
+        </div>
+      </div>
+
+      <!-- Egresos -->
+      <div class="balance-panel">
+        <div class="balance-panel-header">
+          <h3 style="color:var(--red)">↓ Egresos del período</h3>
+          <div class="balance-total" style="color:var(--red)" id="b-egr-total">—</div>
+        </div>
+        <div id="b-egr-rows">
+          <div class="spinner-wrap"><div class="spinner"></div></div>
+        </div>
+      </div>
+
+    </div>
+
+    <!-- Gráfico período + Top clientes período -->
+    <div class="grid-2" style="margin-bottom:14px">
+
+      <div class="chart-panel">
+        <div class="chart-panel-header">
+          <h3>Ingresos vs Egresos</h3>
+          <div class="chart-legend">
+            <div class="legend-item"><div class="legend-dot" style="background:var(--green)"></div>Ingresos</div>
+            <div class="legend-item"><div class="legend-dot" style="background:var(--red)"></div>Egresos</div>
+          </div>
+        </div>
+        <div class="chart-body">
+          <div class="chart-wrapper" id="chart-periodo" style="height:140px">
+            <div class="spinner-wrap"><div class="spinner"></div></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="panel">
+        <div class="panel-header">
+          <h3>Top clientes del período</h3>
+          <span style="font-size:11px;color:var(--muted)" id="top-periodo-label"></span>
+        </div>
+        <div id="top-clientes-periodo">
+          <div class="spinner-wrap"><div class="spinner"></div></div>
+        </div>
+      </div>
+
+    </div>
+
+    <!-- FC pendientes del período agrupadas por cliente -->
+    <div class="panel" style="margin-bottom:14px">
+      <div class="panel-header">
+        <h3>FC por cobrar del período — por cliente</h3>
+        <span id="p-cobrar-total" style="font-family:'DM Mono',monospace;font-size:13px;color:var(--blue)"></span>
+      </div>
+      <div class="cobrar-scroll" id="cobrar-lista-periodo" style="max-height:260px">
+        <div class="spinner-wrap"><div class="spinner"></div></div>
+      </div>
+    </div>
+
+  </div><!-- /vista-periodo -->
+
 </main>
 
 <script>
-
-
-let mesActivo = new Date().toISOString().substring(0,7);
+// ─── Estado global ────────────────────────────────────────────
+let periodoActivo = 'general';
 let empresaActiva = 'todas';
-let kpiData = [], vencData = [], mensData = [], cliData = [];
+let _fechaDesde   = null;
+let _fechaHasta   = null;
 
-// Auth check — una sola instancia
-async function init() {
-  const usuario = await ERP.initLayout('dashboard');
-  if(!usuario) return;
-  const hoy = new Date();
-  document.getElementById('fecha-texto').textContent = hoy.toLocaleDateString('es-AR',{weekday:'long',day:'numeric',month:'long',year:'numeric'});
-  if(document.getElementById('fecha-mobile')) document.getElementById('fecha-mobile').textContent = hoy.toLocaleDateString('es-AR');
-  document.getElementById('sel-mes').value = mesActivo;
-  document.getElementById('k-anio-label').textContent = hoy.getFullYear();
-  document.getElementById('badge-anio').textContent = hoy.getFullYear();
-  await cargarTodo();
-  cargarAlertas();
-}
+// ─── Helpers de fechas ────────────────────────────────────────
+function getFechas() {
+  const hoyD = new Date();
+  const y = hoyD.getFullYear(), m = hoyD.getMonth(), d = hoyD.getDate();
 
-async function cargarTodo() {
-  try {
-    await Promise.all([cargarKPIs(), cargarVencidas(), cargarMensual(), cargarClientes()]);
-  } catch(e) {
-    manejarError(e, 'cargar dashboard');
+  if (periodoActivo === 'mes') {
+    const ini = `${y}-${String(m+1).padStart(2,'0')}-01`;
+    const fin = `${y}-${String(m+1).padStart(2,'0')}-${String(new Date(y,m+1,0).getDate()).padStart(2,'0')}`;
+    return { ini, fin };
   }
-}
-
-async function cargarKPIs() {
-  try {
-  const ini = mesActivo + '-01';
-  // Calcular fin de mes sin timezone para no perder el día 31
-  const [_y,_m] = mesActivo.split('-').map(Number);
-  const nextM = _m===12 ? 1 : _m+1;
-  const nextY = _m===12 ? _y+1 : _y;
-  const finStr = `${nextY}-${String(nextM).padStart(2,'0')}-01`;
-  const anioIni = mesActivo.substring(0,4) + '-01-01';
-  const anioFin = (parseInt(mesActivo.substring(0,4))+1) + '-01-01';
-  const hoy = new Date().toISOString().split('T')[0];
-
-  const emps = await EmpresasAPI.getEmpresas();
-
-  kpiData = await Promise.all((emps||[]).map(async emp => {
-    const [r1,r2,r3,r4,r5,r6,r7,r8,r9,r10,r11] = await Promise.all([
-      FacturasAPI.getFacturas({empresaId:emp.id,excluirAnuladas:true,fechaDesde:ini,fechaHasta:finStr}).then(d=>({data:d})),
-      FacturasAPI.getCobrosParaDashboard(emp.id,ini,finStr).then(d=>({data:d})),
-      EgresosAPI.getEgresosParaDashboard(emp.id,ini,finStr).then(d=>({data:d})),
-      FacturasAPI.getFacturas({empresaId:emp.id,excluirAnuladas:true,fechaDesde:anioIni,fechaHasta:anioFin}).then(d=>({data:d})),
-      FacturasAPI.getFacturas({empresaId:emp.id,soloVencidas:false}).then(d=>({data:d.filter(f=>f.estado!=='cobrada'&&f.estado!=='anulada')})),
-      EgresosAPI.getEgresos({empresaId:emp.id,pagado:false}).then(d=>({data:d})),
-      FacturasAPI.getFacturas({empresaId:emp.id,soloVencidas:true}).then(d=>({data:d})),
-      // Sueldos del mes (monto_bruto = gasto real de la empresa)
-      EmpleadosAPI.getSueldos({empresaId:emp.id,periodo:mesActivo}).then(d=>({data:d})),
-      // Impuestos varios pagados en el mes
-      ImpuestosAPI.getImpuestosVarios({empresaId:emp.id}).then(d=>({data:(d||[]).filter(x=>x.pagado&&(x.fecha||'').substring(0,7)===mesActivo)})),
-      // Pagos de impuestos del mes
-      ImpuestosAPI.getPagosImpuestos({empresaId:emp.id}).then(d=>({data:(d||[]).filter(x=>(x.fecha||x.created_at||'').substring(0,7)===mesActivo)})),
-      // Cuotas de planes AFIP pagadas en el mes
-      db.from('planes_pago_afip').select('monto_cuota').eq('empresa_id',emp.id).eq('pagado',true).like('periodo', mesActivo+'%').then(d=>({data:d.data||[]})).catch(()=>({data:[]})),
-    ]);
-    const s = (r,f='monto_total') => (r.data||[]).reduce((a,x)=>a+Number(x[f]||x.monto||0),0);
-    const fac = s(r1);
-    const egr = s(r3);
-    const sueldos = (r8.data||[]).reduce((a,x)=>a+Number(x.monto_bruto||0),0);
-    const impVarios = (r9.data||[]).reduce((a,x)=>a+Number(x.monto||0),0);
-    const pagosImp  = (r10.data||[]).reduce((a,x)=>a+Number(x.monto||0),0);
-    const planesAfip= (r11.data||[]).reduce((a,x)=>a+Number(x.monto_cuota||0),0);
-    const gastoTotal = egr + sueldos + impVarios + pagosImp + planesAfip;
-    return { empresa_id:emp.id, empresa:emp.nombre,
-      facturacion_mes:fac, cobrado_mes:s(r2,'monto'),
-      egresos_mes:egr, sueldos_mes:sueldos, gastos_mes:gastoTotal,
-      resultado_mes:fac-gastoTotal, facturacion_anio:s(r4),
-      cuentas_por_cobrar:s(r5), cuentas_por_pagar:s(r6,'monto'),
-      facturas_vencidas:(r7.data||[]).length };
-  }));
-  renderKPIs();
-  } catch(e) { manejarError(e, 'KPIs'); }
-}
-
-function filtrar(arr) {
-  return empresaActiva==='todas' ? arr : arr.filter(r=>r.empresa_id===empresaActiva);
-}
-function sum(arr,k) { return filtrar(arr).reduce((s,r)=>s+Number(r[k]||0),0); }
-
-function renderKPIs() {
-  const res = sum(kpiData,'resultado_mes');
-  document.getElementById('k-fac-mes').textContent = fmt(sum(kpiData,'facturacion_mes'));
-  document.getElementById('k-cob-mes').textContent = fmt(sum(kpiData,'cobrado_mes'));
-  document.getElementById('k-egr-mes').textContent = fmt(sum(kpiData,'gastos_mes'));
-  const subEl = document.getElementById('k-egr-sub');
-  if(subEl){
-    const egr = sum(kpiData,'egresos_mes');
-    const sue = sum(kpiData,'sueldos_mes');
-    if(sue > 0) subEl.textContent = 'Compras ' + fmt(egr) + ' · Sueldos ' + fmt(sue);
-    else subEl.textContent = '';
+  if (periodoActivo === 'mes_ant') {
+    const pm = m === 0 ? 12 : m;
+    const py = m === 0 ? y-1 : y;
+    const ini = `${py}-${String(pm).padStart(2,'0')}-01`;
+    const fin = `${py}-${String(pm).padStart(2,'0')}-${String(new Date(py,pm,0).getDate()).padStart(2,'0')}`;
+    return { ini, fin };
   }
-  const el = document.getElementById('k-res-mes');
-  el.textContent = fmt(res); el.className = 'kpi-value '+(res>=0?'pos':'neg');
-  document.getElementById('k-x-cob').textContent = fmt(sum(kpiData,'cuentas_por_cobrar'));
-  document.getElementById('k-x-pag').textContent = fmt(sum(kpiData,'cuentas_por_pagar'));
-  document.getElementById('k-venc').textContent = sum(kpiData,'facturas_vencidas')+' facturas';
-  document.getElementById('k-fac-anio').textContent = fmt(sum(kpiData,'facturacion_anio'));
+  if (periodoActivo === 'trim') {
+    const ini3 = new Date(y, m-2, 1);
+    const ini = `${ini3.getFullYear()}-${String(ini3.getMonth()+1).padStart(2,'0')}-01`;
+    const fin = `${y}-${String(m+1).padStart(2,'0')}-${String(new Date(y,m+1,0).getDate()).padStart(2,'0')}`;
+    return { ini, fin };
+  }
+  if (periodoActivo === 'sem') {
+    const ini6 = new Date(y, m-5, 1);
+    const ini = `${ini6.getFullYear()}-${String(ini6.getMonth()+1).padStart(2,'0')}-01`;
+    const fin = `${y}-${String(m+1).padStart(2,'0')}-${String(new Date(y,m+1,0).getDate()).padStart(2,'0')}`;
+    return { ini, fin };
+  }
+  if (periodoActivo === 'anio') {
+    return { ini: `${y}-01-01`, fin: `${y}-12-31` };
+  }
+  if (periodoActivo === 'custom') {
+    const desde = document.getElementById('f-desde').value;
+    const hasta = document.getElementById('f-hasta').value;
+    if (!desde || !hasta) return null;
+    return { ini: desde, fin: hasta };
+  }
+  // general: mes en curso para KPIs generales
+  const ini = `${y}-${String(m+1).padStart(2,'0')}-01`;
+  const fin = `${y}-${String(m+1).padStart(2,'0')}-${String(new Date(y,m+1,0).getDate()).padStart(2,'0')}`;
+  return { ini, fin, anioIni: `${y}-01-01`, anioFin: `${y}-12-31` };
 }
 
-async function cargarVencidas() {
-  try {
-  const hoy = new Date().toISOString().split('T')[0];
-  const filtros = { excluirAnuladas:false, soloVencidas:true };
-  if(empresaActiva !== 'todas') filtros.empresaId = empresaActiva;
-  const data = await FacturasAPI.getFacturasVencidasDetalle(200);
-  const datFiltrada = empresaActiva === 'todas' ? data : data.filter(r=>r.empresa_id===empresaActiva);
-  vencData = (datFiltrada||[]).map(r=>({
-    ...r,
-    cliente: r.clientes?.nombre||'—',
-    empresa: r.empresas?.nombre||'—',
-    dias: Math.floor((new Date()-new Date(r.fecha_cobro_estimada+'T12:00:00'))/86400000)
-  }));
-  document.getElementById('badge-venc').textContent = vencData.length;
-  const el = document.getElementById('tbl-venc');
-  if(!vencData.length){el.innerHTML='<div class="empty">Sin facturas vencidas</div>';return;}
-  el.innerHTML=`<div style="overflow-x:auto"><table>
-    <thead><tr><th>Empresa</th><th>Cliente</th><th>Factura</th><th>Vence</th><th>Total</th><th>Días</th></tr></thead>
-    <tbody>${vencData.map(r=>`<tr>
-      <td>${r.empresa}</td><td>${r.cliente}</td>
-      <td class="mono">${r.numero_factura}</td>
-      <td>${fmtF(r.fecha_cobro_estimada)}</td>
-      <td class="mono" style="color:var(--red)">${fmt(r.monto_total)}</td>
-      <td><span style="background:rgba(245,158,11,0.15);color:var(--orange);padding:2px 8px;border-radius:4px;font-size:11px">${r.dias}d</span></td>
-    </tr>`).join('')}</tbody></table></div>`;
-  } catch(e) { manejarError(e, 'facturas vencidas'); }
+function getEmpresaFiltro() {
+  return empresaActiva === 'todas' ? null : empresaActiva;
 }
 
-async function cargarMensual() {
-  try {
-  // Calcular "hace 5 meses, día 1" sin timezone
-  const _hoyM = new Date();
-  let _bkY = _hoyM.getFullYear(), _bkM = _hoyM.getMonth()+1 - 5;
-  if(_bkM <= 0){ _bkM += 12; _bkY -= 1; }
-  const desdeStr = `${_bkY}-${String(_bkM).padStart(2,'0')}-01`;
-  const filtros = { excluirAnuladas:true, fechaDesde:desdeStr };
-  if(empresaActiva !== 'todas') filtros.empresaId = empresaActiva;
-  const filtroEmp = empresaActiva === 'todas' ? null : empresaActiva;
-  const data = await FacturasAPI.getFacturaMensual(filtroEmp, desdeStr, new Date().toISOString().split('T')[0]);
-  const agg = {};
-  (data||[]).forEach(r=>{
-    const mes = r.fecha_emision.substring(0,7);
-    const emp = r.empresas?.nombre||'—';
-    const k = mes+'|'+emp;
-    if(!agg[k]) agg[k]={mes,empresa:emp,total:0};
-    agg[k].total+=Number(r.monto_total||0);
-  });
-  mensData = Object.values(agg);
-  renderGrafico();
-  } catch(e) { manejarError(e, 'facturación mensual'); }
+function labelPeriodo() {
+  const f = getFechas();
+  if (!f) return 'Sin rango';
+  if (periodoActivo === 'general')  return 'Vista general · ' + new Date().toLocaleDateString('es-AR',{month:'long',year:'numeric'});
+  if (periodoActivo === 'mes')      return new Date(f.ini+'T12:00:00').toLocaleDateString('es-AR',{month:'long',year:'numeric'});
+  if (periodoActivo === 'mes_ant')  return 'Mes ant: ' + new Date(f.ini+'T12:00:00').toLocaleDateString('es-AR',{month:'long',year:'numeric'});
+  if (periodoActivo === 'trim')     return 'Trim: ' + fmtF(f.ini) + ' — ' + fmtF(f.fin);
+  if (periodoActivo === 'sem')      return 'Sem: ' + fmtF(f.ini) + ' — ' + fmtF(f.fin);
+  if (periodoActivo === 'anio')     return 'Año ' + new Date().getFullYear();
+  if (periodoActivo === 'custom')   return fmtF(f.ini) + ' — ' + fmtF(f.fin);
+  return '';
 }
 
-function renderGrafico() {
-  const meses = [...new Set(mensData.map(r=>r.mes))].sort().slice(-6);
-  const maxV = Math.max(...mensData.map(r=>r.total),1);
-  document.getElementById('chart-bars').innerHTML = meses.map(m=>{
-    const h = mensData.find(r=>r.mes===m&&r.empresa==='Hidromec');
-    const p = mensData.find(r=>r.mes===m&&r.empresa==='Placemem');
-    const hH = Math.round(((h?.total||0)/maxV)*130);
-    const pH = Math.round(((p?.total||0)/maxV)*130);
-    return `<div class="bar-group">
-      ${empresaActiva!=='a2000000-0000-0000-0000-000000000002'?`<div class="bar h" style="height:${hH}px" title="${fmt(h?.total||0)}"></div>`:''}
-      ${empresaActiva!=='a1000000-0000-0000-0000-000000000001'?`<div class="bar p" style="height:${pH}px" title="${fmt(p?.total||0)}"></div>`:''}
-    </div>`;
-  }).join('');
-  document.getElementById('chart-labels').innerHTML = meses.map(m=>{
-    const d = new Date(m+'-01T12:00:00');
-    return `<div class="chart-label">${d.toLocaleDateString('es-AR',{month:'short'})}</div>`;
-  }).join('');
+// ─── Navegación de vistas ─────────────────────────────────────
+function setPeriodo(p, btn) {
+  periodoActivo = p;
+  document.querySelectorAll('.period-btn').forEach(b => b.classList.remove('active'));
+  if (btn) btn.classList.add('active');
+  document.getElementById('custom-range').style.display = p === 'custom' ? 'flex' : 'none';
+  recargar();
 }
 
-async function cargarClientes() {
-  const anioIni = new Date().getFullYear() + '-01-01';
-  const filtros = { excluirAnuladas:true, fechaDesde:anioIni };
-  if(empresaActiva !== 'todas') filtros.empresaId = empresaActiva;
-  const filtroEmpCli = empresaActiva === 'todas' ? null : empresaActiva;
-  const data = await FacturasAPI.getFacturasPorCliente(filtroEmpCli, anioIni, new Date().toISOString().split('T')[0]);
-  const agg = {};
-  (data||[]).forEach(r=>{
-    const k = (r.clientes?.nombre||'—')+'|'+(r.empresas?.nombre||'—');
-    if(!agg[k]) agg[k]={cliente:r.clientes?.nombre||'—',empresa:r.empresas?.nombre||'—',empresa_id:r.empresa_id,total:0,cant:0};
-    agg[k].total+=Number(r.monto_total||0);
-    agg[k].cant++;
-  });
-  cliData = Object.values(agg).sort((a,b)=>b.total-a.total).slice(0,5);
-  const el = document.getElementById('tbl-clientes');
-  if(!cliData.length){el.innerHTML='<div class="empty">Sin datos</div>';return;}
-  el.innerHTML=`<div style="overflow-x:auto"><table>
-    <thead><tr><th>#</th><th>Cliente</th><th>Empresa</th><th>Facturado</th><th>Facturas</th></tr></thead>
-    <tbody>${cliData.map((r,i)=>`<tr>
-      <td class="mono" style="color:var(--muted)">${i+1}</td>
-      <td><strong>${r.cliente}</strong></td>
-      <td>${r.empresa}</td>
-      <td class="mono">${fmt(r.total)}</td>
-      <td class="mono" style="color:var(--muted)">${r.cant}</td>
-    </tr>`).join('')}</tbody></table></div>`;
-}
-
-function filtrarEmpresa(id,btn) {
+function setEmpresa(id, btn) {
   empresaActiva = id;
-  document.querySelectorAll('.emp-btn').forEach(b=>b.classList.remove('active'));
+  document.querySelectorAll('.emp-btn').forEach(b => b.classList.remove('active'));
   btn.classList.add('active');
-  renderKPIs();
-  renderGrafico();
-  cargarVencidas();
-  cargarClientes();
+  recargar();
 }
 
-function cambiarMes(val) {
-  mesActivo = val;
-  cargarKPIs();
+function recargar() {
+  document.getElementById('periodo-label').textContent = labelPeriodo();
+  if (periodoActivo === 'general') {
+    document.getElementById('vista-general').style.display  = '';
+    document.getElementById('vista-periodo').style.display  = 'none';
+    cargarGeneral();
+  } else {
+    document.getElementById('vista-general').style.display  = 'none';
+    document.getElementById('vista-periodo').style.display  = '';
+    cargarPeriodo();
+  }
 }
 
+// ─────────────────────────────────────────────────────────────
+// VISTA GENERAL
+// ─────────────────────────────────────────────────────────────
+async function cargarGeneral() {
+  const f = getFechas();
+  if (!f) return;
+  await Promise.all([
+    cargarKPIsGenerales(f),
+    cargarGraficoGeneral(),
+    cargarCobrarPorCliente(null, null, 'cobrar-lista', 'g-cobrar-total'),
+    cargarTopClientes(f.anioIni||f.ini, f.anioFin||f.fin, 'top-clientes-general', 'top-anio-label'),
+    cargarProyectos(),
+    cargarAlertas(),
+  ]);
+}
 
+async function cargarKPIsGenerales(f) {
+  try {
+    const empId = getEmpresaFiltro();
+    const ini = f.ini, fin = f.fin;
+    const anioIni = f.anioIni || (new Date().getFullYear() + '-01-01');
+    const anioFin = f.anioFin || (new Date().getFullYear() + '-12-31');
+    const mesActivo = ini.substring(0,7);
+
+    const [facMes, cobMes, egrMes, facAnio, porCobrar, vencidas, xPagar, remitosP, sueldos, impPagos, impVarios, planes] = await Promise.all([
+      FacturasAPI.getFacturas({empresaId:empId||undefined, excluirAnuladas:true, fechaDesde:ini, fechaHasta:fin}),
+      FacturasAPI.getCobrosParaDashboard(empId||'', ini, fin).catch(()=>[]),
+      EgresosAPI.getEgresos({empresaId:empId||undefined, pagado:true, fechaDesde:ini, fechaHasta:fin}),
+      FacturasAPI.getFacturas({empresaId:empId||undefined, excluirAnuladas:true, fechaDesde:anioIni, fechaHasta:anioFin}),
+      FacturasAPI.getFacturas({empresaId:empId||undefined, excluirAnuladas:true}).then(d=>d.filter(f=>f.estado!=='cobrada'&&f.estado!=='anulada'&&(f.fecha_cobro_estimada||'')>=(new Date().toISOString().split('T')[0]))),
+      FacturasAPI.getFacturasVencidasDetalle(200),
+      EgresosAPI.getEgresos({empresaId:empId||undefined, pagado:false}),
+      RemitosAPI.getRemitoPendienteDashboard(100),
+      _getSueldosMes(empId, mesActivo),
+      ImpuestosAPI.getPagosImpuestos(empId ? {empresaId:empId} : {}).then(d=>(d||[]).filter(x=>(x.fecha_pago||x.created_at||'').substring(0,7)===mesActivo)),
+      ImpuestosAPI.getImpuestosVarios(empId ? {empresaId:empId, pagado:true} : {pagado:true}).then(d=>(d||[]).filter(x=>(x.fecha||'').substring(0,7)===mesActivo)),
+      db.from('planes_pago_afip').select('monto_cuota,empresa_id').eq('pagado',true).like('periodo',mesActivo+'%').then(r=>(empId?(r.data||[]).filter(x=>x.empresa_id===empId):(r.data||[]))).catch(()=>[]),
+    ]);
+
+    const sum = (arr, k='monto_total') => (arr||[]).reduce((s,r)=>s+Number(r[k]||r.monto||0),0);
+    const sumEmpresa = (arr, k='monto_total') => {
+      const filtered = empId ? arr : arr;
+      return sum(filtered, k);
+    };
+
+    const totalFac = sum(facMes);
+    const totalCob = sum(cobMes, 'monto');
+    const totalEgr = sum(egrMes, 'monto');
+    const totalSue = sum(sueldos, 'monto_bruto');
+    const totalImpP = sum(impPagos, 'monto');
+    const totalImpV = sum(impVarios, 'monto');
+    const totalPlan = sum(planes, 'monto_cuota');
+    const gastos = totalEgr + totalSue + totalImpP + totalImpV + totalPlan;
+    const resultado = totalCob - gastos;
+
+    const vencFiltradas = empId ? (vencidas||[]).filter(r=>r.empresa_id===empId) : (vencidas||[]);
+    const remFiltrados  = empId ? (remitosP||[]).filter(r=>r.empresa_id===empId) : (remitosP||[]);
+    const xPagarFilt   = empId ? (xPagar||[]).filter(r=>r.empresa_id===empId) : (xPagar||[]);
+    const xCobrarFilt  = empId ? (porCobrar||[]).filter(r=>r.empresa_id===empId) : (porCobrar||[]);
+
+    setText('g-fac-mes', fmt(totalFac));
+    setText('g-fac-mes-sub', totalFac > 0 ? (facMes||[]).length + ' facturas' : '');
+    setText('g-cob-mes', fmt(totalCob));
+    setText('g-egr-mes', fmt(gastos));
+    const subEgr = [];
+    if (totalEgr > 0) subEgr.push('Compras ' + fmt(totalEgr));
+    if (totalSue > 0) subEgr.push('Sueldos ' + fmt(totalSue));
+    if (totalImpP+totalImpV+totalPlan > 0) subEgr.push('Imp. ' + fmt(totalImpP+totalImpV+totalPlan));
+    setText('g-egr-sub', subEgr.join(' · '));
+
+    const resEl = document.getElementById('g-res-mes');
+    resEl.textContent = fmt(resultado);
+    resEl.className = 'kpi-value ' + (resultado >= 0 ? 'pos' : 'neg');
+
+    setText('g-fac-anio', fmt(sum(facAnio)));
+    setText('g-anio-sub', 'Año ' + new Date().getFullYear());
+    setText('g-proy', '—'); // se carga aparte
+
+    setText('g-x-cob', fmt(sum(xCobrarFilt)));
+    setText('g-venc-monto', fmt(sum(vencFiltradas)));
+    setText('g-venc-count', vencFiltradas.length + ' facturas vencidas');
+    setText('g-x-pag', fmt(sum(xPagarFilt, 'monto')));
+    setText('g-remitos', remFiltrados.length + ' remitos');
+
+  } catch(e) { manejarError(e, 'KPIs generales'); }
+}
+
+async function _getSueldosMes(empId, mesActivo) {
+  try {
+    const { data, error } = await db.from('sueldos')
+      .select('monto_bruto, empresa_id')
+      .eq('periodo', mesActivo);
+    if (error) return [];
+    return empId ? (data||[]).filter(r=>r.empresa_id===empId) : (data||[]);
+  } catch(e) { return []; }
+}
+
+async function cargarGraficoGeneral() {
+  try {
+    const hoy = new Date();
+    let bkY = hoy.getFullYear(), bkM = hoy.getMonth()+1-5;
+    if (bkM <= 0) { bkM += 12; bkY -= 1; }
+    const desde = `${bkY}-${String(bkM).padStart(2,'0')}-01`;
+    const empId = getEmpresaFiltro();
+    const data = await FacturasAPI.getFacturaMensual(empId, desde, hoy.toISOString().split('T')[0]);
+
+    const agg = {};
+    (data||[]).forEach(r=>{
+      const mes = r.fecha_emision.substring(0,7);
+      const emp = r.empresas?.nombre||'—';
+      const k = mes+'|'+emp;
+      if (!agg[k]) agg[k] = {mes, empresa:emp, total:0};
+      agg[k].total += Number(r.monto_total||0);
+    });
+    const mensData = Object.values(agg);
+    const meses = [...new Set(mensData.map(r=>r.mes))].sort().slice(-6);
+    const maxV = Math.max(...mensData.map(r=>r.total), 1);
+    const H = 130;
+
+    document.getElementById('chart-general').innerHTML = meses.map(m=>{
+      const h = mensData.find(r=>r.mes===m&&r.empresa==='Hidromec');
+      const p = mensData.find(r=>r.mes===m&&r.empresa==='Placemem');
+      const hH = Math.round(((h?.total||0)/maxV)*H);
+      const pH = Math.round(((p?.total||0)/maxV)*H);
+      const total = (h?.total||0)+(p?.total||0);
+      const label = new Date(m+'-01T12:00:00').toLocaleDateString('es-AR',{month:'short'});
+      return `<div class="chart-col">
+        <div style="font-size:9px;color:var(--muted);font-family:'DM Mono',monospace;margin-bottom:4px">${total>0?fmt(total).replace('$','').trim():''}</div>
+        <div style="display:flex;gap:3px;align-items:flex-end;height:${H}px;width:100%">
+          ${empresaActiva!=='a2000000-0000-0000-0000-000000000002'&&hH>0?`<div class="bar-single" style="flex:1;height:${hH}px;background:var(--blue)" title="Hidromec: ${fmt(h?.total||0)}"></div>`:''}
+          ${empresaActiva!=='a1000000-0000-0000-0000-000000000001'&&pH>0?`<div class="bar-single" style="flex:1;height:${pH}px;background:var(--teal)" title="Placemem: ${fmt(p?.total||0)}"></div>`:''}
+          ${(hH===0&&pH===0)?`<div style="flex:1;height:4px;background:var(--border);border-radius:2px;align-self:flex-end"></div>`:''}
+        </div>
+        <div class="chart-mes-label">${label}</div>
+      </div>`;
+    }).join('');
+  } catch(e) { document.getElementById('chart-general').innerHTML = '<div class="empty">Sin datos</div>'; }
+}
+
+async function cargarCobrarPorCliente(fechaDesde, fechaHasta, elId, totalElId) {
+  try {
+    const empId = getEmpresaFiltro();
+    const filtros = { excluirAnuladas: true };
+    if (empId) filtros.empresaId = empId;
+    const facturas = await FacturasAPI.getFacturas(filtros);
+    const pendientes = (facturas||[]).filter(f => f.estado !== 'cobrada' && f.estado !== 'anulada');
+
+    // Filtrar por período si se pasó
+    const pend = fechaDesde
+      ? pendientes.filter(f => (f.fecha_emision||'') >= fechaDesde && (f.fecha_emision||'') <= fechaHasta)
+      : pendientes;
+
+    const hoy = new Date().toISOString().split('T')[0];
+    // Agrupar por cliente
+    const por = {};
+    pend.forEach(f => {
+      const k = (f.clientes?.nombre||'Sin cliente') + '|' + (f.empresa_id||'');
+      if (!por[k]) por[k] = { cliente: f.clientes?.nombre||'Sin cliente', empresa: f.empresas?.nombre||'', total:0, vencidas:0, normales:0, montoVencido:0 };
+      por[k].total += Number(f.monto_total||0);
+      if ((f.fecha_cobro_estimada||'9999') < hoy) {
+        por[k].vencidas++;
+        por[k].montoVencido += Number(f.monto_total||0);
+      } else {
+        por[k].normales++;
+      }
+    });
+
+    const rows = Object.values(por).sort((a,b)=>b.total-a.total);
+    const totalGral = rows.reduce((s,r)=>s+r.total, 0);
+    if (totalElId) setText(totalElId, fmt(totalGral));
+
+    const el = document.getElementById(elId);
+    if (!rows.length) { el.innerHTML = '<div class="empty">Sin facturas pendientes</div>'; return; }
+
+    el.innerHTML = rows.map(r => `
+      <div class="cobrar-cliente-row">
+        <div>
+          <div class="cobrar-cliente-name">${r.cliente}</div>
+          <div class="cobrar-cliente-empresa">${r.empresa}</div>
+        </div>
+        <div class="cobrar-chips">
+          ${r.vencidas > 0 ? `<span class="cobrar-chip vencida">${r.vencidas} vencida${r.vencidas>1?'s':''}</span>` : ''}
+          ${r.normales > 0 ? `<span class="cobrar-chip normal">${r.normales} pendiente${r.normales>1?'s':''}</span>` : ''}
+          <div class="cobrar-total" style="color:${r.montoVencido>0?'var(--red)':'var(--text)'}">${fmt(r.total)}</div>
+        </div>
+      </div>`).join('');
+  } catch(e) { document.getElementById(elId).innerHTML = '<div class="empty">Error al cargar</div>'; }
+}
+
+async function cargarTopClientes(desde, hasta, elId, labelId) {
+  try {
+    const empId = getEmpresaFiltro();
+    const data = await FacturasAPI.getFacturasPorCliente(empId, desde, hasta);
+    const agg = {};
+    (data||[]).forEach(r => {
+      const k = r.clientes?.nombre||'—';
+      if (!agg[k]) agg[k] = { cliente:k, empresa:r.empresas?.nombre||'—', total:0, cant:0 };
+      agg[k].total += Number(r.monto_total||0);
+      agg[k].cant++;
+    });
+    const top = Object.values(agg).sort((a,b)=>b.total-a.total).slice(0,7);
+    const maxV = top[0]?.total || 1;
+
+    if (labelId) setText(labelId, fmtF(desde) + ' – ' + fmtF(hasta));
+    const el = document.getElementById(elId);
+    if (!top.length) { el.innerHTML = '<div class="empty">Sin datos</div>'; return; }
+
+    el.innerHTML = top.map((r,i) => `
+      <div class="top-cli-row">
+        <div class="top-cli-num">${i+1}</div>
+        <div style="flex:1;min-width:0">
+          <div style="font-size:12px;font-weight:500;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${r.cliente}</div>
+          <div style="font-size:10px;color:var(--muted)">${r.empresa} · ${r.cant} fc</div>
+          <div class="top-cli-bar-wrap" style="margin-top:4px">
+            <div class="top-cli-bar" style="width:${Math.round((r.total/maxV)*100)}%"></div>
+          </div>
+        </div>
+        <div class="top-cli-monto">${fmt(r.total)}</div>
+      </div>`).join('');
+  } catch(e) { document.getElementById(elId).innerHTML = '<div class="empty">Error al cargar</div>'; }
+}
+
+async function cargarProyectos() {
+  try {
+    const empId = getEmpresaFiltro();
+    const filtros = { estados: ['activo', 'pausado'] };
+    if (empId) filtros.empresaId = empId;
+    const data = await ProyectosAPI.getProyectos(filtros);
+    setText('g-proy', (data||[]).length + '');
+    const el = document.getElementById('proy-lista');
+    if (!data.length) { el.innerHTML = '<div class="empty">Sin proyectos activos</div>'; return; }
+    el.innerHTML = `<div style="max-height:280px;overflow-y:auto">` + data.slice(0,10).map(p=>`
+      <div class="proy-row">
+        <div>
+          <div style="font-size:13px;font-weight:500">${p.nombre}</div>
+          <div style="font-size:11px;color:var(--muted)">${p.clientes?.nombre||'—'} · ${p.empresas?.nombre||'—'}</div>
+        </div>
+        <span class="estado ${p.estado}">${p.estado}</span>
+      </div>`).join('') + '</div>';
+  } catch(e) { document.getElementById('proy-lista').innerHTML = '<div class="empty">Error</div>'; }
+}
+
+// ─────────────────────────────────────────────────────────────
+// VISTA PERÍODO
+// ─────────────────────────────────────────────────────────────
+async function cargarPeriodo() {
+  const f = getFechas();
+  if (!f) return;
+  const { ini, fin } = f;
+
+  await Promise.all([
+    cargarKPIsPeriodo(ini, fin),
+    cargarBalanceDetalle(ini, fin),
+    cargarGraficoPeriodo(ini, fin),
+    cargarTopClientes(ini, fin, 'top-clientes-periodo', 'top-periodo-label'),
+    cargarCobrarPorCliente(ini, fin, 'cobrar-lista-periodo', 'p-cobrar-total'),
+  ]);
+}
+
+async function cargarKPIsPeriodo(ini, fin) {
+  try {
+    const empId = getEmpresaFiltro();
+    const mesIni = ini.substring(0,7), mesFin = fin.substring(0,7);
+
+    const [facData, cobData, egrData, sueldosData, impPagosData, impVarData, planesData] = await Promise.all([
+      FacturasAPI.getFacturas({empresaId:empId||undefined, excluirAnuladas:true, fechaDesde:ini, fechaHasta:fin}),
+      db.from('cobros').select('monto,empresa_id').gte('fecha',ini).lte('fecha',fin).then(r=>empId?(r.data||[]).filter(x=>x.empresa_id===empId):(r.data||[])).catch(()=>[]),
+      EgresosAPI.getEgresos({empresaId:empId||undefined, pagado:true, fechaDesde:ini, fechaHasta:fin}),
+      db.from('sueldos').select('monto_bruto,empresa_id').gte('periodo',mesIni).lte('periodo',mesFin).then(r=>empId?(r.data||[]).filter(x=>x.empresa_id===empId):(r.data||[])).catch(()=>[]),
+      db.from('pagos_impuestos').select('monto,empresa_id').gte('fecha_pago',ini).lte('fecha_pago',fin).then(r=>empId?(r.data||[]).filter(x=>x.empresa_id===empId):(r.data||[])).catch(()=>[]),
+      db.from('impuestos_varios').select('monto,empresa_id').eq('pagado',true).gte('fecha',ini).lte('fecha',fin).then(r=>empId?(r.data||[]).filter(x=>x.empresa_id===empId):(r.data||[])).catch(()=>[]),
+      db.from('planes_pago_afip').select('monto_cuota,empresa_id').eq('pagado',true).gte('periodo',mesIni).lte('periodo',mesFin).then(r=>empId?(r.data||[]).filter(x=>x.empresa_id===empId):(r.data||[])).catch(()=>[]),
+    ]);
+
+    const sum = (arr, k='monto') => (arr||[]).reduce((s,r)=>s+Number(r[k]||0),0);
+
+    const totalFac = sum(facData, 'monto_total');
+    const totalCob = sum(cobData, 'monto');
+    const totalEgr = sum(egrData, 'monto');
+    const totalSue = sum(sueldosData, 'monto_bruto');
+    const totalImp = sum(impPagosData, 'monto') + sum(impVarData, 'monto') + sum(planesData, 'monto_cuota');
+    const totalEgrTotal = totalEgr + totalSue + totalImp;
+    const resultado = totalCob - totalEgrTotal;
+
+    setText('p-fac', fmt(totalFac));
+    setText('p-fac-sub', (facData||[]).length + ' facturas emitidas');
+    setText('p-cob', fmt(totalCob));
+    setText('p-egr-total', fmt(totalEgrTotal));
+    const subParts = [];
+    if(totalEgr>0) subParts.push('Compras '+fmt(totalEgr));
+    if(totalSue>0) subParts.push('Sueldos '+fmt(totalSue));
+    if(totalImp>0) subParts.push('Imp. '+fmt(totalImp));
+    setText('p-egr-total-sub', subParts.join(' · '));
+
+    const resEl = document.getElementById('p-resultado');
+    resEl.textContent = fmt(Math.abs(resultado));
+    resEl.className = 'kpi-value ' + (resultado >= 0 ? 'pos' : 'neg');
+
+    // Barra resultado
+    const resMontoEl = document.getElementById('p-res-monto');
+    resMontoEl.textContent = fmt(Math.abs(resultado));
+    resMontoEl.style.color = resultado >= 0 ? 'var(--green)' : 'var(--red)';
+    setText('p-res-label', resultado >= 0 ? '↑ Ingreso neto del período' : '↓ Pérdida neta del período');
+
+    const maxR = Math.max(totalCob, totalEgrTotal, 1);
+    document.getElementById('bar-ing').style.width = Math.round((totalCob/maxR)*100) + '%';
+    document.getElementById('bar-egr').style.width = Math.round((totalEgrTotal/maxR)*100) + '%';
+    setText('bar-label-ing', 'Ingresos ' + fmt(totalCob));
+    setText('bar-label-egr', 'Egresos ' + fmt(totalEgrTotal));
+
+    // Guardar para el gráfico
+    window._periodoBalance = { totalCob, totalEgr, totalSue, totalImp };
+
+  } catch(e) { manejarError(e, 'KPIs período'); }
+}
+
+async function cargarBalanceDetalle(ini, fin) {
+  try {
+    const empId = getEmpresaFiltro();
+    const mesIni = ini.substring(0,7), mesFin = fin.substring(0,7);
+
+    // Ingresos: cobros agrupados por tipo de comprobante / cliente
+    const [cobros, facPeriodo] = await Promise.all([
+      db.from('cobros').select('monto,medio,empresa_id').gte('fecha',ini).lte('fecha',fin).then(r=>r.data||[]).catch(()=>[]),
+      FacturasAPI.getFacturas({empresaId:empId||undefined, excluirAnuladas:true, fechaDesde:ini, fechaHasta:fin}),
+    ]);
+
+    const cobrosFilt = empId ? cobros.filter(r=>r.empresa_id===empId) : cobros;
+
+    // Egresos por categoría
+    const [egresos, sueldos, impPagos, impVarios, planes] = await Promise.all([
+      EgresosAPI.getEgresos({empresaId:empId||undefined, pagado:true, fechaDesde:ini, fechaHasta:fin}),
+      db.from('sueldos').select('monto_bruto,tipo,empresa_id').gte('periodo',mesIni).lte('periodo',mesFin).then(r=>empId?(r.data||[]).filter(x=>x.empresa_id===empId):(r.data||[])).catch(()=>[]),
+      db.from('pagos_impuestos').select('monto,tipo,empresa_id').gte('fecha_pago',ini).lte('fecha_pago',fin).then(r=>empId?(r.data||[]).filter(x=>x.empresa_id===empId):(r.data||[])).catch(()=>[]),
+      db.from('impuestos_varios').select('monto,tipo,empresa_id').eq('pagado',true).gte('fecha',ini).lte('fecha',fin).then(r=>empId?(r.data||[]).filter(x=>x.empresa_id===empId):(r.data||[])).catch(()=>[]),
+      db.from('planes_pago_afip').select('monto_cuota,empresa_id').eq('pagado',true).gte('periodo',mesIni).lte('periodo',mesFin).then(r=>empId?(r.data||[]).filter(x=>x.empresa_id===empId):(r.data||[])).catch(()=>[]),
+    ]);
+
+    const sum = (arr, k='monto') => (arr||[]).reduce((s,r)=>s+Number(r[k]||0), 0);
+
+    // ── Ingresos ──
+    const totalCob = sum(cobrosFilt);
+    const totalFac = sum(facPeriodo, 'monto_total');
+    const ingTotal = totalCob > 0 ? totalCob : totalFac;
+
+    // Desglose cobros por medio
+    const porMedio = {};
+    cobrosFilt.forEach(r=>{ const k=r.medio||'Otros'; porMedio[k]=(porMedio[k]||0)+Number(r.monto||0); });
+    const ingRows = Object.entries(porMedio).sort((a,b)=>b[1]-a[1]);
+
+    const MEDIO_COLORS = { transferencia:'var(--blue)', cheque:'var(--teal)', efectivo:'var(--green)', debito:'var(--purple)' };
+    document.getElementById('b-ing-total').textContent = fmt(ingTotal);
+    document.getElementById('b-ing-rows').innerHTML = `
+      <div class="balance-row">
+        <div class="balance-row-label">
+          <div class="balance-row-dot" style="background:var(--blue)"></div>
+          Facturas emitidas del período
+        </div>
+        <div><span class="balance-row-value">${fmt(totalFac)}</span><span class="balance-row-pct">${(facPeriodo||[]).length} fc</span></div>
+      </div>
+      <div class="balance-row">
+        <div class="balance-row-label">
+          <div class="balance-row-dot" style="background:var(--green)"></div>
+          Cobros registrados
+        </div>
+        <div><span class="balance-row-value" style="color:var(--green)">${fmt(totalCob)}</span></div>
+      </div>
+      ${ingRows.map(([medio,monto])=>`
+      <div class="balance-row" style="padding-left:32px">
+        <div class="balance-row-label" style="color:var(--muted)">↳ ${medio}</div>
+        <div><span class="balance-row-value" style="font-size:12px">${fmt(monto)}</span></div>
+      </div>`).join('')}`;
+
+    // ── Egresos ──
+    const totalEgr = sum(egresos, 'monto');
+    const totalSue = sum(sueldos, 'monto_bruto');
+    const totalImpP = sum(impPagos);
+    const totalImpV = sum(impVarios);
+    const totalPlan = sum(planes, 'monto_cuota');
+    const totalImp = totalImpP + totalImpV + totalPlan;
+    const egrTotal = totalEgr + totalSue + totalImp;
+
+    // Agrupar impuestos por tipo
+    const impPorTipo = {};
+    [...impPagos, ...impVarios].forEach(r=>{ const k=r.tipo||'otro'; impPorTipo[k]=(impPorTipo[k]||0)+Number(r.monto||0); });
+    if (totalPlan > 0) impPorTipo['planes_afip'] = totalPlan;
+
+    const IMP_LABELS = { iva:'IVA', iibb:'IIBB', f931:'F931', autonomos:'Autónomos', ganancias_anticipo:'Ant.Ganancias', cheque:'Imp.Cheque', anticipo_ganancias:'Ant.Ganancias', sindicato:'Sindicato', ieric:'IERIC', uocra:'UOCRA', sunsal:'SUNSAL', inssjp:'INSSJP', obra_social:'Obra social', art:'ART', seguro_vida:'Seg.vida', planes_afip:'Planes AFIP', otro:'Otros' };
+
+    document.getElementById('b-egr-total').textContent = fmt(egrTotal);
+    document.getElementById('b-egr-rows').innerHTML = `
+      ${totalEgr > 0 ? `
+      <div class="balance-row">
+        <div class="balance-row-label"><div class="balance-row-dot" style="background:var(--orange)"></div>Compras / Proveedores</div>
+        <div><span class="balance-row-value" style="color:var(--orange)">${fmt(totalEgr)}</span><span class="balance-row-pct">${(egresos||[]).length} comp.</span></div>
+      </div>` : ''}
+      ${totalSue > 0 ? `
+      <div class="balance-row">
+        <div class="balance-row-label"><div class="balance-row-dot" style="background:var(--purple)"></div>Sueldos</div>
+        <div><span class="balance-row-value" style="color:var(--purple)">${fmt(totalSue)}</span><span class="balance-row-pct">${(sueldos||[]).length} reg.</span></div>
+      </div>` : ''}
+      ${totalImp > 0 ? `
+      <div class="balance-row">
+        <div class="balance-row-label"><div class="balance-row-dot" style="background:var(--red)"></div>Impuestos y cargas</div>
+        <div><span class="balance-row-value" style="color:var(--red)">${fmt(totalImp)}</span></div>
+      </div>
+      ${Object.entries(impPorTipo).sort((a,b)=>b[1]-a[1]).map(([tipo,monto])=>`
+      <div class="balance-row" style="padding-left:32px">
+        <div class="balance-row-label" style="color:var(--muted)">↳ ${IMP_LABELS[tipo]||tipo}</div>
+        <div><span class="balance-row-value" style="font-size:12px">${fmt(monto)}</span></div>
+      </div>`).join('')}` : ''}
+      ${egrTotal === 0 ? '<div class="empty">Sin egresos registrados en el período</div>' : ''}`;
+
+  } catch(e) {
+    document.getElementById('b-ing-rows').innerHTML = '<div class="empty">Error al cargar</div>';
+    document.getElementById('b-egr-rows').innerHTML = '<div class="empty">Error al cargar</div>';
+  }
+}
+
+async function cargarGraficoPeriodo(ini, fin) {
+  try {
+    const empId = getEmpresaFiltro();
+    const mesIni = ini.substring(0,7), mesFin = fin.substring(0,7);
+
+    // Generar lista de meses del período
+    const meses = [];
+    let cur = new Date(ini.substring(0,7)+'-01T12:00:00');
+    const finDate = new Date(fin.substring(0,7)+'-01T12:00:00');
+    while (cur <= finDate) {
+      meses.push(cur.toISOString().substring(0,7));
+      cur.setMonth(cur.getMonth()+1);
+    }
+    if (meses.length > 12) { // Si son muchos meses, agrupar por trimestre
+      document.getElementById('chart-periodo').innerHTML = '<div class="empty" style="padding:20px">Rango muy amplio — usá el balance de arriba</div>';
+      return;
+    }
+
+    const [facData, cobData, egrData, sueldosData, impData, planesData] = await Promise.all([
+      FacturasAPI.getFacturaMensual(empId, ini, fin),
+      db.from('cobros').select('monto,fecha,empresa_id').gte('fecha',ini).lte('fecha',fin).then(r=>empId?(r.data||[]).filter(x=>x.empresa_id===empId):(r.data||[])).catch(()=>[]),
+      db.from('egresos').select('monto,fecha_egreso,empresa_id').eq('pagado',true).gte('fecha_egreso',ini).lte('fecha_egreso',fin).then(r=>empId?(r.data||[]).filter(x=>x.empresa_id===empId):(r.data||[])).catch(()=>[]),
+      db.from('sueldos').select('monto_bruto,periodo,empresa_id').gte('periodo',mesIni).lte('periodo',mesFin).then(r=>empId?(r.data||[]).filter(x=>x.empresa_id===empId):(r.data||[])).catch(()=>[]),
+      db.from('pagos_impuestos').select('monto,fecha_pago,empresa_id').gte('fecha_pago',ini).lte('fecha_pago',fin).then(r=>empId?(r.data||[]).filter(x=>x.empresa_id===empId):(r.data||[])).catch(()=>[]),
+      db.from('planes_pago_afip').select('monto_cuota,periodo,empresa_id').eq('pagado',true).gte('periodo',mesIni).lte('periodo',mesFin).then(r=>empId?(r.data||[]).filter(x=>x.empresa_id===empId):(r.data||[])).catch(()=>[]),
+    ]);
+
+    const porMes = {};
+    meses.forEach(m => { porMes[m] = { ing:0, egr:0 }; });
+
+    (facData||[]).forEach(r=>{ const m=r.fecha_emision?.substring(0,7); if(porMes[m]) porMes[m].ing+=Number(r.monto_total||0); });
+    (cobData||[]).forEach(r=>{ const m=r.fecha?.substring(0,7); if(porMes[m]) porMes[m].ing=Math.max(porMes[m].ing, Number(r.monto||0)); });
+    (egrData||[]).forEach(r=>{ const m=r.fecha_egreso?.substring(0,7); if(porMes[m]) porMes[m].egr+=Number(r.monto||0); });
+    (sueldosData||[]).forEach(r=>{ const m=r.periodo?.substring(0,7); if(porMes[m]) porMes[m].egr+=Number(r.monto_bruto||0); });
+    (impData||[]).forEach(r=>{ const m=r.fecha_pago?.substring(0,7); if(porMes[m]) porMes[m].egr+=Number(r.monto||0); });
+    (planesData||[]).forEach(r=>{ const m=r.periodo?.substring(0,7); if(porMes[m]) porMes[m].egr+=Number(r.monto_cuota||0); });
+
+    const maxV = Math.max(...Object.values(porMes).map(v=>Math.max(v.ing,v.egr)), 1);
+    const H = 130;
+
+    document.getElementById('chart-periodo').innerHTML = meses.map(m=>{
+      const d = porMes[m];
+      const hIng = Math.round((d.ing/maxV)*H);
+      const hEgr = Math.round((d.egr/maxV)*H);
+      const label = new Date(m+'-01T12:00:00').toLocaleDateString('es-AR',{month:'short'});
+      return `<div class="chart-col">
+        <div style="display:flex;gap:2px;align-items:flex-end;height:${H}px;width:100%">
+          ${hIng>0?`<div style="flex:1;height:${hIng}px;background:var(--green);border-radius:3px 3px 0 0;min-height:2px" title="Ing: ${fmt(d.ing)}"></div>`:'<div style="flex:1"></div>'}
+          ${hEgr>0?`<div style="flex:1;height:${hEgr}px;background:var(--red);opacity:0.75;border-radius:3px 3px 0 0;min-height:2px" title="Egr: ${fmt(d.egr)}"></div>`:'<div style="flex:1"></div>'}
+        </div>
+        <div class="chart-mes-label">${label}</div>
+      </div>`;
+    }).join('');
+  } catch(e) { document.getElementById('chart-periodo').innerHTML = '<div class="empty">Error al cargar</div>'; }
+}
+
+// ─────────────────────────────────────────────────────────────
+// ALERTAS
+// ─────────────────────────────────────────────────────────────
 async function cargarAlertas() {
   const alertas = [];
-  const hoyStr = new Date().toISOString().split('T')[0];
-  const hace30 = new Date(); hace30.setDate(hace30.getDate()-30);
-  const hace60 = new Date(); hace60.setDate(hace60.getDate()-60);
-  const hace30Str = hace30.toISOString().split('T')[0];
-  const hace60Str = hace60.toISOString().split('T')[0];
+  const hoyStr = hoy();
 
-  // 1. Facturas vencidas hace más de 30 días
-  const facVenc = await FacturasAPI.getFacturasVencidasDetalle(50);
-  if(facVenc?.length) {
-    const total = facVenc.reduce((s,r)=>s+Number(r.monto_total||0),0);
-    alertas.push({
-      nivel:'rojo',
-      icono:'💰',
-      titulo:`${facVenc.length} factura(s) vencidas hace más de 30 días`,
-      detalle:`Total: ${fmt(total)} — Clientes: ${[...new Set(facVenc.map(r=>r.clientes?.nombre))].slice(0,3).join(', ')}`,
-      link:'facturas.html'
-    });
-  }
+  try {
+    const [facVenc, egrVenc, remPend, cai, docsVenc, docsProx] = await Promise.all([
+      FacturasAPI.getFacturasVencidasDetalle(50),
+      EgresosAPI.getEgresosVencidosDashboard(10),
+      RemitosAPI.getRemitoPendienteDashboard(10),
+      RemitosAPI.getTalonarioDashboard(),
+      ClientesAPI.getDocsClientesProxVencer(0).catch(()=>[]),
+      ClientesAPI.getDocsClientesProxVencer(30).catch(()=>[]),
+    ]);
 
-  // 2. Proyectos con horas reales > horas estimadas
-  const proyectos = await ProyectosAPI.getProyectos({estados:['activo','pausado']});
-  if(proyectos?.length) {
-    for(const p of proyectos) {
-      const hsEst=(p.hs_ayudante||0)+(p.hs_oficial||0)+(p.hs_oficial_esp||0)+(p.hs_supervisor||0)+(p.hs_higiene||0);
-      if(hsEst<=0) continue;
-      const horas = await ProyectosAPI.getImputacionHoras({proyectoId:p.id});
-      const hsReal=(horas||[]).reduce((s,h)=>s+(Number(h.horas||0)*Number(h.cantidad_personas||1)),0);
-      if(hsReal > hsEst*0.9) {
-        const pct = Math.round(hsReal/hsEst*100);
-        alertas.push({
-          nivel: pct>=100?'rojo':'naranja',
-          icono:'⏱',
-          titulo:`Proyecto "${p.nombre}" — ${pct>=100?'EXCEDIÓ':'está al '+pct+'% de'} las horas estimadas`,
-          detalle:`Estimadas: ${hsEst}h | Reales: ${hsReal.toFixed(1)}h`,
-          link:'proyectos.html'
-        });
-      }
+    if (facVenc?.length) {
+      const total = facVenc.reduce((s,r)=>s+Number(r.monto_total||0),0);
+      alertas.push({ nivel:'rojo', icono:'💰', titulo:`${facVenc.length} factura${facVenc.length>1?'s':''} vencidas sin cobrar`, detalle:`Total: ${fmt(total)}`, link:'facturas.html' });
     }
-  }
-
-  // 3. Remitos pendientes de facturar hace más de 60 días
-  const remPend = await RemitosAPI.getRemitoPendienteDashboard(10);
-  if(remPend?.length) {
-    alertas.push({
-      nivel:'naranja',
-      icono:'📋',
-      titulo:`${remPend.length} remito(s) pendientes de facturar hace más de 60 días`,
-      detalle:`Remitos: ${remPend.map(r=>r.numero_formateado).slice(0,4).join(', ')}`,
-      link:'remitos.html'
+    if (egrVenc?.length) {
+      const total = egrVenc.reduce((s,r)=>s+Number(r.monto||0),0);
+      alertas.push({ nivel:'naranja', icono:'💳', titulo:`${egrVenc.length} egreso${egrVenc.length>1?'s':''} sin pagar vencidos`, detalle:`Total: ${fmt(total)}`, link:'compras.html' });
+    }
+    if (remPend?.length) {
+      alertas.push({ nivel:'naranja', icono:'📋', titulo:`${remPend.length} remito${remPend.length>1?'s':''} pendientes de facturar`, detalle:remPend.map(r=>r.numero_formateado).slice(0,4).join(', '), link:'remitos.html' });
+    }
+    (cai||[]).forEach(t => {
+      const restantes = t.nro_hasta - t.nro_actual + 1;
+      const diasVto = Math.floor((new Date(t.fecha_vencimiento)-new Date())/86400000);
+      if (restantes < 100) alertas.push({ nivel:'naranja', icono:'🔢', titulo:`CAI ${t.empresas?.nombre} — quedan ${restantes} remitos`, detalle:`Vence: ${fmtF(t.fecha_vencimiento)}`, link:'remitos.html' });
+      else if (diasVto < 30) alertas.push({ nivel:'naranja', icono:'📅', titulo:`CAI ${t.empresas?.nombre} vence en ${diasVto} días`, detalle:'', link:'remitos.html' });
     });
-  }
+    if (docsVenc?.length) alertas.push({ nivel:'rojo', icono:'📋', titulo:`${docsVenc.length} doc${docsVenc.length>1?'s':''} de clientes VENCIDOS`, detalle:docsVenc.slice(0,3).map(d=>`${d.clientes?.nombre||'—'}: ${d.nombre}`).join(' · '), link:'clientes.html' });
+    if (docsProx?.length) alertas.push({ nivel:'naranja', icono:'📅', titulo:`${docsProx.length} doc${docsProx.length>1?'s':''} de clientes vencen en 30 días`, detalle:docsProx.slice(0,3).map(d=>d.clientes?.nombre||'—').join(', '), link:'clientes.html' });
+  } catch(e) {}
 
-  // 4. CAI de remitos próximo a vencer (menos de 100 remitos)
-  const cai = await RemitosAPI.getTalonarioDashboard();
-  (cai||[]).forEach(t => {
-    const restantes = t.nro_hasta - t.nro_actual + 1;
-    const diasVto = Math.floor((new Date(t.fecha_vencimiento)-new Date())/86400000);
-    if(restantes < 100) alertas.push({
-      nivel:'naranja',
-      icono:'🔢',
-      titulo:`CAI ${t.empresas?.nombre} — quedan solo ${restantes} remitos disponibles`,
-      detalle:`Vence: ${new Date(t.fecha_vencimiento).toLocaleDateString('es-AR')}`,
-      link:'remitos.html'
-    });
-    else if(diasVto < 30) alertas.push({
-      nivel:'naranja',
-      icono:'📅',
-      titulo:`CAI ${t.empresas?.nombre} vence en ${diasVto} días`,
-      detalle:`CAI: ${t.cai}`,
-      link:'remitos.html'
-    });
-  });
-
-  // 5. Egresos sin pagar hace más de 60 días
-  const egrVenc = await EgresosAPI.getEgresosVencidosDashboard(10);
-  if(egrVenc?.length) {
-    const total = egrVenc.reduce((s,r)=>s+Number(r.monto||0),0);
-    alertas.push({
-      nivel:'naranja',
-      icono:'💳',
-      titulo:`${egrVenc.length} egreso(s) sin pagar hace más de 60 días`,
-      detalle:`Total: ${fmt(total)}`,
-      link:'compras.html'
-    });
-  }
-
-  // 6. Documentacion requerida por clientes proxima a vencer
-  const hoyDocStr = new Date().toISOString().split('T')[0];
-  const en15 = new Date(); en15.setDate(en15.getDate()+15);
-  const en15Str = en15.toISOString().split('T')[0];
-  const en30Str2 = new Date(Date.now()+30*86400000).toISOString().split('T')[0];
-
-  let docsVenc=[]; try{ docsVenc=await ClientesAPI.getDocsClientesProxVencer(0); }catch(e){}
-  if(docsVenc?.length){
-    alertas.push({
-      nivel:'rojo',
-      icono:'📋',
-      titulo:`${docsVenc.length} doc${docsVenc.length>1?'s':''} de clientes VENCIDO${docsVenc.length>1?'S':''}`,
-      detalle:docsVenc.slice(0,3).map(d=>`${d.clientes?.nombre||'—'}: ${d.nombre}`).join(' · ')+(docsVenc.length>3?` +${docsVenc.length-3} mas`:''),
-      link:'clientes.html'
-    });
-  }
-
-  let docsProx=[]; try{ docsProx=await ClientesAPI.getDocsClientesProxVencer(30); }catch(e){}
-  if(docsProx?.length){
-    alertas.push({
-      nivel:'naranja',
-      icono:'📅',
-      titulo:`${docsProx.length} doc${docsProx.length>1?'s':''} de clientes vence${docsProx.length>1?'n':''} en 30 dias`,
-      detalle:docsProx.slice(0,3).map(d=>{
-        const dias=Math.ceil((new Date(d.fecha_vencimiento+'T12:00:00')-new Date())/(1000*60*60*24));
-        return `${d.clientes?.nombre||'—'}: ${d.nombre} (${dias}d)`;
-      }).join(' · ')+(docsProx.length>3?` +${docsProx.length-3} mas`:''),
-      link:'clientes.html'
-    });
-  }
-
-  // Mostrar alertas
   const panel = document.getElementById('panel-alertas');
-  const lista = document.getElementById('alertas-lista');
-  const count = document.getElementById('alertas-count');
-  if(!alertas.length) { panel.style.display='none'; return; }
-  panel.style.display='block';
-  count.textContent = alertas.length + ' alerta(s)';
-  const colores = {rojo:'var(--red)',naranja:'var(--orange)',verde:'var(--green)'};
-  const bgColores = {rojo:'rgba(239,68,68,0.06)',naranja:'rgba(245,158,11,0.06)',verde:'rgba(16,185,129,0.06)'};
+  const lista  = document.getElementById('alertas-lista');
+  const count  = document.getElementById('alertas-count');
+  if (!alertas.length) { panel.style.display = 'none'; return; }
+  panel.style.display = '';
+  count.textContent = alertas.length + ' alerta' + (alertas.length>1?'s':'');
+  const C = { rojo:'var(--red)', naranja:'var(--orange)' };
+  const BG = { rojo:'rgba(239,68,68,0.04)', naranja:'rgba(245,158,11,0.04)' };
   lista.innerHTML = alertas.map(a=>`
-    <a href="${a.link}" style="display:flex;align-items:flex-start;gap:14px;padding:12px 20px;border-bottom:1px solid var(--border);text-decoration:none;transition:background 0.1s;background:${bgColores[a.nivel]}" onmouseover="this.style.opacity='0.8'" onmouseout="this.style.opacity='1'">
-      <span style="font-size:18px;margin-top:1px">${a.icono}</span>
-      <div>
-        <div style="font-size:13px;font-weight:500;color:${colores[a.nivel]}">${a.titulo}</div>
-        <div style="font-size:12px;color:var(--muted);margin-top:2px">${a.detalle}</div>
+    <a href="${a.link}" class="alerta-row" style="background:${BG[a.nivel]}">
+      <span style="font-size:16px">${a.icono}</span>
+      <div style="flex:1;min-width:0">
+        <div style="font-size:12px;font-weight:500;color:${C[a.nivel]}">${a.titulo}</div>
+        ${a.detalle?`<div style="font-size:11px;color:var(--muted);margin-top:1px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${a.detalle}</div>`:''}
       </div>
-      <svg style="margin-left:auto;flex-shrink:0;color:var(--muted)" width="16" height="16" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/></svg>
+      <svg style="color:var(--muted);flex-shrink:0" width="14" height="14" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/></svg>
     </a>`).join('');
 }
 
-// logout() → ahora en ERP.logout() (erp-sidebar.js)
+// ─── Helpers ─────────────────────────────────────────────────
+function setText(id, val) { const el = document.getElementById(id); if(el) el.textContent = val; }
+
+// ─── Init ─────────────────────────────────────────────────────
+async function init() {
+  const usuario = await ERP.initLayout('dashboard');
+  if (!usuario) return;
+
+  const hoyD = new Date();
+  document.getElementById('fecha-texto').textContent = hoyD.toLocaleDateString('es-AR',{weekday:'long',day:'numeric',month:'long',year:'numeric'});
+  if (document.getElementById('fecha-mobile')) document.getElementById('fecha-mobile').textContent = hoyD.toLocaleDateString('es-AR');
+  document.getElementById('top-anio-label').textContent = 'Año ' + hoyD.getFullYear();
+
+  // Defaults de rango custom
+  const firstDay = `${hoyD.getFullYear()}-${String(hoyD.getMonth()+1).padStart(2,'0')}-01`;
+  const lastDay  = `${hoyD.getFullYear()}-${String(hoyD.getMonth()+1).padStart(2,'0')}-${String(new Date(hoyD.getFullYear(),hoyD.getMonth()+1,0).getDate()).padStart(2,'0')}`;
+  document.getElementById('f-desde').value = firstDay;
+  document.getElementById('f-hasta').value = lastDay;
+
+  recargar();
+}
 
 init();
 </script>

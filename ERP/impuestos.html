@@ -27,7 +27,17 @@
   .kpi-card.red::before{background:var(--red);}
   .kpi-card.orange::before{background:var(--orange);}
   .kpi-value{font-size:18px;font-weight:600;font-family:'DM Mono',monospace;}
-  @media(max-width:768px){.main{margin-left:0;padding:16px;}.kpi-row{grid-template-columns:repeat(2,1fr);}  }
+  .kpi-label{font-size:11px;color:var(--muted);margin-bottom:4px;text-transform:uppercase;letter-spacing:0.6px;}
+  .dash-resumen{background:var(--bg2);border:1px solid var(--border);border-radius:12px;padding:18px 20px;margin-bottom:20px;}
+  .dash-resumen-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;}
+  .dash-resumen-header h3{font-size:13px;font-weight:500;color:var(--muted);text-transform:uppercase;letter-spacing:0.8px;}
+  .dash-total-mes{font-size:24px;font-weight:700;font-family:'DM Mono',monospace;color:var(--red);}
+  .dash-breakdown{display:flex;gap:8px;flex-wrap:wrap;margin-top:12px;padding-top:12px;border-top:1px solid var(--border);}
+  .dash-breakdown-item{background:var(--bg3);border:1px solid var(--border);border-radius:8px;padding:8px 14px;font-size:12px;display:flex;flex-direction:column;gap:2px;min-width:130px;}
+  .dash-breakdown-item .bk-label{font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:0.6px;}
+  .dash-breakdown-item .bk-value{font-family:'DM Mono',monospace;font-size:13px;font-weight:600;}
+  .dash-breakdown-item .bk-count{font-size:10px;color:var(--muted);}
+  @media(max-width:768px){.main{margin-left:0;padding:16px;}.kpi-row{grid-template-columns:repeat(2,1fr);}.dash-breakdown{gap:6px;}.dash-breakdown-item{min-width:calc(50% - 3px);}  }
 </style>
 </head>
 <body>
@@ -65,6 +75,8 @@
       <option value="12">Diciembre</option>
     </select>
   </div>
+
+  <div id="dash-impuestos-mes" style="display:none"></div>
 
   <div class="tabs">
     <button class="tab active" onclick="cambiarTab('iva',this)">Posición IVA</button>
@@ -408,12 +420,143 @@ function getPeriodo(){
 }
 
 function recargar(){
+  cargarDashImpuestosMes();
   if(tabActual==='iva') cargarIVA();
   else if(tabActual==='iibb') cargarIIBB();
   else if(tabActual==='retenciones') cargarRetenciones();
   else if(tabActual==='varios') cargarVarios();
   else if(tabActual==='planes') cargarPlanes();
   else cargarPagos();
+}
+
+// ===== DASHBOARD CONSOLIDADO — TOTAL PAGADO EN EL MES =====
+async function cargarDashImpuestosMes(){
+  const el = document.getElementById('dash-impuestos-mes');
+  if(!el) return;
+  const empId = document.getElementById('f-empresa').value;
+  const {tipo, periodo, label} = getPeriodo();
+
+  // Solo mostrar en vista mensual (en vista anual no tiene sentido el "mes")
+  if(tipo !== 'mes'){
+    el.style.display = 'none';
+    return;
+  }
+
+  el.style.display = '';
+  el.innerHTML = '<div style="height:72px;display:flex;align-items:center;gap:8px;color:var(--muted);font-size:13px"><div class="spinner"></div>Calculando total del mes...</div>';
+
+  try {
+    // Traer las 3 fuentes en paralelo
+    const [pagosRes, variosRes, planesRes] = await Promise.all([
+      db.from('pagos_impuestos')
+        .select('tipo,monto,periodo')
+        .eq('empresa_id', empId)
+        .eq('periodo', periodo),
+      db.from('impuestos_varios')
+        .select('tipo,descripcion,monto,pagado')
+        .eq('empresa_id', empId)
+        .eq('periodo', periodo)
+        .eq('pagado', true),
+      db.from('planes_pago_afip')
+        .select('tipo,monto_cuota,descripcion,nro_plan,pagado,periodo')
+        .eq('empresa_id', empId)
+        .eq('periodo', periodo)
+        .eq('pagado', true)
+        .then(r => r)  // captura incluso si tabla no existe
+        .catch(() => ({ data: [] })),
+    ]);
+
+    const pagos   = pagosRes.data   || [];
+    const varios  = variosRes.data  || [];
+    const planes  = planesRes.data  || [];
+
+    const totalPagos  = pagos.reduce((s,r)=>s+Number(r.monto||0), 0);
+    const totalVarios = varios.reduce((s,r)=>s+Number(r.monto||0), 0);
+    const totalPlanes = planes.reduce((s,r)=>s+Number(r.monto_cuota||0), 0);
+    const totalMes    = totalPagos + totalVarios + totalPlanes;
+
+    // Desglose por tipo dentro de pagos AFIP
+    const porTipoPagos = {};
+    pagos.forEach(r=>{ porTipoPagos[r.tipo]=(porTipoPagos[r.tipo]||0)+Number(r.monto||0); });
+
+    const LABELS_TIPO = {
+      iva:'IVA', iibb:'IIBB', f931:'F931', autonomos:'Autónomos',
+      ganancias_anticipo:'Ant. Ganancias', ganancias_anual:'Ganancias anual',
+      cheque:'Imp. Cheque', otro:'Otro pago AFIP',
+    };
+    const VARIOS_LABELS_MINI = {
+      anticipo_ganancias:'Ant. Ganancias', sindicato:'Sindicato', ieric:'IERIC',
+      autonomo_gerente:'Autónomo', uocra:'UOCRA', sunsal:'SUNSAL',
+      inssjp:'INSSJP/PAMI', obra_social:'Obra social', art:'ART',
+      seguro_vida:'Seg. vida', otro:'Varios',
+    };
+
+    // Agrupar varios por tipo
+    const porTipoVarios = {};
+    varios.forEach(r=>{ porTipoVarios[r.tipo]=(porTipoVarios[r.tipo]||0)+Number(r.monto||0); });
+
+    // Generar chips de desglose
+    const chips = [];
+
+    // Chips de pagos AFIP
+    Object.entries(porTipoPagos).forEach(([tipo, monto])=>{
+      chips.push({ label: LABELS_TIPO[tipo]||tipo, value: monto, count: null, color:'var(--blue)' });
+    });
+
+    // Chips de varios
+    Object.entries(porTipoVarios).forEach(([tipo, monto])=>{
+      const label = VARIOS_LABELS_MINI[tipo]||tipo;
+      // Si ya existe el mismo label, fusionar
+      const exist = chips.find(c=>c.label===label);
+      if(exist) exist.value += monto;
+      else chips.push({ label, value: monto, count: null, color:'var(--orange)' });
+    });
+
+    // Chip de planes de pago
+    if(totalPlanes > 0){
+      chips.push({ label:`Planes AFIP (${planes.length} cuota${planes.length!==1?'s':''})`, value: totalPlanes, count: null, color:'var(--purple)' });
+    }
+
+    el.innerHTML = `
+      <div class="dash-resumen">
+        <div class="dash-resumen-header">
+          <h3>Total impuestos pagados — ${label}</h3>
+          <div style="display:flex;align-items:baseline;gap:10px">
+            <div class="dash-total-mes">${fmt(totalMes)}</div>
+            ${totalMes===0 ? '<span style="font-size:11px;color:var(--muted)">Sin pagos registrados</span>' : ''}
+          </div>
+        </div>
+        <div style="display:flex;gap:20px;flex-wrap:wrap">
+          <div style="display:flex;flex-direction:column;gap:2px">
+            <div style="font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:0.6px">Pagos AFIP</div>
+            <div style="font-family:'DM Mono',monospace;font-size:14px;font-weight:600;color:var(--blue)">${fmt(totalPagos)}</div>
+            <div style="font-size:10px;color:var(--muted)">${pagos.length} registro${pagos.length!==1?'s':''}</div>
+          </div>
+          <div style="width:1px;background:var(--border);margin:2px 0"></div>
+          <div style="display:flex;flex-direction:column;gap:2px">
+            <div style="font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:0.6px">Imp. varios</div>
+            <div style="font-family:'DM Mono',monospace;font-size:14px;font-weight:600;color:var(--orange)">${fmt(totalVarios)}</div>
+            <div style="font-size:10px;color:var(--muted)">${varios.length} registro${varios.length!==1?'s':''}</div>
+          </div>
+          <div style="width:1px;background:var(--border);margin:2px 0"></div>
+          <div style="display:flex;flex-direction:column;gap:2px">
+            <div style="font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:0.6px">Planes AFIP</div>
+            <div style="font-family:'DM Mono',monospace;font-size:14px;font-weight:600;color:var(--purple)">${fmt(totalPlanes)}</div>
+            <div style="font-size:10px;color:var(--muted)">${planes.length} cuota${planes.length!==1?'s':''}</div>
+          </div>
+        </div>
+        ${chips.length ? `
+        <div class="dash-breakdown">
+          ${chips.map(c=>`
+            <div class="dash-breakdown-item">
+              <span class="bk-label">${c.label}</span>
+              <span class="bk-value" style="color:${c.color}">${fmt(c.value)}</span>
+            </div>`).join('')}
+        </div>` : ''}
+      </div>`;
+  } catch(e) {
+    el.style.display = 'none';
+  }
 }
 
 // ===== POSICIÓN IVA =====
