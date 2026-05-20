@@ -391,8 +391,9 @@
         <div class="kpi-sub" id="p-fac-sub"></div>
       </div>
       <div class="kpi-card green">
-        <div class="kpi-label">Cobrado</div>
+        <div class="kpi-label">Cobrado (caja)</div>
         <div class="kpi-value" id="p-cob">—</div>
+        <div class="kpi-sub">De lo facturado</div>
       </div>
       <div class="kpi-card red">
         <div class="kpi-label">Total egresos</div>
@@ -1004,11 +1005,12 @@ async function cargarKPIsPeriodo(ini, fin) {
     const totalSue  = sumArr(sueldosData,  'monto_bruto');
     const totalImp  = sumArr(pagosImpData, 'monto') + sumArr(impVarData, 'monto') + sumArr(planesData, 'monto_cuota');
     const totalEgrT = totalEgr + totalSue + totalImp;
-    const resultado = totalCob - totalEgrT;
+    // Resultado = facturado del período vs total egresos (no cobros — evita duplicar)
+    const resultado = totalFac - totalEgrT;
 
     setText('p-fac',      fmt(totalFac));
     setText('p-fac-sub',  (facData||[]).length + ' facturas emitidas');
-    setText('p-cob',      fmt(totalCob));
+    setText('p-cob',      fmt(totalCob));  // KPI informativo — no suma al resultado
     setText('p-egr-total', fmt(totalEgrT));
     const sub = [];
     if (totalEgr > 0) sub.push('Compras ' + fmt(totalEgr));
@@ -1022,21 +1024,21 @@ async function cargarKPIsPeriodo(ini, fin) {
       resEl.className   = 'kpi-value ' + (resultado >= 0 ? 'pos' : 'neg');
     }
 
-    // Barra resultado
+    // Barra comparativa: facturado vs egresos
     const resMontoEl = document.getElementById('p-res-monto');
     if (resMontoEl) {
       resMontoEl.textContent = fmt(Math.abs(resultado));
       resMontoEl.style.color = resultado >= 0 ? 'var(--green)' : 'var(--red)';
     }
-    setText('p-res-label', resultado >= 0 ? '↑ Ingreso neto del período' : '↓ Pérdida neta del período');
+    setText('p-res-label', resultado >= 0 ? '↑ Resultado positivo del período' : '↓ Resultado negativo del período');
 
-    const maxR = Math.max(totalCob, totalEgrT, 1);
+    const maxR = Math.max(totalFac, totalEgrT, 1);
     const elIng = document.getElementById('bar-ing');
     const elEgr = document.getElementById('bar-egr');
-    if (elIng) elIng.style.width = Math.round((totalCob  / maxR) * 100) + '%';
+    if (elIng) elIng.style.width = Math.round((totalFac  / maxR) * 100) + '%';
     if (elEgr) elEgr.style.width = Math.round((totalEgrT / maxR) * 100) + '%';
-    setText('bar-label-ing', 'Ingresos ' + fmt(totalCob));
-    setText('bar-label-egr', 'Egresos '  + fmt(totalEgrT));
+    setText('bar-label-ing', 'Facturado ' + fmt(totalFac));
+    setText('bar-label-egr', 'Egresos '   + fmt(totalEgrT));
 
   } catch(e) {
     console.error('cargarKPIsPeriodo:', e);
@@ -1064,19 +1066,24 @@ async function cargarBalance(ini, fin) {
 
     const totalCob = sumArr(cobros,  'monto');
     const totalFac = sumArr(facPer,  'monto_total');
-    const ingTotal = totalCob > 0 ? totalCob : totalFac;
-    setText('b-ing-total', fmt(ingTotal));
+    // El ingreso del período = lo facturado (devengado)
+    // Los cobros se muestran solo como referencia de lo que ya ingresó en caja
+    setText('b-ing-total', fmt(totalFac));
 
-    // Agrupar cobros (sin columna medio — no existe)
+    const cobPct = totalFac > 0 ? Math.round((totalCob / totalFac) * 100) : 0;
     elIng.innerHTML = `
       <div class="balance-row">
         <div class="balance-row-label"><div class="balance-row-dot" style="background:var(--blue)"></div>Facturas emitidas</div>
         <div><span class="balance-row-value">${fmt(totalFac)}</span><span class="balance-row-pct">${(facPer||[]).length} fc</span></div>
       </div>
-      <div class="balance-row">
-        <div class="balance-row-label"><div class="balance-row-dot" style="background:var(--green)"></div>Cobros registrados</div>
-        <div><span class="balance-row-value" style="color:var(--green)">${fmt(totalCob)}</span><span class="balance-row-pct">${(cobros||[]).length} reg.</span></div>
-      </div>`;
+      ${totalCob > 0 ? `<div class="balance-row" style="padding-left:32px">
+        <div class="balance-row-label" style="color:var(--muted)">↳ Cobrado de ese total</div>
+        <div><span class="balance-row-value" style="color:var(--green);font-size:12px">${fmt(totalCob)}</span><span class="balance-row-pct">${cobPct}%</span></div>
+      </div>` : ''}
+      ${totalFac - totalCob > 0 ? `<div class="balance-row" style="padding-left:32px">
+        <div class="balance-row-label" style="color:var(--muted)">↳ Pendiente de cobro</div>
+        <div><span class="balance-row-value" style="color:var(--orange);font-size:12px">${fmt(totalFac - totalCob)}</span></div>
+      </div>` : ''}`;
 
     // Egresos
     const totalEgr  = sumArr(egresos,  'monto');
