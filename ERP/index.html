@@ -691,15 +691,20 @@ async function qEgresos(empId, ini, fin) {
 async function cargarGeneral() {
   const fechas = getFechas();
   if (!fechas) return;
-  // Cargar en paralelo — cada función maneja su propio error
-  Promise.all([
-    cargarKPIsGeneral(fechas),
-    cargarGraficoGeneral(),
-    cargarCobrarCliente(null, null, 'cobrar-lista', 'g-cobrar-total'),
-    cargarTopClientes(fechas.anioIni, fechas.anioFin, 'top-clientes-general', 'top-anio-label'),
-    cargarProyectos(),
-    cargarAlertas(),
-  ]);
+  console.log('[dash] cargarGeneral', fechas);
+  try {
+    await Promise.all([
+      cargarKPIsGeneral(fechas),
+      cargarGraficoGeneral(),
+      cargarCobrarCliente(null, null, 'cobrar-lista', 'g-cobrar-total'),
+      cargarTopClientes(fechas.anioIni, fechas.anioFin, 'top-clientes-general', 'top-anio-label'),
+      cargarProyectos(),
+      cargarAlertas(),
+    ]);
+    console.log('[dash] cargarGeneral OK');
+  } catch(e) {
+    console.error('[dash] cargarGeneral ERROR:', e);
+  }
 }
 
 async function cargarKPIsGeneral(fechas) {
@@ -953,14 +958,28 @@ async function cargarPeriodo() {
   const fechas = getFechas();
   if (!fechas) { toast('Seleccioná un rango de fechas', 'warn'); return; }
   const { ini, fin } = fechas;
+  console.log('[dash] cargarPeriodo', { ini, fin, empId: getEmpId() });
 
-  Promise.all([
-    cargarKPIsPeriodo(ini, fin),
-    cargarBalance(ini, fin),
-    cargarGraficoPeriodo(ini, fin),
-    cargarTopClientes(ini, fin, 'top-clientes-periodo', 'top-periodo-label'),
-    cargarCobrarCliente(ini, fin, 'cobrar-lista-periodo', 'p-cobrar-total'),
-  ]);
+  // Resetear spinners en contenedores de periodo
+  ['b-ing-rows','b-egr-rows','chart-periodo','top-clientes-periodo','cobrar-lista-periodo'].forEach(function(id) {
+    const el = document.getElementById(id);
+    if (el) el.innerHTML = '<div class="spinner-wrap"><div class="spinner"></div>Cargando...</div>';
+  });
+
+  try {
+    await Promise.all([
+      cargarKPIsPeriodo(ini, fin),
+      cargarBalance(ini, fin),
+      cargarGraficoPeriodo(ini, fin),
+      cargarTopClientes(ini, fin, 'top-clientes-periodo', 'top-periodo-label'),
+      cargarCobrarCliente(ini, fin, 'cobrar-lista-periodo', 'p-cobrar-total'),
+    ]);
+    console.log('[dash] cargarPeriodo OK');
+  } catch(e) {
+    console.error('[dash] cargarPeriodo ERROR:', e);
+    const elErr = document.getElementById('b-ing-rows');
+    if (elErr) elErr.innerHTML = '<div style="padding:16px;color:var(--red);font-size:12px;font-family:monospace">Error: ' + e.message + '</div>';
+  }
 }
 
 async function cargarKPIsPeriodo(ini, fin) {
@@ -1256,8 +1275,17 @@ async function cargarAlertas() {
 // ══════════════════════════════════════════════════════════════
 
 async function init() {
-  const usuario = await ERP.initLayout('dashboard');
-  if (!usuario) return;
+  console.log('[dash] init start');
+  let usuario;
+  try {
+    usuario = await ERP.initLayout('dashboard');
+  } catch(e) {
+    console.error('[dash] initLayout ERROR:', e);
+    document.body.innerHTML += '<div style="position:fixed;top:20px;left:50%;transform:translateX(-50%);background:#ef4444;color:#fff;padding:12px 20px;border-radius:8px;font-size:13px;z-index:9999">Error de autenticación: ' + e.message + '</div>';
+    return;
+  }
+  if (!usuario) { console.warn('[dash] sin usuario'); return; }
+  console.log('[dash] usuario OK:', usuario.email);
 
   const ahora = new Date();
   setText('fecha-texto', ahora.toLocaleDateString('es-AR',{weekday:'long',day:'numeric',month:'long',year:'numeric'}));
