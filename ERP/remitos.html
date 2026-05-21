@@ -812,11 +812,16 @@ async function editarRemito(id){
     }catch(e){_itemsContratoCache=[];}
     // Renderizar filas con dropdown preseleccionado
     (items||[]).forEach(it=>{
-      const match=_itemsContratoCache.find(ci=>ci.descripcion===it.descripcion)||null;
+      // Buscar match por contrato_item_id primero (más preciso), luego por descripción como fallback
+      const match=_itemsContratoCache.find(ci=>ci.id===it.contrato_item_id)
+               ||_itemsContratoCache.find(ci=>ci.descripcion===it.descripcion)
+               ||null;
+      // Usar precio vigente del contrato si hay match; sino el guardado en el item
+      const precioVigente=match?(match.precio_unitario||0):(it.precio_unitario||0);
       agregarItemRow(
         it.cantidad_num!=null?it.cantidad_num:(it.cantidad||''),
         it.descripcion,
-        it.precio_unitario||0,
+        precioVigente,
         false,
         match?.id||''
       );
@@ -945,6 +950,9 @@ async function guardarRemito(estado){
     const detalleEl=fila.querySelector('[data-detalle]');
     const desc=detalleEl?((detalleEl.value||'').trim()||(hiddenDesc?.value||'').trim()):(hiddenDesc?.value||'').trim();
     const precioRaw=fila.querySelector('[data-precio]')?.value||'0';
+    // Recuperar contrato_item_id del select si está en modo contrato
+    const selEl=fila.querySelector('select');
+    const contratoItemId=selEl?.value||null;
     if(desc){
       const cantNum=parseFloat(cantRaw)||null;
       const precio=parseFloat(precioRaw)||0;
@@ -957,6 +965,7 @@ async function guardarRemito(estado){
         cantidad_num:cantNum,
         precio_unitario:precio,
         subtotal,
+        contrato_item_id:contratoItemId||null,
       });
     }
   });
