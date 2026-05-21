@@ -811,13 +811,15 @@ async function editarRemito(id){
       _itemsContratoCache=ci||[];
     }catch(e){_itemsContratoCache=[];}
     // Renderizar filas con dropdown preseleccionado
+    let hayItemsSinMatch=false;
     (items||[]).forEach(it=>{
       // Buscar match por contrato_item_id primero (más preciso), luego por descripción como fallback
       const match=_itemsContratoCache.find(ci=>ci.id===it.contrato_item_id)
                ||_itemsContratoCache.find(ci=>ci.descripcion===it.descripcion)
                ||null;
-      // Usar precio vigente del contrato si hay match; sino el guardado en el item
+      // SIEMPRE usar precio vigente del contrato si hay match
       const precioVigente=match?(match.precio_unitario||0):(it.precio_unitario||0);
+      if(!match && it.descripcion) hayItemsSinMatch=true;
       agregarItemRow(
         it.cantidad_num!=null?it.cantidad_num:(it.cantidad||''),
         it.descripcion,
@@ -825,7 +827,28 @@ async function editarRemito(id){
         false,
         match?.id||''
       );
+      // Si hay match, forzar sincronización del precio en la fila recién creada
+      if(match){
+        const tbody=document.getElementById('items-body');
+        const lastRow=tbody.lastElementChild;
+        if(lastRow){
+          const sel=lastRow.querySelector('select');
+          if(sel) sel.value=match.id;
+          const precioHidden=lastRow.querySelector('[data-precio]');
+          if(precioHidden) precioHidden.value=precioVigente;
+        }
+      }
     });
+    if(hayItemsSinMatch){
+      const msgEl=document.getElementById('msg-items-contrato');
+      if(msgEl){
+        msgEl.innerHTML=`⚠ Algunos ítems no pudieron asociarse al contrato automáticamente — seleccioná el ítem del dropdown para actualizar el precio vigente.`;
+        msgEl.style.display='block';
+        msgEl.style.background='rgba(245,158,11,0.08)';
+        msgEl.style.borderColor='rgba(245,158,11,0.3)';
+        msgEl.style.color='var(--orange)';
+      }
+    }
     if(!items||items.length<3) for(let i=(items||[]).length;i<3;i++) agregarItemRow();
     const msgEl=document.getElementById('msg-items-contrato');
     if(msgEl&&_itemsContratoCache.length){
