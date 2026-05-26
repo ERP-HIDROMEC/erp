@@ -636,7 +636,7 @@ function onItemContratoChange(sel){
   // Si hay textarea de detalle vacío, sugerir la descripción del ítem
   const ta=tr.querySelector('[data-detalle]');
   if(ta && !ta.value.trim()) { ta.value=desc; ta.style.height='auto'; ta.style.height=ta.scrollHeight+'px'; }
-  const precioInput=tr.querySelector('[data-precio]');
+  const precioInput=tr.querySelector('[data-precio-val]')||tr.querySelector('[data-precio]');
   if(precioInput) precioInput.value=precio||'';
   recalcularTotales();
 }
@@ -655,7 +655,7 @@ function agregarItemRow(cant='',desc='',precio=0,readonly=false,contratoItemId='
       <td style="width:130px;min-width:110px">
         <select style="width:100%" onchange="onItemContratoChange(this)">${opciones}</select>
         <input type="hidden" data-desc-hidden value="${desc||''}">
-        <input type="hidden" data-precio value="${precio||0}">
+        <input type="hidden" data-precio-val value="${precio||0}">
       </td>
       <td style="min-width:200px"><textarea placeholder="Descripción de lo entregado..." data-detalle
         style="width:100%;min-height:60px;resize:vertical;background:var(--bg3);border:1px solid var(--border);border-radius:6px;color:var(--text);font-size:13px;padding:8px 10px;font-family:inherit;line-height:1.5"
@@ -757,7 +757,7 @@ function recalcularTotales(){
   let total=0;
   document.getElementById('items-body').querySelectorAll('tr').forEach(tr=>{
     const cantInput=tr.querySelector('input[type="number"]');
-    const precioInput=tr.querySelector('[data-precio]');
+    const precioInput=tr.querySelector('[data-precio-val]')||tr.querySelector('[data-precio]');
     const cant=parseFloat(cantInput?.value)||0;
     const precio=parseFloat(precioInput?.value)||0;
     const subtotal=cant*precio;
@@ -832,7 +832,7 @@ async function editarRemito(id){
         if(lastRow){
           const sel=lastRow.querySelector('select');
           if(sel) sel.value=match.id;
-          const precioHidden=lastRow.querySelector('[data-precio]');
+          const precioHidden=lastRow.querySelector('[data-precio-val]')||lastRow.querySelector('[data-precio]');
           if(precioHidden) precioHidden.value=precioVigente;
         }
       }
@@ -967,7 +967,7 @@ async function guardarRemito(estado){
     const hiddenDesc=fila.querySelector('[data-desc-hidden]');
     const detalleEl=fila.querySelector('[data-detalle]');
     const desc=detalleEl?((detalleEl.value||'').trim()||(hiddenDesc?.value||'').trim()):(hiddenDesc?.value||'').trim();
-    const precioRaw=fila.querySelector('[data-precio]')?.value||'0';
+    const precioRaw=(fila.querySelector('[data-precio-val]')||fila.querySelector('[data-precio]'))?.value||'0';
     if(desc){
       const cantNum=parseFloat(cantRaw)||null;
       const precio=parseFloat(precioRaw)||0;
