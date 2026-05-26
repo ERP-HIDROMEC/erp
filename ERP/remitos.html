@@ -662,11 +662,12 @@ function agregarItemRow(cant='',desc='',precio=0,readonly=false,contratoItemId='
         oninput="this.style.height='auto';this.style.height=this.scrollHeight+'px'">${desc||''}</textarea></td>
       <td style="font-family:'DM Mono',monospace;font-size:12px;color:var(--muted);text-align:right;padding-right:8px;white-space:nowrap" data-subtotal>${subtotal>0?fmt(subtotal):'—'}</td>
       <td><button onclick="this.closest('tr').remove();recalcularTotales()" style="background:none;border:none;color:var(--muted);cursor:pointer;font-size:16px">×</button></td>`;
+    // Siempre setear .value del textarea (innerHTML no es suficiente para leerlo con .value)
+    const ta=tr.querySelector("[data-detalle]");
+    if(ta && desc) ta.value=desc;
     if(desc && contratoItemId){
-      const selEl=tr.querySelector('select');
+      const selEl=tr.querySelector("select");
       if(selEl) selEl.value=contratoItemId;
-      const ta=tr.querySelector('[data-detalle]');
-      if(ta) ta.value=desc;
     }
   } else {
     // Modo normal: texto libre + precio
