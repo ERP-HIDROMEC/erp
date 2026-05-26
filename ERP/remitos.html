@@ -663,10 +663,10 @@ function agregarItemRow(cant='',desc='',precio=0,readonly=false,contratoItemId='
       <td style="font-family:'DM Mono',monospace;font-size:12px;color:var(--muted);text-align:right;padding-right:8px;white-space:nowrap" data-subtotal>${subtotal>0?fmt(subtotal):'—'}</td>
       <td><button onclick="this.closest('tr').remove();recalcularTotales()" style="background:none;border:none;color:var(--muted);cursor:pointer;font-size:16px">×</button></td>`;
     // Siempre setear .value del textarea (innerHTML no es suficiente para leerlo con .value)
-    const ta=tr.querySelector("[data-detalle]");
+    const ta=tr.querySelector('[data-detalle]');
     if(ta && desc) ta.value=desc;
     if(desc && contratoItemId){
-      const selEl=tr.querySelector("select");
+      const selEl=tr.querySelector('select');
       if(selEl) selEl.value=contratoItemId;
     }
   } else {
@@ -814,11 +814,9 @@ async function editarRemito(id){
     // Renderizar filas con dropdown preseleccionado
     let hayItemsSinMatch=false;
     (items||[]).forEach(it=>{
-      // Buscar match por contrato_item_id primero (más preciso), luego por descripción como fallback
       const match=_itemsContratoCache.find(ci=>ci.id===it.contrato_item_id)
                ||_itemsContratoCache.find(ci=>ci.descripcion===it.descripcion)
                ||null;
-      // SIEMPRE usar precio vigente del contrato si hay match
       const precioVigente=match?(match.precio_unitario||0):(it.precio_unitario||0);
       if(!match && it.descripcion) hayItemsSinMatch=true;
       agregarItemRow(
@@ -828,10 +826,9 @@ async function editarRemito(id){
         false,
         match?.id||''
       );
-      // Si hay match, forzar sincronización del precio en la fila recién creada
       if(match){
-        const tbody=document.getElementById('items-body');
-        const lastRow=tbody.lastElementChild;
+        const tbody2=document.getElementById('items-body');
+        const lastRow=tbody2.lastElementChild;
         if(lastRow){
           const sel=lastRow.querySelector('select');
           if(sel) sel.value=match.id;
@@ -840,21 +837,18 @@ async function editarRemito(id){
         }
       }
     });
-    if(hayItemsSinMatch){
-      const msgEl=document.getElementById('msg-items-contrato');
-      if(msgEl){
-        msgEl.innerHTML=`⚠ Algunos ítems no pudieron asociarse al contrato automáticamente — seleccioná el ítem del dropdown para actualizar el precio vigente.`;
-        msgEl.style.display='block';
-        msgEl.style.background='rgba(245,158,11,0.08)';
-        msgEl.style.borderColor='rgba(245,158,11,0.3)';
-        msgEl.style.color='var(--orange)';
-      }
-    }
     if(!items||items.length<3) for(let i=(items||[]).length;i<3;i++) agregarItemRow();
     const msgEl=document.getElementById('msg-items-contrato');
-    if(msgEl&&_itemsContratoCache.length){
+    if(hayItemsSinMatch){
+      if(msgEl){
+        msgEl.innerHTML='⚠ Algunos ítems no pudieron asociarse al contrato — seleccioná el ítem del dropdown para actualizar el precio.';
+        msgEl.style.display='block';
+        msgEl.style.color='var(--orange)';
+      }
+    } else if(msgEl&&_itemsContratoCache.length){
       msgEl.textContent=`✓ ${_itemsContratoCache.length} ítems disponibles.`;
       msgEl.style.display='block';
+      msgEl.style.color='';
     }
   } else {
     (items||[]).forEach(it=>agregarItemRow(
@@ -974,14 +968,14 @@ async function guardarRemito(estado){
     const detalleEl=fila.querySelector('[data-detalle]');
     const desc=detalleEl?((detalleEl.value||'').trim()||(hiddenDesc?.value||'').trim()):(hiddenDesc?.value||'').trim();
     const precioRaw=fila.querySelector('[data-precio]')?.value||'0';
-    // Recuperar contrato_item_id del select si está en modo contrato
-    const selEl=fila.querySelector('select');
-    const contratoItemId=selEl?.value||null;
     if(desc){
       const cantNum=parseFloat(cantRaw)||null;
       const precio=parseFloat(precioRaw)||0;
       const subtotal=(cantNum||0)*precio;
       totalValorizado+=subtotal;
+      // Recuperar contrato_item_id del select si está en modo contrato
+      const selEl2=fila.querySelector('select');
+      const contratoItemId=selEl2?.value||null;
       itemsData.push({
         orden:i+1,
         cantidad:cantRaw||null,
@@ -1354,7 +1348,7 @@ async function guardarTalonario(){
   cargarTalonarios();
 }
 
-function cerrarModal(){document.getElementById('modal-remito').classList.remove('show');}
+function cerrarModal(id){document.getElementById(id||'modal-remito').classList.remove('show');}
 function cerrarModal2(){document.getElementById('modal-talonario').classList.remove('show');}
 // logout() → ahora en ERP.logout() (erp-sidebar.js)
 
@@ -1614,7 +1608,7 @@ async function cargarItemsContratoplantilla() {
   const cid = document.getElementById('np-contrato').value;
   const msg = document.getElementById('np-msg-contrato');
   if (!cid) { _npItemsContratoCache = []; msg.style.display = 'none'; return; }
-  const { data } = await db.from('contratos_items').select('*').eq('contrato_id', cid).order('descripcion');
+  const { data } = await db.from('contrato_items').select('*').eq('contrato_id', cid).order('descripcion');
   _npItemsContratoCache = data || [];
   msg.style.display = _npItemsContratoCache.length ? 'block' : 'none';
   if (_npItemsContratoCache.length)
