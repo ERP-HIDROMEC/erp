@@ -120,11 +120,22 @@
     <div class="form-row">
       <div class="form-group">
         <label>Monto total del contrato ($)</label>
-        <input type="number" id="nc-monto" placeholder="0.00 — opcional">
+        <input type="number" id="nc-monto" placeholder="0.00 — opcional" oninput="calcularMontoNeto()">
       </div>
       <div class="form-group">
         <label>Ampliaciones / Adendas ($)</label>
-        <input type="number" id="nc-ampliacion" placeholder="0.00 — si aplica">
+        <input type="number" id="nc-ampliacion" placeholder="0.00 — si aplica" oninput="calcularMontoNeto()">
+      </div>
+    </div>
+    <div class="form-row">
+      <div class="form-group">
+        <label>Bonificación / Descuento (%)</label>
+        <input type="number" id="nc-bonificacion" placeholder="0.00 — ej: 2 para 2%" min="0" max="100" step="0.01" oninput="calcularMontoNeto()">
+      </div>
+      <div class="form-group">
+        <label>Monto neto (con descuento)</label>
+        <input type="number" id="nc-monto-neto" placeholder="Se calcula automático" readonly
+          style="background:var(--bg2);color:var(--muted);cursor:not-allowed">
       </div>
     </div>
     <div class="form-row full">
@@ -270,7 +281,11 @@ async function cargarContratos(){
 
   // ── KPIs globales ─────────────────────────────────────────
   const activos=rows.filter(r=>r.estado==='activo').length;
-  const totalContratado=rows.reduce((s,r)=>s+Number(r.monto_total||0)+Number(r.monto_ampliacion||0),0);
+  const totalContratado=rows.reduce((s,r)=>{
+    const base=Number(r.monto_total||0)+Number(r.monto_ampliacion||0);
+    const bonif=Number(r.bonificacion_pct||0);
+    return s+(bonif>0?base*(1-bonif/100):base);
+  },0);
   const totalCertificado=Object.values(certificadoMap).reduce((s,v)=>s+v,0);
   const totalSaldo=totalContratado-totalCertificado;
 
@@ -293,7 +308,9 @@ async function cargarContratos(){
           <th>Inicio</th><th>Fin</th><th>Estado</th><th>Acciones</th>
         </tr></thead>
         <tbody>${rows.length?rows.map(r=>{
-          const montoTotal=Number(r.monto_total||0)+Number(r.monto_ampliacion||0);
+          const montoBase=Number(r.monto_total||0)+Number(r.monto_ampliacion||0);
+          const bonifPct=Number(r.bonificacion_pct||0);
+          const montoTotal=bonifPct>0?montoBase*(1-bonifPct/100):montoBase;
           const certificado=certificadoMap[r.id]||0;
           const saldo=montoTotal-certificado;
           const pct=montoTotal>0?Math.round(certificado/montoTotal*100):0;
@@ -303,7 +320,10 @@ async function cargarContratos(){
             <td style="font-size:12px">${r.empresas?.nombre||'—'}</td>
             <td class="mono" style="font-weight:600">${r.numero_contrato}</td>
             <td>${r.clientes?.nombre||'—'}</td>
-            <td class="mono" style="text-align:right">${montoTotal?fmt(montoTotal):'<span style="color:var(--muted)">Sin monto</span>'}</td>
+            <td class="mono" style="text-align:right">
+              ${montoTotal?fmt(montoTotal):'<span style="color:var(--muted)">Sin monto</span>'}
+              ${bonifPct>0?'<div style="font-size:10px;color:var(--orange);margin-top:2px">-'+bonifPct+'% bonif.</div>':''}
+            </td>
             <td class="mono" style="text-align:right;color:var(--muted)">${montoTotal?fmt(certificado):'—'}</td>
             <td style="min-width:100px">
               ${montoTotal?`
@@ -362,10 +382,20 @@ async function cargarClientesModal(){
   document.getElementById('nc-cliente').innerHTML=(data||[]).map(c=>`<option value="${c.id}">${c.nombre}</option>`).join('');
 }
 
+function calcularMontoNeto(){
+  const monto=parseFloat(document.getElementById('nc-monto').value)||0;
+  const ampliacion=parseFloat(document.getElementById('nc-ampliacion').value)||0;
+  const bonif=parseFloat(document.getElementById('nc-bonificacion').value)||0;
+  const base=monto+ampliacion;
+  const neto=bonif>0?base*(1-bonif/100):base;
+  const el=document.getElementById('nc-monto-neto');
+  if(el) el.value=neto>0?neto.toFixed(2):'';
+}
+
 function abrirNuevoContrato(){
   contratoEditId=null;
   document.getElementById('cont-titulo').textContent='Nuevo contrato';
-  ['nc-numero','nc-desc','nc-inicio','nc-fin','nc-monto','nc-ampliacion'].forEach(id=>document.getElementById(id).value='');
+  ['nc-numero','nc-desc','nc-inicio','nc-fin','nc-monto','nc-ampliacion','nc-bonificacion','nc-monto-neto'].forEach(id=>document.getElementById(id).value='');
   document.getElementById('nc-estado').value='activo';
   cargarClientesModal();
   document.getElementById('modal-contrato').classList.add('show');
@@ -386,6 +416,8 @@ async function editarContrato(id){
   document.getElementById('nc-fin').value=r.fecha_fin||'';
   document.getElementById('nc-monto').value=r.monto_total||'';
   document.getElementById('nc-ampliacion').value=r.monto_ampliacion||'';
+  document.getElementById('nc-bonificacion').value=r.bonificacion_pct||'';
+  calcularMontoNeto();
   document.getElementById('modal-contrato').classList.add('show');
 }
 
@@ -403,10 +435,51 @@ async function guardarContrato(){
     fecha_fin:document.getElementById('nc-fin').value||null,
     monto_total: parseFloat(document.getElementById('nc-monto').value)||null,
     monto_ampliacion: parseFloat(document.getElementById('nc-ampliacion').value)||0,
+    bonificacion_pct: parseFloat(document.getElementById('nc-bonificacion').value)||0,
   };
-  let error;
-  try{ if(contratoEditId){ await ContratosAPI.actualizarContrato(contratoEditId,payload); } else { await ContratosAPI.crearContrato(payload); } }catch(e){error=e;}
+  let error, contratoId;
+  try{
+    if(contratoEditId){
+      await ContratosAPI.actualizarContrato(contratoEditId, payload);
+      contratoId = contratoEditId;
+    } else {
+      const nuevo = await ContratosAPI.crearContrato(payload);
+      contratoId = nuevo.id;
+    }
+  }catch(e){ error=e; }
   if(error){toast('Error: '+(error?.message||String(error)), 'error');return;}
+
+  // Aplicar bonificación a los ítems si corresponde
+  if(contratoId && payload.bonificacion_pct > 0){
+    try{
+      // Primero guardar precio_original si no está guardado
+      const items = await ContratosAPI.getItemsContrato(contratoId);
+      for(const item of items){
+        const precioBase = item.precio_original || item.precio_unitario;
+        const precioConBonif = Math.round(precioBase * (1 - payload.bonificacion_pct / 100) * 100) / 100;
+        await db.from('contrato_items')
+          .update({
+            precio_original: precioBase,
+            precio_unitario: precioConBonif
+          })
+          .eq('id', item.id);
+      }
+      toast('Bonificación del ' + payload.bonificacion_pct + '% aplicada a ' + items.length + ' ítems.', 'success');
+    }catch(e){ toast('Error aplicando bonificación: ' + e.message, 'error'); }
+  } else if(contratoId && payload.bonificacion_pct === 0 && contratoEditId){
+    // Si se quitó la bonificación, restaurar precios originales
+    try{
+      const items = await ContratosAPI.getItemsContrato(contratoId);
+      const conOriginal = items.filter(i => i.precio_original && i.precio_original !== i.precio_unitario);
+      for(const item of conOriginal){
+        await db.from('contrato_items')
+          .update({ precio_unitario: item.precio_original })
+          .eq('id', item.id);
+      }
+      if(conOriginal.length) toast('Precios originales restaurados.', 'info');
+    }catch(e){ toast('Error restaurando precios: ' + e.message, 'error'); }
+  }
+
   cerrarModal('modal-contrato');
   cargarContratos();
 }
@@ -462,7 +535,12 @@ async function cargarPrecios(){
         <tbody>${rows.length?rows.map(r=>`<tr>
           <td style="font-weight:500">${r.descripcion}</td>
           <td><span style="font-size:11px;padding:2px 8px;border-radius:4px;background:var(--bg3);color:var(--muted)">${r.unidad||'HRA'}</span></td>
-          <td><span class="precio-badge">${fmt(r.precio_unitario)}</span></td>
+          <td>
+            <span class="precio-badge">${fmt(r.precio_unitario)}</span>
+            ${r.precio_original && Number(r.precio_original) !== Number(r.precio_unitario)
+              ? '<div style="font-size:10px;color:var(--muted);text-decoration:line-through;margin-top:2px">' + fmt(r.precio_original) + '</div>'
+              : ''}
+          </td>
           <td><div style="display:flex;gap:6px">
             <button class="btn btn-sm btn-ghost" onclick="editarItem('${r.id}','${r.descripcion.replace(/'/g,"\\'")}','${r.unidad||'HRA'}',${r.precio_unitario})">Editar precio</button>
             <button class="btn btn-sm btn-danger" onclick="borrarItem('${r.id}')">Borrar</button>
