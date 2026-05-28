@@ -653,32 +653,40 @@ async function init() {
 
 // ─── LISTA ───────────────────────────────────────────────────
 async function cargarLista() {
-  const el  = document.getElementById('lista-informes');
   const emp = document.getElementById('f-empresa').value;
   const tp  = document.getElementById('f-tipo').value;
   const bq  = document.getElementById('f-buscar').value.toLowerCase();
+  const el  = document.getElementById('lista-informes');
 
-  await withLoading('lista-informes', async () => {
-    const data = await InformesAPI.getInformes({
+  // Spinner manual — no usar withLoading porque restaura el innerHTML y pisa el resultado
+  el.innerHTML = '<div class="spinner-wrap"><div class="spinner"></div>Cargando...</div>';
+  let data;
+  try {
+    data = await InformesAPI.getInformes({
       empresaId: emp || undefined,
       tipo:      tp  || undefined,
     });
+  } catch(e) {
+    el.innerHTML = '<div class="empty">Error al cargar informes.</div>';
+    manejarError(e, 'cargar informes');
+    return;
+  }
 
-    const filtrados = data.filter(inf =>
-      !bq ||
-      (inf.titulo||'').toLowerCase().includes(bq) ||
-      (inf.n_informe||'').toLowerCase().includes(bq) ||
-      (inf.localizacion||'').toLowerCase().includes(bq)
-    );
+  const filtrados = data.filter(inf =>
+    !bq ||
+    (inf.titulo||'').toLowerCase().includes(bq) ||
+    (inf.n_informe||'').toLowerCase().includes(bq) ||
+    (inf.localizacion||'').toLowerCase().includes(bq)
+  );
 
-    document.getElementById('lista-count').textContent = filtrados.length + ' informes';
+  document.getElementById('lista-count').textContent = filtrados.length + ' informes';
 
-    if (!filtrados.length) {
-      el.innerHTML = '<div class="empty">Sin informes. Creá uno nuevo.</div>';
-      return;
-    }
+  if (!filtrados.length) {
+    el.innerHTML = '<div class="empty">Sin informes. Creá uno nuevo.</div>';
+    return;
+  }
 
-    el.innerHTML = filtrados.map(inf => `
+  el.innerHTML = filtrados.map(inf => `
       <div class="inf-item" id="li-${inf.id}" onclick="seleccionarInforme('${inf.id}')">
         <div class="inf-item-titulo">${inf.titulo || 'Sin título'}</div>
         <div class="inf-item-meta">
@@ -689,7 +697,6 @@ async function cargarLista() {
         </div>
       </div>
     `).join('');
-  });
 }
 
 // ─── SELECTS ─────────────────────────────────────────────────
