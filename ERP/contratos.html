@@ -120,22 +120,11 @@
     <div class="form-row">
       <div class="form-group">
         <label>Monto total del contrato ($)</label>
-        <input type="number" id="nc-monto" placeholder="0.00 — opcional" oninput="calcularMontoNeto()">
+        <input type="number" id="nc-monto" placeholder="0.00 — opcional">
       </div>
       <div class="form-group">
         <label>Ampliaciones / Adendas ($)</label>
-        <input type="number" id="nc-ampliacion" placeholder="0.00 — si aplica" oninput="calcularMontoNeto()">
-      </div>
-    </div>
-    <div class="form-row">
-      <div class="form-group">
-        <label>Bonificación / Descuento (%)</label>
-        <input type="number" id="nc-bonificacion" placeholder="0.00 — ej: 2 para 2%" min="0" max="100" step="0.01" oninput="calcularMontoNeto()">
-      </div>
-      <div class="form-group">
-        <label>Monto neto (con descuento)</label>
-        <input type="number" id="nc-monto-neto" placeholder="Se calcula automático" readonly
-          style="background:var(--bg2);color:var(--muted);cursor:not-allowed">
+        <input type="number" id="nc-ampliacion" placeholder="0.00 — si aplica">
       </div>
     </div>
     <div class="form-row full">
@@ -281,11 +270,7 @@ async function cargarContratos(){
 
   // ── KPIs globales ─────────────────────────────────────────
   const activos=rows.filter(r=>r.estado==='activo').length;
-  const totalContratado=rows.reduce((s,r)=>{
-    const base=Number(r.monto_total||0)+Number(r.monto_ampliacion||0);
-    const bonif=Number(r.bonificacion_pct||0);
-    return s+(bonif>0?base*(1-bonif/100):base);
-  },0);
+  const totalContratado=rows.reduce((s,r)=>s+Number(r.monto_total||0)+Number(r.monto_ampliacion||0),0);
   const totalCertificado=Object.values(certificadoMap).reduce((s,v)=>s+v,0);
   const totalSaldo=totalContratado-totalCertificado;
 
@@ -308,9 +293,7 @@ async function cargarContratos(){
           <th>Inicio</th><th>Fin</th><th>Estado</th><th>Acciones</th>
         </tr></thead>
         <tbody>${rows.length?rows.map(r=>{
-          const montoBase=Number(r.monto_total||0)+Number(r.monto_ampliacion||0);
-          const bonifPct=Number(r.bonificacion_pct||0);
-          const montoTotal=bonifPct>0?montoBase*(1-bonifPct/100):montoBase;
+          const montoTotal=Number(r.monto_total||0)+Number(r.monto_ampliacion||0);
           const certificado=certificadoMap[r.id]||0;
           const saldo=montoTotal-certificado;
           const pct=montoTotal>0?Math.round(certificado/montoTotal*100):0;
@@ -320,11 +303,14 @@ async function cargarContratos(){
             <td style="font-size:12px">${r.empresas?.nombre||'—'}</td>
             <td class="mono" style="font-weight:600">${r.numero_contrato}</td>
             <td>${r.clientes?.nombre||'—'}</td>
-            <td class="mono" style="text-align:right">
-              ${montoTotal?fmt(montoTotal):'<span style="color:var(--muted)">Sin monto</span>'}
-              ${bonifPct>0?'<div style="font-size:10px;color:var(--orange);margin-top:2px">-'+bonifPct+'% bonif.</div>':''}
+            <td class="mono" style="text-align:right">${montoTotal?fmt(montoTotal):'<span style="color:var(--muted)">Sin monto</span>'}</td>
+            <td class="mono" style="text-align:right" onclick="event.stopPropagation()">
+              ${montoTotal && certificado>0
+                ? `<span onclick='verRemitosContrato("${r.id}","${(r.numero_contrato||'').replace(/"/g,'&quot;')}")'  
+                    style='color:var(--blue);cursor:pointer;text-decoration:underline dotted;text-underline-offset:3px'
+                    title='Ver remitos certificados'>${fmt(certificado)}</span>`
+                : `<span style="color:var(--muted)">${montoTotal?fmt(certificado):'—'}</span>`}
             </td>
-            <td class="mono" style="text-align:right;color:var(--muted)">${montoTotal?fmt(certificado):'—'}</td>
             <td style="min-width:100px">
               ${montoTotal?`
                 <div style="display:flex;align-items:center;gap:6px">
@@ -354,6 +340,61 @@ async function cargarContratos(){
     </div>`;
 }
 
+async function verRemitosContrato(contratoId, numeroContrato) {
+  const modal = document.getElementById('modal-remitos-contrato');
+  const contenido = document.getElementById('mrc-contenido');
+  const subtitulo = document.getElementById('mrc-subtitulo');
+  const totalEl = document.getElementById('mrc-total');
+
+  modal.classList.add('show');
+  contenido.innerHTML = '<div class="spinner-wrap"><div class="spinner"></div>Cargando...</div>';
+  subtitulo.textContent = 'Contrato N° ' + numeroContrato;
+  totalEl.textContent = '';
+
+  try {
+    const { data: remitos, error } = await db.from('remitos_v2')
+      .select('id,numero_formateado,fecha,estado,total_valorizado,descripcion_gral,orden_compra,clientes(nombre),factura_id')
+      .eq('contrato_id', contratoId)
+      .neq('estado', 'anulado')
+      .order('fecha', { ascending: false });
+
+    if (error) throw error;
+
+    if (!remitos || !remitos.length) {
+      contenido.innerHTML = '<div class="empty">No hay remitos asociados a este contrato.</div>';
+      return;
+    }
+
+    const total = remitos.reduce((s, r) => s + Number(r.total_valorizado || 0), 0);
+    totalEl.innerHTML = '<strong>Total certificado: ' + fmt(total) + '</strong> — ' + remitos.length + ' remito' + (remitos.length !== 1 ? 's' : '');
+
+    contenido.innerHTML = '<div style="overflow-x:auto"><table>' +
+      '<thead><tr>' +
+      '<th>N° Remito</th><th>Fecha</th><th>OC</th><th>Descripción</th><th>Estado</th><th style="text-align:right">Total</th><th>Factura</th>' +
+      '</tr></thead><tbody>' +
+      remitos.map(r => {
+        const estadoFactura = r.factura_id
+          ? '<span style="color:var(--green);font-size:11px">✓ Facturado</span>'
+          : '<span style="color:var(--muted);font-size:11px">Sin factura</span>';
+        return '<tr>' +
+          '<td class="mono" style="font-weight:600">' + (r.numero_formateado || '—') + '</td>' +
+          '<td class="mono" style="font-size:12px">' + fmtF(r.fecha) + '</td>' +
+          '<td style="font-size:12px">' + (r.orden_compra || '—') + '</td>' +
+          '<td style="font-size:12px;max-width:200px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">' + (r.descripcion_gral || '—') + '</td>' +
+          '<td><span class="estado ' + r.estado + '">' + r.estado + '</span></td>' +
+          '<td class="mono" style="text-align:right">' + fmt(Number(r.total_valorizado || 0)) + '</td>' +
+          '<td>' + estadoFactura + '</td>' +
+          '</tr>';
+      }).join('') +
+      '</tbody></table></div>';
+
+  } catch(e) {
+    contenido.innerHTML = '<div class="empty">Error al cargar remitos.</div>';
+    manejarError(e, 'ver remitos del contrato');
+  }
+}
+
+
 function seleccionarContrato(id, nombre){
   contratoSelId=id;
   contratoSelNombre=nombre;
@@ -382,20 +423,10 @@ async function cargarClientesModal(){
   document.getElementById('nc-cliente').innerHTML=(data||[]).map(c=>`<option value="${c.id}">${c.nombre}</option>`).join('');
 }
 
-function calcularMontoNeto(){
-  const monto=parseFloat(document.getElementById('nc-monto').value)||0;
-  const ampliacion=parseFloat(document.getElementById('nc-ampliacion').value)||0;
-  const bonif=parseFloat(document.getElementById('nc-bonificacion').value)||0;
-  const base=monto+ampliacion;
-  const neto=bonif>0?base*(1-bonif/100):base;
-  const el=document.getElementById('nc-monto-neto');
-  if(el) el.value=neto>0?neto.toFixed(2):'';
-}
-
 function abrirNuevoContrato(){
   contratoEditId=null;
   document.getElementById('cont-titulo').textContent='Nuevo contrato';
-  ['nc-numero','nc-desc','nc-inicio','nc-fin','nc-monto','nc-ampliacion','nc-bonificacion','nc-monto-neto'].forEach(id=>document.getElementById(id).value='');
+  ['nc-numero','nc-desc','nc-inicio','nc-fin','nc-monto','nc-ampliacion'].forEach(id=>document.getElementById(id).value='');
   document.getElementById('nc-estado').value='activo';
   cargarClientesModal();
   document.getElementById('modal-contrato').classList.add('show');
@@ -416,8 +447,6 @@ async function editarContrato(id){
   document.getElementById('nc-fin').value=r.fecha_fin||'';
   document.getElementById('nc-monto').value=r.monto_total||'';
   document.getElementById('nc-ampliacion').value=r.monto_ampliacion||'';
-  document.getElementById('nc-bonificacion').value=r.bonificacion_pct||'';
-  calcularMontoNeto();
   document.getElementById('modal-contrato').classList.add('show');
 }
 
@@ -435,51 +464,10 @@ async function guardarContrato(){
     fecha_fin:document.getElementById('nc-fin').value||null,
     monto_total: parseFloat(document.getElementById('nc-monto').value)||null,
     monto_ampliacion: parseFloat(document.getElementById('nc-ampliacion').value)||0,
-    bonificacion_pct: parseFloat(document.getElementById('nc-bonificacion').value)||0,
   };
-  let error, contratoId;
-  try{
-    if(contratoEditId){
-      await ContratosAPI.actualizarContrato(contratoEditId, payload);
-      contratoId = contratoEditId;
-    } else {
-      const nuevo = await ContratosAPI.crearContrato(payload);
-      contratoId = nuevo.id;
-    }
-  }catch(e){ error=e; }
+  let error;
+  try{ if(contratoEditId){ await ContratosAPI.actualizarContrato(contratoEditId,payload); } else { await ContratosAPI.crearContrato(payload); } }catch(e){error=e;}
   if(error){toast('Error: '+(error?.message||String(error)), 'error');return;}
-
-  // Aplicar bonificación a los ítems si corresponde
-  if(contratoId && payload.bonificacion_pct > 0){
-    try{
-      // Primero guardar precio_original si no está guardado
-      const items = await ContratosAPI.getItemsContrato(contratoId);
-      for(const item of items){
-        const precioBase = item.precio_original || item.precio_unitario;
-        const precioConBonif = Math.round(precioBase * (1 - payload.bonificacion_pct / 100) * 100) / 100;
-        await db.from('contrato_items')
-          .update({
-            precio_original: precioBase,
-            precio_unitario: precioConBonif
-          })
-          .eq('id', item.id);
-      }
-      toast('Bonificación del ' + payload.bonificacion_pct + '% aplicada a ' + items.length + ' ítems.', 'success');
-    }catch(e){ toast('Error aplicando bonificación: ' + e.message, 'error'); }
-  } else if(contratoId && payload.bonificacion_pct === 0 && contratoEditId){
-    // Si se quitó la bonificación, restaurar precios originales
-    try{
-      const items = await ContratosAPI.getItemsContrato(contratoId);
-      const conOriginal = items.filter(i => i.precio_original && i.precio_original !== i.precio_unitario);
-      for(const item of conOriginal){
-        await db.from('contrato_items')
-          .update({ precio_unitario: item.precio_original })
-          .eq('id', item.id);
-      }
-      if(conOriginal.length) toast('Precios originales restaurados.', 'info');
-    }catch(e){ toast('Error restaurando precios: ' + e.message, 'error'); }
-  }
-
   cerrarModal('modal-contrato');
   cargarContratos();
 }
@@ -535,12 +523,7 @@ async function cargarPrecios(){
         <tbody>${rows.length?rows.map(r=>`<tr>
           <td style="font-weight:500">${r.descripcion}</td>
           <td><span style="font-size:11px;padding:2px 8px;border-radius:4px;background:var(--bg3);color:var(--muted)">${r.unidad||'HRA'}</span></td>
-          <td>
-            <span class="precio-badge">${fmt(r.precio_unitario)}</span>
-            ${r.precio_original && Number(r.precio_original) !== Number(r.precio_unitario)
-              ? '<div style="font-size:10px;color:var(--muted);text-decoration:line-through;margin-top:2px">' + fmt(r.precio_original) + '</div>'
-              : ''}
-          </td>
+          <td><span class="precio-badge">${fmt(r.precio_unitario)}</span></td>
           <td><div style="display:flex;gap:6px">
             <button class="btn btn-sm btn-ghost" onclick="editarItem('${r.id}','${r.descripcion.replace(/'/g,"\\'")}','${r.unidad||'HRA'}',${r.precio_unitario})">Editar precio</button>
             <button class="btn btn-sm btn-danger" onclick="borrarItem('${r.id}')">Borrar</button>
@@ -731,5 +714,23 @@ function cerrarModal(id){document.getElementById(id).classList.remove('show');}
 
 init();
 </script>
+
+<!-- Modal remitos certificados -->
+<div class="modal-overlay" id="modal-remitos-contrato">
+  <div class="modal" style="max-width:720px">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:20px">
+      <div>
+        <h3 style="margin:0">Remitos certificados</h3>
+        <div id="mrc-subtitulo" style="font-size:12px;color:var(--muted);margin-top:4px"></div>
+      </div>
+      <button class="btn btn-ghost btn-sm" onclick="document.getElementById('modal-remitos-contrato').classList.remove('show')">✕</button>
+    </div>
+    <div id="mrc-contenido"><div class="spinner-wrap"><div class="spinner"></div>Cargando...</div></div>
+    <div style="margin-top:16px;padding-top:16px;border-top:1px solid var(--border);display:flex;justify-content:space-between;align-items:center">
+      <span id="mrc-total" style="font-size:13px;color:var(--muted)"></span>
+      <button class="btn btn-ghost btn-sm" onclick="document.getElementById('modal-remitos-contrato').classList.remove('show')">Cerrar</button>
+    </div>
+  </div>
+</div>
 </body>
 </html>
