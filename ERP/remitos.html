@@ -33,8 +33,11 @@
   .estado.aceptado_parcial{background:rgba(245,158,11,0.15);color:var(--orange);}
   .alerta-cai{background:rgba(239,68,68,0.1);border:1px solid rgba(239,68,68,0.3);border-radius:8px;padding:10px 16px;margin-bottom:16px;font-size:13px;color:var(--red);display:none;}
   .check-remito-pend{width:15px;height:15px;cursor:pointer;accent-color:var(--blue);}
-  .barra-simulacion{display:none;position:sticky;bottom:0;background:var(--bg2);border-top:1px solid var(--border);padding:12px 20px;display:none;align-items:center;gap:12px;z-index:10;}
-  .barra-simulacion.show{display:flex;}
+  .barra-simulacion{display:flex;align-items:center;gap:12px;background:var(--bg3);border-bottom:1px solid var(--border);padding:10px 20px;flex-wrap:wrap;}
+  .barra-simulacion .btn{display:none;}
+  .barra-simulacion.show .btn{display:inline-flex;}
+  .barra-simulacion .hint-text{font-size:12px;color:var(--muted);}
+  .barra-simulacion.show .hint-text{display:none;}
   .form-row.three{grid-template-columns:1fr 1fr 1fr;}
   .items-.items-table .items-table .items-table input{padding:6px 8px;font-size:13px;}
   .cai-info{background:rgba(16,185,129,0.08);border:1px solid rgba(16,185,129,0.2);border-radius:8px;padding:10px 16px;margin-bottom:16px;font-size:12px;}
@@ -63,6 +66,29 @@
     <button class="tab" onclick="cambiarTab('historico',this)">Histórico</button>
     <button class="tab" onclick="cambiarTab('talonarios',this)">CAI / Talonarios</button>
     <button class="tab" onclick="cambiarTab('plantillas',this)">📋 Plantillas</button>
+  </div>
+
+  <!-- FILTROS PENDIENTES — reemplazan el buscador libre en esa tab -->
+  <div class="filtros" id="filtros-pendientes" style="display:none">
+    <select id="fp-empresa" onchange="cargarPendientes()">
+      <option value="">Todas las empresas</option>
+      <option value="a1000000-0000-0000-0000-000000000001">Hidromec</option>
+      <option value="a2000000-0000-0000-0000-000000000002">Placemem</option>
+    </select>
+    <select id="fp-tipo" onchange="filtrarPendientesLocal()">
+      <option value="">Todos los tipos</option>
+      <option value="servicio">Servicio facturable</option>
+      <option value="contrato">Contrato</option>
+    </select>
+    <select id="fp-cliente" onchange="filtrarPendientesLocal()" style="min-width:200px">
+      <option value="">Todos los clientes</option>
+    </select>
+    <select id="fp-estado" onchange="filtrarPendientesLocal()">
+      <option value="">Todos los estados</option>
+      <option value="emitido">Emitido</option>
+      <option value="aceptado">Aceptado</option>
+      <option value="aceptado_parcial">Aceptado parcialmente</option>
+    </select>
   </div>
 
   <div class="filtros" id="filtros-main">
@@ -427,7 +453,10 @@ function cambiarTab(tab,btn){
   if(btn) btn.classList.add('active');
   const btnPlant=document.getElementById('btn-desde-plantilla');
   if(btnPlant) btnPlant.style.display=(tab==='todos'||tab==='pendientes')?'':'none';
-  document.getElementById('filtros-main').style.display=(tab==='talonarios'||tab==='plantillas')?'none':'flex';
+  const esTalPlant=tab==='talonarios'||tab==='plantillas';
+  const esPend=tab==='pendientes';
+  document.getElementById('filtros-main').style.display=esTalPlant||esPend?'none':'flex';
+  document.getElementById('filtros-pendientes').style.display=esPend?'flex':'none';
   recargar();
 }
 
@@ -567,9 +596,13 @@ function _actualizarBarraSimulacion() {
   const barra = document.getElementById('barra-simulacion');
   if (!barra) return;
   const n = _selPendientes.size;
+  const countEl = barra.querySelector('#barra-count');
   if (n > 0) {
     barra.classList.add('show');
-    barra.querySelector('#barra-count').textContent = `${n} remito${n>1?'s':''} seleccionado${n>1?'s':''}`;
+    if (countEl) countEl.textContent = `${n} remito${n>1?'s':''} seleccionado${n>1?'s':''}`;
+    // Mostrar la ayuda o el contador según haya selección
+    const hint = barra.querySelector('span:last-child');
+    if (hint) hint.style.display = 'none';
   } else {
     barra.classList.remove('show');
   }
@@ -581,24 +614,47 @@ async function cargarPendientes(){
   document.getElementById('kpis').innerHTML='';
   document.getElementById('contenido').innerHTML='<div class="spinner-wrap"><div class="spinner"></div>Cargando...</div>';
   _selPendientes.clear();
-  const emp=document.getElementById('f-empresa').value;
+  const emp=document.getElementById('fp-empresa')?.value||'';
 
-  // Pendientes: excluir internos — solo contrato y servicio facturable
   const filtrosTodos={estados:['emitido','aceptado','aceptado_parcial'],sinFactura:true};
   if(emp) filtrosTodos.empresaId=emp;
   const todosData=await RemitosAPI.getRemitos(filtrosTodos);
 
-  // Excluir tipo=interno (quedan fuera de pendientes a facturar)
   const todosFiltered=(todosData||[]).filter(r=>r.tipo!=='interno');
-  const normales=todosFiltered.filter(r=>!r.migrado);
-  const historicos=todosFiltered.filter(r=>r.migrado);
-  const todos=[...normales,...historicos];
-  _pendientesData=todos;
+  _pendientesData=[...todosFiltered.filter(r=>!r.migrado),...todosFiltered.filter(r=>r.migrado)];
 
-  const totalNormal=normales.reduce((s,r)=>s+Number(r.total_valorizado||0),0);
+  // Poblar dropdown de clientes en memoria sin re-query
+  const clientesSel=document.getElementById('fp-cliente');
+  if(clientesSel){
+    const clientesUnicos=[...new Map(
+      _pendientesData.filter(r=>r.clientes?.nombre).map(r=>[r.cliente_id,r.clientes.nombre])
+    ).entries()];
+    clientesUnicos.sort((a,b)=>a[1].localeCompare(b[1]));
+    const valorPrevio=clientesSel.value;
+    clientesSel.innerHTML='<option value="">Todos los clientes</option>'+
+      clientesUnicos.map(([id,nombre])=>`<option value="${id}"${id===valorPrevio?' selected':''}>${nombre}</option>`).join('');
+  }
+  filtrarPendientesLocal();
+}
+
+function filtrarPendientesLocal(){
+  const tipo     = document.getElementById('fp-tipo')?.value    || '';
+  const clienteId= document.getElementById('fp-cliente')?.value || '';
+  const estado   = document.getElementById('fp-estado')?.value  || '';
+
+  let filtrados=_pendientesData;
+  if(tipo)       filtrados=filtrados.filter(r=>r.tipo===tipo);
+  if(clienteId)  filtrados=filtrados.filter(r=>r.cliente_id===clienteId);
+  if(estado)     filtrados=filtrados.filter(r=>r.estado===estado);
+
+  const normales  =filtrados.filter(r=>!r.migrado);
+  const historicos=filtrados.filter(r=>r.migrado);
+  const todos     =[...normales,...historicos];
+
+  const totalNormal   =normales.reduce((s,r)=>s+Number(r.total_valorizado||0),0);
   const totalHistorico=historicos.reduce((s,r)=>s+Number(r.total_valorizado||0),0);
-  const totalGeneral=totalNormal+totalHistorico;
-  const cantParcial=todos.filter(r=>r.estado==='aceptado_parcial').length;
+  const totalGeneral  =totalNormal+totalHistorico;
+  const cantParcial   =todos.filter(r=>r.estado==='aceptado_parcial').length;
 
   document.getElementById('kpis').innerHTML=`
     <div class="kpi-card orange"><div class="kpi-label">Total pendiente de facturar</div><div class="kpi-value" style="font-size:18px">${fmt(totalGeneral)}</div></div>
@@ -609,15 +665,23 @@ async function cargarPendientes(){
   const renderRow=r=>{
     const dias=Math.floor((new Date()-new Date(r.fecha+'T12:00:00'))/86400000);
     const esFacturable=!r.migrado;
-    return`<tr>
-      <td style="width:32px;text-align:center">${esFacturable?`<input type="checkbox" class="check-remito-pend" data-id="${r.id}" onchange="toggleSelPendiente('${r.id}',this)">`:'—'}</td>
+    return `<tr>
+      <td style="width:32px;text-align:center">${esFacturable
+        ? `<input type="checkbox" class="check-remito-pend" data-id="${r.id}" onchange="toggleSelPendiente('${r.id}',this)">`
+        : '—'}</td>
       <td class="mono" style="font-weight:600">${r.numero_formateado||r.numero||'—'}</td>
       <td class="mono">${fmtF(r.fecha)}</td>
       <td>${r.clientes?.nombre||'—'}</td>
-      <td><span style="font-size:11px;padding:2px 8px;border-radius:4px;background:${r.tipo==='contrato'?'rgba(59,130,246,0.12)':'rgba(16,185,129,0.1)'};color:${r.tipo==='contrato'?'var(--blue)':'var(--green)'}">${r.tipo==='contrato'?'Contrato':'Servicio'}</span></td>
+      <td><span style="font-size:11px;padding:2px 8px;border-radius:4px;background:${
+          r.tipo==='contrato'?'rgba(59,130,246,0.12)':'rgba(16,185,129,0.1)'
+        };color:${r.tipo==='contrato'?'var(--blue)':'var(--green)'}">
+        ${r.tipo==='contrato'?'Contrato':'Servicio'}</span></td>
       <td style="font-size:12px;color:var(--muted)">${r.orden_compra||'—'}</td>
       <td class="mono" style="color:var(--orange)">${r.total_valorizado?fmt(r.total_valorizado):'Sin valor'}</td>
-      <td><span style="font-size:11px;padding:2px 8px;border-radius:4px;background:${dias>30?'rgba(239,68,68,0.15)':'rgba(245,158,11,0.15)'};color:${dias>30?'var(--red)':'var(--orange)'}">${dias}d</span></td>
+      <td><span style="font-size:11px;padding:2px 8px;border-radius:4px;background:${
+          dias>30?'rgba(239,68,68,0.15)':'rgba(245,158,11,0.15)'
+        };color:${dias>30?'var(--red)':'var(--orange)'}">
+        ${dias}d</span></td>
       <td>
         <span class="estado ${r.estado}">${r.estado==='aceptado_parcial'?'Acept. parcial':r.estado}</span>
         ${r.migrado?'<span style="font-size:10px;background:rgba(139,92,246,0.15);color:var(--purple);padding:1px 6px;border-radius:4px;margin-left:4px">Hist.</span>':''}
@@ -651,21 +715,19 @@ async function cargarPendientes(){
     </table></div>`:'';
 
   document.getElementById('contenido').innerHTML=`
-    <div style="padding:12px 20px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap">
-      <span style="font-size:12px;color:var(--muted)">${todos.length} remitos pendientes — Total valorizado: <strong style="color:var(--orange)">${fmt(totalGeneral)}</strong></span>
-      <span style="font-size:12px;color:var(--muted)">Seleccioná remitos y usá <strong style="color:var(--blue)">Simular facturación</strong> para ver el desglose por ítem</span>
+    <div class="barra-simulacion" id="barra-simulacion" style="border-top:none;border-radius:0">
+      <span style="font-size:13px;color:var(--text);font-weight:500" id="barra-count">0 seleccionados</span>
+      <button class="btn btn-primary btn-sm" onclick="abrirSimulacionFacturacion()">🔍 Simular facturación</button>
+      <button class="btn btn-ghost btn-sm" onclick="limpiarSeleccion()">Limpiar</button>
+      <span class="hint-text">← Tildá remitos para simular facturación agrupada</span>
+    </div>
+    <div style="padding:10px 20px;border-bottom:1px solid var(--border)">
+      <span style="font-size:12px;color:var(--muted)">${todos.length} remitos — Total valorizado: <strong style="color:var(--orange)">${fmt(totalGeneral)}</strong></span>
     </div>
     ${tablaNormales}
     ${tablaHistoricos}
-    ${!todos.length?'<div style="padding:40px;text-align:center;color:var(--muted)">Sin remitos pendientes de facturar</div>':''}
-    <!-- Barra de simulación -->
-    <div class="barra-simulacion" id="barra-simulacion">
-      <span style="font-size:13px;color:var(--muted)" id="barra-count">0 remitos seleccionados</span>
-      <button class="btn btn-primary" onclick="abrirSimulacionFacturacion()">🔍 Simular facturación</button>
-      <button class="btn btn-ghost" onclick="limpiarSeleccion()">Limpiar</button>
-    </div>`;
+    ${!todos.length?'<div style="padding:40px;text-align:center;color:var(--muted)">Sin remitos pendientes de facturar</div>':''}`;
 }
-
 function toggleAllPendientes(masterCb){
   document.querySelectorAll('.check-remito-pend').forEach(cb=>{
     cb.checked=masterCb.checked;
@@ -1209,7 +1271,9 @@ async function guardarRemito(estado){
     const contratoItemId=selEl?.value||null;
     if(desc){
       const cantNum=parseFloat(cantRaw)||null;
-      const precio=parseFloat(precioRaw)||0;
+      // En modo contrato: si no hay item seleccionado, precio = 0 (no tomar valor residual del hidden)
+      const esModoContrato=tipoRemito==='contrato';
+      const precio=esModoContrato && !contratoItemId ? 0 : (parseFloat(precioRaw)||0);
       const subtotal=(cantNum||0)*precio;
       totalValorizado+=subtotal;
       itemsData.push({
@@ -1590,7 +1654,11 @@ async function guardarTalonario(){
   cargarTalonarios();
 }
 
-function cerrarModal(){document.getElementById('modal-remito').classList.remove('show');}
+function cerrarModal(id){
+  const modalId = id || 'modal-remito';
+  const el = document.getElementById(modalId);
+  if (el) el.classList.remove('show');
+}
 function cerrarModal2(){document.getElementById('modal-talonario').classList.remove('show');}
 // logout() → ahora en ERP.logout() (erp-sidebar.js)
 
