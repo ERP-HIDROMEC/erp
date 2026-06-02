@@ -20,12 +20,19 @@
   /* PANEL */
   /* TABLE */
   tr:hover /* ESTADOS */
-  .estado.cobrada_parcial{background:rgba(59,130,246,0.15);color:var(--blue);}
-  .estado.borrador{background:rgba(139,92,246,0.15);color:var(--purple);}
-  .estado.enviado{background:rgba(245,158,11,0.15);color:var(--orange);}
-  .estado.aprobado{background:rgba(16,185,129,0.15);color:var(--green);}
-  .estado.rechazado{background:rgba(239,68,68,0.15);color:var(--red);}
-  .estado.facturado{background:rgba(16,185,129,0.15);color:var(--green);}
+  .estado.cobrada        {background:rgba(34,211,160,0.15);color:#22d3a0;}
+  .estado.cobrada_parcial{background:rgba(79,142,247,0.15);color:#4f8ef7;}
+  .estado.pendiente      {background:rgba(251,191,36,0.15);color:#fbbf24;}
+  .estado.vencida        {background:rgba(241,98,98,0.15);color:#f16262;}
+  .estado.anulada        {background:rgba(90,98,120,0.15);color:#5a6278;text-decoration:line-through;}
+  .estado.borrador       {background:rgba(167,139,250,0.15);color:#a78bfa;}
+  .estado.enviado        {background:rgba(251,191,36,0.15);color:#fbbf24;}
+  .estado.aprobado       {background:rgba(34,211,160,0.15);color:#22d3a0;}
+  .estado.rechazado      {background:rgba(241,98,98,0.15);color:#f16262;}
+  .estado.facturado      {background:rgba(34,211,160,0.15);color:#22d3a0;}
+  /* NC — púrpura, nunca rojo */
+  .estado.NC             {background:rgba(167,139,250,0.15);color:#a78bfa;}
+  .estado.nc             {background:rgba(167,139,250,0.15);color:#a78bfa;}
 
   /* MODAL */
   /* UPLOAD ZONE */
@@ -181,6 +188,25 @@
       <div class="form-group">
         <label>Remitos asociados</label>
         <div id="nf-remitos-lista" style="display:flex;flex-wrap:wrap;gap:6px;min-height:32px;padding:8px;background:var(--bg3);border:1px solid var(--border);border-radius:8px;margin-bottom:6px"></div>
+        <!-- Panel de detalle de ítems y diferencia -->
+        <div id="panel-diferencia" style="display:none;margin:8px 0 10px;padding:12px 14px;background:var(--bg3);border:1px solid var(--border);border-radius:10px">
+          <div style="font-size:11px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:0.8px;margin-bottom:10px">Chequeo contable — Remitos vs Factura</div>
+          <div id="panel-items-remitos" style="margin-bottom:12px;max-height:240px;overflow-y:auto"></div>
+          <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;padding-top:10px;border-top:1px solid var(--border)">
+            <div style="text-align:center">
+              <div style="font-size:10px;color:var(--muted);margin-bottom:4px;text-transform:uppercase;letter-spacing:0.7px">Remitos + IVA</div>
+              <div id="dif-remitos" style="font-family:'JetBrains Mono',monospace;font-size:13px;font-weight:600;color:var(--orange)">$0</div>
+            </div>
+            <div style="text-align:center">
+              <div style="font-size:10px;color:var(--muted);margin-bottom:4px;text-transform:uppercase;letter-spacing:0.7px">Facturado</div>
+              <div id="dif-factura" style="font-family:'JetBrains Mono',monospace;font-size:13px;font-weight:600;color:var(--green)">$0</div>
+            </div>
+            <div style="text-align:center">
+              <div style="font-size:10px;color:var(--muted);margin-bottom:4px;text-transform:uppercase;letter-spacing:0.7px">Diferencia</div>
+              <div id="dif-valor" style="font-family:'JetBrains Mono',monospace;font-size:13px;font-weight:600">$0</div>
+            </div>
+          </div>
+        </div>
         <div style="display:flex;gap:8px">
           <select id="nf-remito-sel" style="flex:1;padding:8px;background:var(--bg3);border:1px solid var(--border);border-radius:8px;color:var(--text);font-size:13px;font-family:'DM Sans',sans-serif;outline:none">
             <option value="">Seleccionar remito...</option>
@@ -746,7 +772,7 @@ async function cargarFacturas(){
           <td class="mono">${r.numero_factura||'—'}</td>
           <td><span class="estado ${r.tipo==='NC'?'anulada':'pendiente'}" style="${r.tipo==='NC'?'background:rgba(239,68,68,0.1);color:var(--red)':'background:var(--bg3);color:var(--muted)'}">${r.tipo}</span></td>
           <td>${r.clientes?.nombre||'—'}</td>
-          <td class="mono" onclick="abrirDetalleFc('${r.id}')" title="Ver detalle" style="cursor:pointer;text-decoration:underline dotted;text-underline-offset:3px;font-weight:600;color:${esNC(r)?'var(--red)':r.estado==='cobrada'?'var(--green)':r.estado_visual==='vencida'?'var(--red)':'var(--orange)'}">${esNC(r)?'-':''}${fmt(r.monto_total)}<span style="display:inline-flex;align-items:center;justify-content:center;margin-left:5px;font-size:9px;font-weight:700;padding:1px 5px;border-radius:4px;vertical-align:middle;background:${esNC(r)?'transparent':r.estado==='cobrada'?(r.remitos_ids&&r.remitos_ids.length?'rgba(34,211,160,0.15)':'rgba(251,191,36,0.2)'):(r.remitos_ids&&r.remitos_ids.length?'rgba(79,142,247,0.15)':'transparent')};color:${esNC(r)?'transparent':r.estado==='cobrada'?(r.remitos_ids&&r.remitos_ids.length?'var(--green)':'var(--orange)'):(r.remitos_ids&&r.remitos_ids.length?'var(--blue)':'transparent')};border:1px solid ${esNC(r)?'transparent':r.estado==='cobrada'?(r.remitos_ids&&r.remitos_ids.length?'rgba(34,211,160,0.3)':'rgba(251,191,36,0.35)'):(r.remitos_ids&&r.remitos_ids.length?'rgba(79,142,247,0.3)':'transparent')};">${esNC(r)?'':r.estado==='cobrada'?(r.remitos_ids&&r.remitos_ids.length?'✓ rem':'! rem'):(r.remitos_ids&&r.remitos_ids.length?'📋':'')}</span></td>
+          <td class="mono" onclick="abrirDetalleFc('${r.id}')" title="Ver detalle" style="cursor:pointer;text-decoration:underline dotted;text-underline-offset:3px;font-weight:600;color:${esNC(r)?'#a78bfa':r.estado==='cobrada'?'#22d3a0':r.estado_visual==='vencida'?'#f16262':'#fbbf24'}">${esNC(r)?'−':''}${fmt(r.monto_total)}<span style="display:inline-flex;align-items:center;gap:2px;margin-left:6px;font-size:9px;font-weight:700;padding:1px 5px;border-radius:4px;vertical-align:middle;background:${r.estado==='cobrada'?(r.remitos_ids&&r.remitos_ids.length?'rgba(34,211,160,0.15)':'rgba(241,98,98,0.12)'):(r.remitos_ids&&r.remitos_ids.length?'rgba(79,142,247,0.15)':'transparent')};color:${r.estado==='cobrada'?(r.remitos_ids&&r.remitos_ids.length?'#22d3a0':'#f16262'):(r.remitos_ids&&r.remitos_ids.length?'#4f8ef7':'transparent')};border:1px solid ${r.estado==='cobrada'?(r.remitos_ids&&r.remitos_ids.length?'rgba(34,211,160,0.3)':'rgba(241,98,98,0.25)'):(r.remitos_ids&&r.remitos_ids.length?'rgba(79,142,247,0.3)':'transparent')};">${esNC(r)?'':r.estado==='cobrada'?(r.remitos_ids&&r.remitos_ids.length?'✓rem':'!rem'):(r.remitos_ids&&r.remitos_ids.length?'rem':'')}</span></td>
           <td><span class="estado ${r.estado_visual}">${r.estado_visual}</span></td>
           <td>${r.fecha_cobro_estimada?`<span style="font-size:12px${venc?';color:var(--red)':''}">${fmtF(r.fecha_cobro_estimada)}${venc?` <span class="dias-badge">${dias}d</span>`:''}</span>`:'—'}</td>
           <td>
@@ -1330,11 +1356,17 @@ function actualizarDiferencia(){
     });
   });
   const totalFactura=parseFloat(document.getElementById('nf-total')?.value)||0;
-  const diff=totalFactura-totalRemitos;
-  elRem.textContent=fmt(totalRemitos);
+  const netoFc=parseFloat(document.getElementById('nf-neto')?.value)||0;
+  const ivaFc=parseFloat(document.getElementById('nf-iva')?.value)||0;
+  const pctIva=netoFc>0?ivaFc/netoFc:0.21;
+  const ivaRemitos=totalRemitos*pctIva;
+  const totalConIva=totalRemitos+ivaRemitos;
+
+  elRem.innerHTML=`${fmt(totalRemitos)} <span style="font-size:11px;color:var(--muted)">+ IVA ${fmt(ivaRemitos)}</span> <strong>${fmt(totalConIva)}</strong>`;
   elFac.textContent=fmt(totalFactura);
+  const diff=totalFactura-totalConIva;
   elDif.textContent=(diff>=0?'+':'')+fmt(diff);
-  elDif.style.color=Math.abs(diff)<1?'var(--green)':diff>0?'var(--orange)':'var(--red)';
+  elDif.style.color=Math.abs(diff)<1?'var(--green)':Math.abs(diff)<totalFactura*0.01?'var(--orange)':'var(--red)';
   renderItemsDetalleRemitos();
 }
 
@@ -1455,10 +1487,23 @@ async function abrirDetalleFc(facturaId){
       });
 
       tbody.innerHTML=htmlRows;
-      totalRemEl.textContent=fmt(totalRemitos);
-      const diff=(fc.monto_total||0)-totalRemitos;
+
+      // Calcular IVA: usar el % real de la factura si hay neto, sino 21% por defecto
+      const netoFc = fc.monto_neto || 0;
+      const ivaFc  = fc.monto_iva  || 0;
+      const pctIva = netoFc > 0 ? ivaFc / netoFc : 0.21;
+      const ivaRemitos = totalRemitos * pctIva;
+      const totalConIva = totalRemitos + ivaRemitos;
+
+      totalRemEl.innerHTML =
+        `<span style="color:var(--muted);font-size:11px">Neto </span>${fmt(totalRemitos)} ` +
+        `<span style="color:var(--muted);font-size:11px">+ IVA (${Math.round(pctIva*100)}%) </span>` +
+        `<span style="color:#4f8ef7">${fmt(ivaRemitos)}</span> ` +
+        `<strong style="margin-left:4px">${fmt(totalConIva)}</strong>`;
+
+      const diff=(fc.monto_total||0)-totalConIva;
       difEl.textContent=(diff>=0?'+':'')+fmt(diff);
-      difEl.style.color=Math.abs(diff)<1?'var(--green)':diff>0?'var(--orange)':'var(--red)';
+      difEl.style.color=Math.abs(diff)<1?'var(--green)':Math.abs(diff)<fc.monto_total*0.01?'var(--orange)':'var(--red)';
     }
 
     document.getElementById('dfc-loading').style.display='none';
