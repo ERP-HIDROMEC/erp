@@ -1361,6 +1361,8 @@ function toggleTodosSimItems(masterCb){
   document.querySelectorAll('.sim-grupo-check').forEach(cb => cb.checked = masterCb.checked);
   recalcSimTotal();
 }
+
+function facturarDesdeSimulacion(){
   const ids=[..._selPendientes.keys()];
   if(!ids.length) return;
   if(ids.length===1){
