@@ -570,7 +570,7 @@ function renderRemitos(rows){
         <td>${r.clientes?.nombre||'—'}</td>
         <td style="font-size:12px;color:var(--muted)">${r.orden_compra||'—'}</td>
         <td style="font-size:12px">${r.factura_id?`<span style="color:var(--green);font-family:'DM Mono',monospace">${r._nroFactura||'✓'}</span>`:'<span style="color:var(--muted)">—</span>'}</td>
-        <td class="mono">${r.total_valorizado?fmt(r.total_valorizado):'—'}</td>
+        <td class="mono" style="cursor:pointer;text-decoration:underline dotted;text-underline-offset:3px;color:${r.total_valorizado?'inherit':'var(--muted)'}" onclick="abrirDetalleItems('${r.id}')" title="Ver detalle de ítems">${r.total_valorizado?fmt(r.total_valorizado):'—'}</td>
         <td><span class="estado ${r.estado}">${r.estado}</span></td>
         <td><div style="display:flex;gap:6px;flex-wrap:wrap">
           ${!r.migrado&&r.estado!=='anulado'?`<button class="btn btn-sm btn-ghost" onclick="generarPDF('${r.id}')">PDF</button>`:''}
