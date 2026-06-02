@@ -180,27 +180,7 @@
     <div class="form-row full">
       <div class="form-group">
         <label>Remitos asociados</label>
-        <!-- Lista de remitos seleccionados con opción de vínculo parcial -->
-        <div id="nf-remitos-lista" style="margin-bottom:8px"></div>
-        <!-- Panel de diferencia -->
-        <div id="panel-diferencia" style="display:none;margin:10px 0;padding:12px 16px;background:var(--bg3);border:1px solid var(--border);border-radius:10px">
-          <div style="font-size:11px;font-weight:500;color:var(--muted);text-transform:uppercase;letter-spacing:0.8px;margin-bottom:10px">Chequeo contable — Remitos vs Factura</div>
-          <div id="panel-items-remitos" style="margin-bottom:12px;max-height:280px;overflow-y:auto"></div>
-          <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;padding-top:10px;border-top:1px solid var(--border)">
-            <div style="text-align:center">
-              <div style="font-size:11px;color:var(--muted);margin-bottom:4px">Total remitos</div>
-              <div id="dif-remitos" style="font-family:'DM Mono',monospace;font-size:15px;font-weight:600;color:var(--orange)">$0</div>
-            </div>
-            <div style="text-align:center">
-              <div style="font-size:11px;color:var(--muted);margin-bottom:4px">Facturado</div>
-              <div id="dif-factura" style="font-family:'DM Mono',monospace;font-size:15px;font-weight:600;color:var(--green)">$0</div>
-            </div>
-            <div style="text-align:center">
-              <div style="font-size:11px;color:var(--muted);margin-bottom:4px">Diferencia</div>
-              <div id="dif-valor" style="font-family:'DM Mono',monospace;font-size:15px;font-weight:600">$0</div>
-            </div>
-          </div>
-        </div>
+        <div id="nf-remitos-lista" style="display:flex;flex-wrap:wrap;gap:6px;min-height:32px;padding:8px;background:var(--bg3);border:1px solid var(--border);border-radius:8px;margin-bottom:6px"></div>
         <div style="display:flex;gap:8px">
           <select id="nf-remito-sel" style="flex:1;padding:8px;background:var(--bg3);border:1px solid var(--border);border-radius:8px;color:var(--text);font-size:13px;font-family:'DM Sans',sans-serif;outline:none">
             <option value="">Seleccionar remito...</option>
@@ -865,8 +845,6 @@ function calcularTotal(){
 function abrirNuevaFactura(){
   facturaEditId=null;
   _remitosSeleccionados=[];
-  _remitosDetalles={};
-  _itemsNoVinculados.clear();
   document.getElementById('modal-titulo').textContent='Nueva factura';
   document.getElementById('nf-numero').value='';
   document.getElementById('nf-neto').value='';
@@ -885,7 +863,7 @@ async function editarFactura(id){
   if(!data) return;
   facturaEditId=id;
   _remitosDetalles={};
-  _itemsNoVinculados.clear();
+  _itemsNoVinculados=new Set();
   document.getElementById('modal-titulo').textContent='Editar factura';
   document.getElementById('nf-empresa').value=data.empresa_id;
   await cargarClientesPorEmpresa();
@@ -900,15 +878,21 @@ async function editarFactura(id){
   document.getElementById('nf-estado').value=data.estado;
   document.getElementById('nf-obs').value=data.observaciones||'';
   _remitosSeleccionados=data.remitos_ids||[];
-  // Cargar items de cada remito ya asociado
+
+  // Cargar items de cada remito ya vinculado para mostrar el detalle y nombre correcto
   if(_remitosSeleccionados.length){
     await cargarRemitosParaFactura();
     await Promise.all(_remitosSeleccionados.map(async rid=>{
-      const items=await RemitosAPI.getItemsRemito(rid);
-      const remito=_remitosDisponibles.find(r=>r.id===rid);
-      _remitosDetalles[rid]={remito,items:items||[]};
+      try{
+        const [remito,items]=await Promise.all([
+          RemitosAPI.getRemitoById(rid),
+          RemitosAPI.getItemsRemito(rid)
+        ]);
+        _remitosDetalles[rid]={remito,items:items||[]};
+      }catch(e){console.warn('No se pudo cargar remito',rid,e);}
     }));
   }
+
   renderRemitosSeleccionados();
   await cargarRemitosParaFactura();
   actualizarDiferencia();
@@ -943,33 +927,15 @@ async function guardarFactura(){
     try{ data=await FacturasAPI.crearFactura(payload); }catch(e){error=e;}
   }
   if(error){toast('Error: ', 'error');return;}
-  // Marcar remitos como facturados (o aceptado_parcial si hay items excluidos)
+  // Marcar remitos como facturados
   const factId=data?.id||facturaEditId;
   if(_remitosSeleccionados.length&&factId){
     for(const rid of _remitosSeleccionados){
-      // Verificar si todos los ítems del remito están vinculados
-      const det=_remitosDetalles[rid];
-      const tieneExcluidos=det?.items?.some(it=>{
-        const key=rid+':'+(it.id||it.descripcion);
-        return _itemsNoVinculados.has(key);
-      });
-
-      if(tieneExcluidos){
-        // Vinculación parcial: el remito queda como "aceptado_parcial"
-        // NO se vincula a la factura aún (seguirá pendiente)
-        try{
-          await db.from('remitos_v2').update({estado:'aceptado_parcial'}).eq('id',rid);
-        }catch(e){console.warn('Error actualizando estado parcial',rid,e);}
-      } else {
-        // Vinculación total: marcar facturado
-        await RemitosAPI.vincularRemitoFactura(rid, factId);
-      }
+      await RemitosAPI.vincularRemitoFactura(rid, factId);
     }
   }
   cerrarModal('modal-factura');
   _remitosSeleccionados=[];
-  _remitosDetalles={};
-  _itemsNoVinculados.clear();
   cargarFacturas();
 }
 
@@ -1120,8 +1086,6 @@ async function borrarRemito(id){
 async function convertirAFactura(remitoId,clienteId,empresaId,total){
   facturaEditId=null;
   _remitosSeleccionados=[remitoId];
-  _remitosDetalles={};
-  _itemsNoVinculados.clear();
   document.getElementById('nf-empresa').value=empresaId;
   await cargarClientesPorEmpresa();
   document.getElementById('nf-cliente').value=clienteId;
@@ -1133,12 +1097,8 @@ async function convertirAFactura(remitoId,clienteId,empresaId,total){
   document.getElementById('nf-estado').value='pendiente';
   document.getElementById('nf-fecha-emision').value=hoy();
   document.getElementById('modal-titulo').textContent='Nueva factura desde remito';
-  await cargarRemitosParaFactura();
-  const items=await RemitosAPI.getItemsRemito(remitoId);
-  const remito=_remitosDisponibles.find(r=>r.id===remitoId);
-  _remitosDetalles[remitoId]={remito,items:items||[]};
   renderRemitosSeleccionados();
-  actualizarDiferencia();
+  await cargarRemitosParaFactura();
   document.getElementById('modal-factura').classList.add('show');
 }
 
@@ -1228,224 +1188,94 @@ async function confirmarImport(){
 
 function cerrarModal(id){ document.getElementById(id).classList.remove('show'); }
 // ── REMITOS EN FACTURA ────────────────────────────────────────
-let _remitosSeleccionados = []; // ids vinculados completos
-let _remitosDisponibles   = [];
-let _remitosDetalles      = {}; // id -> {remito, items}
-// items que el usuario decide NO vincular por esta factura (aceptación parcial)
-let _itemsNoVinculados    = new Set(); // "remitoId:itemId"
+let _remitosSeleccionados=[];
+let _remitosDisponibles=[];
 
 async function cargarRemitosParaFactura(){
-  const empId = document.getElementById('nf-empresa').value;
-  const cliId = document.getElementById('nf-cliente').value;
-  const data = await RemitosAPI.getRemitosParaVincular(empId);
-  // Incluir también los que están en aceptado_parcial
-  const dataConParcial = data.filter(r => ['emitido','aceptado','aceptado_parcial'].includes(r.estado));
-  const filteredData = cliId ? dataConParcial.filter(r=>r.cliente_id===cliId) : dataConParcial;
-  _remitosDisponibles = filteredData || [];
-  const sel = document.getElementById('nf-remito-sel');
-  if (!sel) return;
-  sel.innerHTML = '<option value="">Seleccionar remito...</option>' +
+  const empId=document.getElementById('nf-empresa').value;
+  const cliId=document.getElementById('nf-cliente').value;
+  // Buscar por empresa; si hay cliente también filtrar por cliente
+  const data=await RemitosAPI.getRemitosParaVincular(empId);
+  const filteredData = cliId ? data.filter(r=>r.cliente_id===cliId) : data;
+  _remitosDisponibles=filteredData||[];
+  const sel=document.getElementById('nf-remito-sel');
+  if(!sel) return;
+  sel.innerHTML='<option value="">Seleccionar remito...</option>'+
     _remitosDisponibles
-      .filter(r => !_remitosSeleccionados.includes(r.id))
-      .map(r => `<option value="${r.id}">${r.numero_formateado||r.id.slice(0,8)} — ${fmtF(r.fecha)} — ${r.clientes?.nombre||''}${r.estado==='aceptado_parcial'?' (parcial)':''}</option>`)
+      .filter(r=>!_remitosSeleccionados.includes(r.id))
+      .map(r=>`<option value="${r.id}" data-estado="${r.estado}">${r.numero_formateado||r.id.slice(0,8)} — ${fmtF(r.fecha)} ${r.estado==='facturado'?'(ya facturado)':''}</option>`)
       .join('');
 }
 
-async function agregarRemitoAFactura(){
-  const sel = document.getElementById('nf-remito-sel');
-  const id  = sel.value;
-  if (!id || _remitosSeleccionados.includes(id)) return;
+function agregarRemitoAFactura(){
+  const sel=document.getElementById('nf-remito-sel');
+  const id=sel.value;
+  if(!id||_remitosSeleccionados.includes(id)) return;
   _remitosSeleccionados.push(id);
-  // Cargar items del remito para el detalle
-  if (!_remitosDetalles[id]) {
-    const [items] = await Promise.all([RemitosAPI.getItemsRemito(id)]);
-    const remito = _remitosDisponibles.find(r=>r.id===id);
-    _remitosDetalles[id] = { remito, items: items||[] };
-  }
   renderRemitosSeleccionados();
-  actualizarDiferencia();
   cargarRemitosParaFactura();
 }
 
 function quitarRemito(id){
-  _remitosSeleccionados = _remitosSeleccionados.filter(r=>r!==id);
-  // Limpiar items no vinculados de este remito
-  [..._itemsNoVinculados].forEach(k=>{ if(k.startsWith(id+':')) _itemsNoVinculados.delete(k); });
+  _remitosSeleccionados=_remitosSeleccionados.filter(r=>r!==id);
   renderRemitosSeleccionados();
-  actualizarDiferencia();
   cargarRemitosParaFactura();
 }
 
-function toggleItemVinculacion(remitoId, itemId, cb){
-  const key = remitoId+':'+itemId;
-  if (cb.checked) {
-    _itemsNoVinculados.delete(key); // volver a vincular
-  } else {
-    _itemsNoVinculados.add(key); // excluir
-  }
-  actualizarDiferencia();
-}
-
 function renderRemitosSeleccionados(){
-  const lista = document.getElementById('nf-remitos-lista');
-  if (!lista) return;
-  const panelDif = document.getElementById('panel-diferencia');
-
-  if (!_remitosSeleccionados.length) {
-    lista.innerHTML = '<div style="min-height:32px;padding:8px;background:var(--bg3);border:1px solid var(--border);border-radius:8px"><span style="color:var(--muted);font-size:12px">Sin remitos asociados</span></div>';
-    if (panelDif) panelDif.style.display='none';
+  const lista=document.getElementById('nf-remitos-lista');
+  if(!lista) return;
+  const panelDif=document.getElementById('panel-diferencia');
+  if(!_remitosSeleccionados.length){
+    lista.innerHTML='<span style="color:var(--muted);font-size:12px">Sin remitos asociados</span>';
+    if(panelDif) panelDif.style.display='none';
     return;
   }
-
-  // Chips de remitos
-  lista.innerHTML = '<div style="display:flex;flex-wrap:wrap;gap:6px;padding:8px;background:var(--bg3);border:1px solid var(--border);border-radius:8px;margin-bottom:8px">' +
-    _remitosSeleccionados.map(id => {
-      const r = _remitosDisponibles.find(x=>x.id===id) || _remitosDetalles[id]?.remito;
-      const label = r ? r.numero_formateado || id.slice(0,8) : id.slice(0,8);
-      return `<span style="display:inline-flex;align-items:center;gap:6px;background:rgba(59,130,246,0.15);border:1px solid rgba(59,130,246,0.3);color:var(--blue);padding:3px 10px;border-radius:20px;font-size:12px">
-        📋 ${label}
-        <button onclick="quitarRemito('${id}')" style="background:none;border:none;color:var(--muted);cursor:pointer;font-size:14px;line-height:1;padding:0">×</button>
-      </span>`;
-    }).join('') + '</div>';
-
-  // Panel de detalle
-  if (panelDif) panelDif.style.display='block';
-  renderItemsDetalleRemitos();
-}
-
-function renderItemsDetalleRemitos(){
-  const container = document.getElementById('panel-items-remitos');
-  if (!container) return;
-  let html = '';
-  _remitosSeleccionados.forEach(remitoId => {
-    const det = _remitosDetalles[remitoId];
-    if (!det) return;
-    const r = det.remito;
-    html += `<div style="margin-bottom:12px">
-      <div style="font-size:11px;font-weight:600;color:var(--blue);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:6px">
-        📋 ${r?.numero_formateado||remitoId.slice(0,8)} — ${fmtF(r?.fecha)} — ${r?.clientes?.nombre||''}
-      </div>
-      <table style="width:100%;border-collapse:collapse">
-        <thead><tr>
-          <th style="padding:4px 8px;font-size:10px;color:var(--muted);text-align:left;border-bottom:1px solid var(--border)">Vincular</th>
-          <th style="padding:4px 8px;font-size:10px;color:var(--muted);text-align:left;border-bottom:1px solid var(--border)">Ítem</th>
-          <th style="padding:4px 8px;font-size:10px;color:var(--muted);text-align:center;border-bottom:1px solid var(--border)">Cant.</th>
-          <th style="padding:4px 8px;font-size:10px;color:var(--muted);text-align:right;border-bottom:1px solid var(--border)">Precio</th>
-          <th style="padding:4px 8px;font-size:10px;color:var(--muted);text-align:right;border-bottom:1px solid var(--border)">Subtotal</th>
-        </tr></thead>
-        <tbody>`;
-    if (!det.items.length) {
-      html += `<tr><td colspan="5" style="padding:6px 8px;font-size:12px;color:var(--muted);text-align:center">Sin ítems registrados</td></tr>`;
-    } else {
-      det.items.forEach(it => {
-        const key = remitoId+':'+(it.id||it.descripcion);
-        const excluido = _itemsNoVinculados.has(key);
-        const cant = parseFloat(it.cantidad_num||it.cantidad)||0;
-        const precio = parseFloat(it.precio_unitario)||0;
-        const sub = cant*precio;
-        html += `<tr style="${excluido?'opacity:0.45;':''}">
-          <td style="padding:5px 8px;text-align:center">
-            <input type="checkbox" ${excluido?'':'checked'} 
-              onchange="toggleItemVinculacion('${remitoId}','${it.id||it.descripcion}',this)"
-              style="width:14px;height:14px;cursor:pointer;accent-color:var(--blue)">
-          </td>
-          <td style="padding:5px 8px;font-size:12px">${it.descripcion||'Sin descripción'}</td>
-          <td style="padding:5px 8px;font-size:12px;text-align:center;font-family:'DM Mono',monospace">${cant||'—'}</td>
-          <td style="padding:5px 8px;font-size:12px;text-align:right;font-family:'DM Mono',monospace">${precio?fmt(precio):'—'}</td>
-          <td style="padding:5px 8px;font-size:12px;text-align:right;font-family:'DM Mono',monospace;color:${excluido?'var(--muted)':'var(--orange)'}">${sub?fmt(sub):'—'}</td>
-        </tr>`;
-      });
-    }
-    html += `</tbody></table></div>`;
-    if (_remitosSeleccionados.indexOf(remitoId) < _remitosSeleccionados.length-1) {
-      html += `<hr style="border:none;border-top:1px solid var(--border);margin:8px 0">`;
-    }
-  });
-  container.innerHTML = html || '<div style="color:var(--muted);font-size:12px;padding:8px">Cargando ítems...</div>';
-}
-
-function actualizarDiferencia(){
-  const elRem  = document.getElementById('dif-remitos');
-  const elFac  = document.getElementById('dif-factura');
-  const elDif  = document.getElementById('dif-valor');
-  if (!elRem) return;
-
-  // Sumar solo ítems vinculados
-  let totalRemitos = 0;
-  _remitosSeleccionados.forEach(remitoId => {
-    const det = _remitosDetalles[remitoId];
-    if (!det) return;
-    det.items.forEach(it => {
-      const key = remitoId+':'+(it.id||it.descripcion);
-      if (_itemsNoVinculados.has(key)) return;
-      const cant = parseFloat(it.cantidad_num||it.cantidad)||0;
-      const precio = parseFloat(it.precio_unitario)||0;
-      totalRemitos += cant*precio;
-    });
-  });
-
-  const totalFactura = parseFloat(document.getElementById('nf-total')?.value)||0;
-  const diff = totalFactura - totalRemitos;
-
-  elRem.textContent  = fmt(totalRemitos);
-  elFac.textContent  = fmt(totalFactura);
-  elDif.textContent  = (diff>=0?'+':'')+fmt(diff);
-  elDif.style.color  = Math.abs(diff)<1 ? 'var(--green)' : diff>0 ? 'var(--orange)' : 'var(--red)';
-
+  lista.innerHTML=_remitosSeleccionados.map(id=>{
+    const rDisp=_remitosDisponibles.find(x=>x.id===id);
+    const rDet=_remitosDetalles[id]?.remito;
+    // Buscar número en disponibles primero, luego en detalles cargados
+    const label=rDisp?.numero_formateado||rDet?.numero_formateado||rDisp?.numero||rDet?.numero||id.slice(0,8);
+    return`<span style="display:inline-flex;align-items:center;gap:6px;background:rgba(79,142,247,0.13);border:1px solid rgba(79,142,247,0.28);color:var(--blue);padding:3px 10px;border-radius:20px;font-size:12px;font-family:'JetBrains Mono',monospace;font-weight:500">
+      📋 ${label}
+      <button onclick="quitarRemito('${id}')" style="background:none;border:none;color:var(--muted);cursor:pointer;font-size:14px;line-height:1;padding:0">×</button>
+    </span>`;
+  }).join('');
+  if(panelDif) panelDif.style.display='block';
   renderItemsDetalleRemitos();
 }
 
 // Recargar remitos cuando cambia el cliente
 document.addEventListener('DOMContentLoaded',()=>{
-  const cli = document.getElementById('nf-cliente');
-  if (cli) cli.addEventListener('change', ()=>{
-    _remitosSeleccionados = [];
-    _remitosDetalles = {};
-    _itemsNoVinculados.clear();
+  const cli=document.getElementById('nf-cliente');
+  if(cli) cli.addEventListener('change',()=>{
+    _remitosSeleccionados=[];
     renderRemitosSeleccionados();
     cargarRemitosParaFactura();
   });
-  // Recalcular diferencia cuando cambia el total de la factura
-  const nfTotal = document.getElementById('nf-total');
-  if (nfTotal) nfTotal.addEventListener('input', actualizarDiferencia);
-  const nfNeto  = document.getElementById('nf-neto');
-  if (nfNeto)  nfNeto.addEventListener('input',  () => { calcularTotal(); actualizarDiferencia(); });
-  const nfIva   = document.getElementById('nf-iva');
-  if (nfIva)   nfIva.addEventListener('input',   () => { calcularTotal(); actualizarDiferencia(); });
 });
 
-// Leer ?remito=id o ?remitos=id1,id2 al cargar la página
+// Leer ?remito=id al cargar la página
 (async()=>{
   const params=new URLSearchParams(window.location.search);
   const remitoId=params.get('remito');
-  const remitosIds=params.get('remitos');
-  const ids=remitoId?[remitoId]:remitosIds?remitosIds.split(',').filter(Boolean):[];
-  if(!ids.length) return;
-
-  // Tomar datos del primer remito para empresa/cliente
-  const first=await RemitosAPI.getRemitoSimple(ids[0]);
-  if(!first) return;
-
-  _remitosSeleccionados=[...ids];
-  _remitosDetalles={};
-  _itemsNoVinculados.clear();
-  document.getElementById('nf-empresa').value=first.empresa_id;
-  await cargarClientesPorEmpresa();
-  document.getElementById('nf-cliente').value=first.cliente_id||'';
-  document.getElementById('nf-fecha-emision').value=hoy();
-  document.getElementById('nf-estado').value='pendiente';
-  document.getElementById('modal-titulo').textContent=ids.length>1?`Nueva factura (${ids.length} remitos)`:'Nueva factura desde remito';
-  await cargarRemitosParaFactura();
-  // Cargar items de todos
-  await Promise.all(ids.map(async rid=>{
-    const items=await RemitosAPI.getItemsRemito(rid);
-    const remito=_remitosDisponibles.find(r=>r.id===rid)||await RemitosAPI.getRemitoSimple(rid);
-    _remitosDetalles[rid]={remito,items:items||[]};
-  }));
-  renderRemitosSeleccionados();
-  actualizarDiferencia();
-  document.getElementById('modal-factura').classList.add('show');
-  window.history.replaceState({},'',window.location.pathname);
+  if(remitoId){
+    const r=await RemitosAPI.getRemitoSimple(remitoId);
+    if(r){
+      _remitosSeleccionados=[remitoId];
+      document.getElementById('nf-empresa').value=r.empresa_id;
+      await cargarClientesPorEmpresa();
+      document.getElementById('nf-cliente').value=r.cliente_id||'';
+      document.getElementById('nf-fecha-emision').value=hoy();
+      document.getElementById('nf-estado').value='pendiente';
+      document.getElementById('modal-titulo').textContent='Nueva factura desde remito';
+      renderRemitosSeleccionados();
+      await cargarRemitosParaFactura();
+      document.getElementById('modal-factura').classList.add('show');
+      // Limpiar la URL
+      window.history.replaceState({},'',window.location.pathname);
+    }
+  }
 })();
 
 // logout() → ahora en ERP.logout() (erp-sidebar.js)

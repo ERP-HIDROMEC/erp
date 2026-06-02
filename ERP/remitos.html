@@ -242,25 +242,30 @@
     </div>
 
     <div id="sim-content" style="display:none">
-      <div style="margin-bottom:12px;padding:10px 14px;background:rgba(59,130,246,0.08);border:1px solid rgba(59,130,246,0.2);border-radius:8px;font-size:12px;color:var(--muted)">
-        ℹ Este es un chequeo operativo para verificar que el cliente aceptó todos los ítems antes de ir a AFIP. No genera factura.
+      <div style="margin-bottom:12px;padding:10px 14px;background:rgba(79,142,247,0.08);border:1px solid rgba(79,142,247,0.18);border-radius:8px;font-size:12px;color:var(--muted)">
+        ℹ Podés <strong style="color:var(--text-soft)">destildar ítems</strong> para excluirlos del total simulado. El total se recalcula en tiempo real.
       </div>
       <div style="overflow-x:auto;max-height:60vh;overflow-y:auto">
         <table>
           <thead>
             <tr>
-              <th>Ítem / Remito</th>
+              <th style="width:28px;text-align:center">
+                <input type="checkbox" checked title="Seleccionar todos"
+                  onchange="toggleTodosSimItems(this)"
+                  style="width:14px;height:14px;cursor:pointer;accent-color:var(--blue)">
+              </th>
+              <th>Remito</th>
               <th>Fecha</th>
-              <th style="text-align:center">Cantidad</th>
-              <th style="text-align:right">Precio unit.</th>
+              <th style="text-align:center">Cant.</th>
+              <th style="text-align:right">P. unit.</th>
               <th style="text-align:right">Subtotal</th>
             </tr>
           </thead>
           <tbody id="sim-items-body"></tbody>
           <tfoot>
             <tr style="background:var(--bg3)">
-              <td colspan="4" style="padding:12px 16px;font-size:13px;font-weight:600;text-align:right">TOTAL GENERAL</td>
-              <td style="padding:12px 16px;font-family:'DM Mono',monospace;font-size:16px;font-weight:600;color:var(--green)" id="sim-total">$0</td>
+              <td colspan="5" style="padding:12px 16px;font-size:13px;font-weight:600;text-align:right">TOTAL SELECCIONADO</td>
+              <td style="padding:12px 16px;font-family:'JetBrains Mono',monospace;font-size:16px;font-weight:700;color:var(--green);text-align:right" id="sim-total">$0</td>
             </tr>
           </tfoot>
         </table>
@@ -677,7 +682,10 @@ function filtrarPendientesLocal(){
         };color:${r.tipo==='contrato'?'var(--blue)':'var(--green)'}">
         ${r.tipo==='contrato'?'Contrato':'Servicio'}</span></td>
       <td style="font-size:12px;color:var(--muted)">${r.orden_compra||'—'}</td>
-      <td class="mono" style="color:var(--orange)">${r.total_valorizado?fmt(r.total_valorizado):'Sin valor'}</td>
+      <td class="mono" style="color:var(--orange);cursor:pointer;text-decoration:underline dotted;text-underline-offset:3px" 
+          onclick="abrirDetalleItems('${r.id}')" title="Ver detalle de ítems">
+        ${r.total_valorizado ? fmt(r.total_valorizado) : '<span style="color:var(--muted-dark);font-size:12px">Sin valor</span>'}
+      </td>
       <td><span style="font-size:11px;padding:2px 8px;border-radius:4px;background:${
           dias>30?'rgba(239,68,68,0.15)':'rgba(245,158,11,0.15)'
         };color:${dias>30?'var(--red)':'var(--orange)'}">
@@ -793,7 +801,7 @@ async function abrirSimulacionFacturacion(){
         const cant=parseFloat(it.cantidad_num||it.cantidad)||0;
         const precio=parseFloat(it.precio_unitario)||0;
         const sub=cant*precio;
-        g.lineas.push({remito,item:it,cant,precio,sub});
+        g.lineas.push({remito,item:it,cant,precio,sub,key,itemKey:`${remito.id}::${it.id||it.descripcion}`});
         g.totalCant+=cant;
         g.totalMonto+=sub;
       });
@@ -804,26 +812,36 @@ async function abrirSimulacionFacturacion(){
 
     let html='';
     grupos.forEach(g=>{
-      html+=`<tr style="background:rgba(59,130,246,0.05)">
-        <td colspan="5" style="font-size:12px;font-weight:600;color:var(--blue);padding:10px 16px 4px;text-transform:uppercase;letter-spacing:0.5px">
-          ${g.desc}${g.contrato_item_id?'<span style="font-size:10px;color:var(--muted);margin-left:8px;font-weight:400">ítem de contrato</span>':''}
+      html+=`<tr style="background:rgba(79,142,247,0.06)">
+        <td style="width:28px;text-align:center;padding:8px 8px 4px">
+          <input type="checkbox" class="sim-grupo-check" data-key="${g.desc.replace(/"/g,'')}"
+            checked onchange="toggleGrupoSim(this)"
+            style="width:14px;height:14px;cursor:pointer;accent-color:var(--blue)">
+        </td>
+        <td colspan="4" style="font-size:12px;font-weight:600;color:var(--blue);padding:8px 16px 4px;text-transform:uppercase;letter-spacing:0.5px">
+          ${g.desc}${g.contrato_item_id?'<span style="font-size:10px;color:var(--muted);margin-left:8px;font-weight:400;text-transform:none">ítem de contrato</span>':''}
         </td>
       </tr>`;
       g.lineas.forEach(l=>{
-        html+=`<tr>
-          <td style="padding-left:28px;font-size:12px;color:var(--muted)">${l.remito?.numero_formateado||'—'}</td>
+        html+=`<tr class="sim-item-row" data-item-key="${l.itemKey}">
+          <td style="text-align:center;padding:5px 8px">
+            <input type="checkbox" class="sim-item-check" data-item-key="${l.itemKey}"
+              checked onchange="recalcSimTotal()"
+              style="width:13px;height:13px;cursor:pointer;accent-color:var(--blue)">
+          </td>
+          <td style="padding-left:24px;font-size:12px;color:var(--muted)">${l.remito?.numero_formateado||'—'}</td>
           <td style="font-size:12px;color:var(--muted)">${fmtF(l.remito?.fecha)}</td>
-          <td class="mono" style="font-size:12px">${l.cant||'—'}</td>
-          <td class="mono" style="font-size:12px">${l.precio?fmt(l.precio):'—'}</td>
-          <td class="mono" style="font-size:12px;color:var(--orange)">${l.sub?fmt(l.sub):'—'}</td>
+          <td class="mono" style="font-size:12px;text-align:center">${l.cant||'—'}</td>
+          <td class="mono" style="font-size:12px;text-align:right">${l.precio?fmt(l.precio):'—'}</td>
+          <td class="mono" style="font-size:12px;text-align:right;color:var(--orange)" data-sub="${l.sub}">${l.sub?fmt(l.sub):'—'}</td>
         </tr>`;
       });
       if(g.lineas.length>1){
         html+=`<tr style="border-top:1px solid var(--border)">
-          <td colspan="2" style="padding-left:28px;font-size:12px;color:var(--muted)">Subtotal ${g.desc}</td>
-          <td class="mono" style="font-size:12px">${g.totalCant}</td>
           <td></td>
-          <td class="mono" style="font-size:13px;font-weight:600;color:var(--green)">${fmt(g.totalMonto)}</td>
+          <td colspan="3" style="padding-left:24px;font-size:12px;color:var(--muted)">Subtotal</td>
+          <td></td>
+          <td class="mono" style="font-size:13px;font-weight:600;color:var(--green);text-align:right" id="sub-${g.desc.replace(/\s/g,'_').slice(0,20)}">${fmt(g.totalMonto)}</td>
         </tr>`;
       }
     });
@@ -1311,7 +1329,38 @@ async function anularRemito(id){
   cargarRemitos();
 }
 
-function facturarDesdeSimulacion(){
+function recalcSimTotal(){
+  let total = 0;
+  document.querySelectorAll('.sim-item-check:checked').forEach(cb => {
+    const row = cb.closest('tr');
+    const subEl = row?.querySelector('[data-sub]');
+    if(subEl) total += parseFloat(subEl.dataset.sub) || 0;
+  });
+  const el = document.getElementById('sim-total');
+  if(el) el.textContent = fmt(total);
+}
+
+function toggleGrupoSim(masterCb){
+  // Tildar/destildar todos los items de un grupo por descripción
+  const key = masterCb.dataset.key;
+  // Los items del grupo son las filas que siguen hasta el próximo grupo
+  const allItems = document.querySelectorAll('.sim-item-check');
+  // Usamos el orden en el DOM: las filas del grupo van después de la cabecera del grupo
+  const grupoCab = masterCb.closest('tr');
+  let node = grupoCab?.nextElementSibling;
+  while(node && node.classList.contains('sim-item-row')){
+    const cb = node.querySelector('.sim-item-check');
+    if(cb) cb.checked = masterCb.checked;
+    node = node.nextElementSibling;
+  }
+  recalcSimTotal();
+}
+
+function toggleTodosSimItems(masterCb){
+  document.querySelectorAll('.sim-item-check').forEach(cb => cb.checked = masterCb.checked);
+  document.querySelectorAll('.sim-grupo-check').forEach(cb => cb.checked = masterCb.checked);
+  recalcSimTotal();
+}
   const ids=[..._selPendientes.keys()];
   if(!ids.length) return;
   if(ids.length===1){
@@ -1370,18 +1419,35 @@ async function abrirVincularFCMultiple(remitoIds, primerRemito){
 // ── Override unificado: maneja 1 o N remitos ─────────────────
 async function confirmarVincularFC(facturaId, nroFactura){
   const esMultiple = Array.isArray(_vfcRemitoId);
+  const ids = esMultiple ? _vfcRemitoId : [_vfcRemitoId];
   const msg = esMultiple
-    ? `¿Vincular ${_vfcRemitoId.length} remitos a la factura ${nroFactura}?\nTodos pasarán a estado "Facturado".`
+    ? `¿Vincular ${ids.length} remitos a la factura ${nroFactura}?\nTodos pasarán a estado "Facturado".`
     : `¿Vincular el remito a la factura ${nroFactura}?\nEl remito pasará a estado "Facturado" y se dará de baja en pendientes.`;
 
   const ok = await confirmar(msg);
   if(!ok) return;
 
   try {
-    const ids = esMultiple ? _vfcRemitoId : [_vfcRemitoId];
+    // 1. Marcar cada remito como facturado y guardar factura_id
     for(const rid of ids){
       await RemitosAPI.vincularRemitoFactura(rid, facturaId);
     }
+
+    // 2. Actualizar remitos_ids en la factura (leer actual y hacer merge)
+    const { data: facActual, error: eLeer } = await db
+      .from('facturas_emitidas')
+      .select('remitos_ids')
+      .eq('id', facturaId)
+      .single();
+
+    if(!eLeer){
+      const remitosActuales = facActual?.remitos_ids || [];
+      const nuevoArray = [...new Set([...remitosActuales, ...ids])];
+      await db.from('facturas_emitidas')
+        .update({ remitos_ids: nuevoArray })
+        .eq('id', facturaId);
+    }
+
     cerrarModal('modal-vincular-fc');
     limpiarSeleccion();
     toast(`✓ ${ids.length > 1 ? ids.length + ' remitos vinculados' : 'Remito vinculado'} a factura ${nroFactura}`, 'success');
@@ -1402,7 +1468,56 @@ let _vfcClienteId = null;
 let _vfcEmpresaId = null;
 let _vfcFacturas  = []; // cache de facturas cargadas
 
-async function abrirVincularFC(remitoId){
+async function abrirDetalleItems(remitoId){
+  document.getElementById('modal-detalle-items').classList.add('show');
+  document.getElementById('detalle-items-loading').style.display='flex';
+  document.getElementById('detalle-items-content').style.display='none';
+
+  try {
+    const [remito, items] = await Promise.all([
+      RemitosAPI.getRemitoById(remitoId),
+      RemitosAPI.getItemsRemito(remitoId)
+    ]);
+
+    document.getElementById('detalle-items-titulo').textContent =
+      `Detalle — ${remito?.numero_formateado || remitoId.slice(0,8)}`;
+    document.getElementById('detalle-items-cliente').textContent =
+      remito?.clientes?.nombre || '—';
+
+    const body = document.getElementById('detalle-items-body');
+    const sinValor = document.getElementById('detalle-items-sinvalor');
+    const totalEl = document.getElementById('detalle-items-total');
+
+    if(!items || !items.length){
+      body.innerHTML='';
+      sinValor.style.display='block';
+      totalEl.textContent = remito?.total_valorizado ? fmt(remito.total_valorizado) : '—';
+    } else {
+      sinValor.style.display='none';
+      let total = 0;
+      body.innerHTML = items.map(it => {
+        const cant = parseFloat(it.cantidad_num || it.cantidad) || null;
+        const precio = parseFloat(it.precio_unitario) || 0;
+        const sub = cant ? cant * precio : 0;
+        total += sub;
+        return `<tr>
+          <td style="font-size:13px">${it.descripcion || '—'}</td>
+          <td style="text-align:center;font-family:'JetBrains Mono',monospace;font-size:12.5px">${it.cantidad || '—'}</td>
+          <td style="text-align:right;font-family:'JetBrains Mono',monospace;font-size:12.5px">${precio ? fmt(precio) : '—'}</td>
+          <td style="text-align:right;font-family:'JetBrains Mono',monospace;font-size:13px;font-weight:600;color:var(--orange)">${sub ? fmt(sub) : '—'}</td>
+        </tr>`;
+      }).join('');
+      // Si el total calculado es 0 pero tiene total_valorizado, usar ese
+      totalEl.textContent = fmt(total || remito?.total_valorizado || 0);
+    }
+
+    document.getElementById('detalle-items-loading').style.display='none';
+    document.getElementById('detalle-items-content').style.display='block';
+  } catch(e){
+    manejarError(e,'cargar detalle de ítems');
+    cerrarModal('modal-detalle-items');
+  }
+}
   _vfcRemitoId = remitoId;
   _vfcFacturas = [];
 
@@ -2189,6 +2304,45 @@ async function eliminarPlantilla(id) {
 }
 
 </script>
+<!-- MODAL DETALLE ITEMS REMITO (click en monto) -->
+<div class="modal-overlay" id="modal-detalle-items">
+  <div class="modal" style="max-width:620px;width:96vw">
+    <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:18px">
+      <div>
+        <h3 style="margin-bottom:4px" id="detalle-items-titulo">Detalle de ítems</h3>
+        <div style="font-size:13px;color:var(--muted)">Cliente: <strong id="detalle-items-cliente" style="color:var(--text-soft)">—</strong></div>
+      </div>
+      <button class="btn btn-ghost btn-sm" onclick="cerrarModal('modal-detalle-items')">✕</button>
+    </div>
+    <div id="detalle-items-loading" class="spinner-wrap" style="display:none"><div class="spinner"></div>Cargando...</div>
+    <div id="detalle-items-content">
+      <div style="overflow-x:auto">
+        <table>
+          <thead><tr>
+            <th>Descripción</th>
+            <th style="text-align:center">Cantidad</th>
+            <th style="text-align:right">Precio unit.</th>
+            <th style="text-align:right">Subtotal</th>
+          </tr></thead>
+          <tbody id="detalle-items-body"></tbody>
+          <tfoot>
+            <tr style="background:var(--bg3)">
+              <td colspan="3" style="text-align:right;font-weight:600;font-size:13px">Total</td>
+              <td style="text-align:right;font-family:'JetBrains Mono',monospace;font-weight:700;font-size:15px;color:var(--orange)" id="detalle-items-total"></td>
+            </tr>
+          </tfoot>
+        </table>
+      </div>
+      <div id="detalle-items-sinvalor" style="display:none;padding:24px;text-align:center;color:var(--muted);font-size:13px">
+        Este remito no tiene ítems valorizados registrados.
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" onclick="cerrarModal('modal-detalle-items')">Cerrar</button>
+    </div>
+  </div>
+</div>
+
 <!-- MODAL VINCULAR REMITO A FACTURA EXISTENTE -->
 <div class="modal-overlay" id="modal-vincular-fc">
   <div class="modal" style="max-width:680px;width:96vw">
