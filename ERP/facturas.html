@@ -56,7 +56,6 @@
 
   <div class="tabs">
     <button class="tab active" onclick="cambiarTab('facturas',this)">Facturas</button>
-    <button class="tab" onclick="cambiarTab('remitos',this)">Remitos</button>
     <button class="tab" onclick="cambiarTab('cobros',this)">Cobros</button>
   </div>
 
@@ -761,7 +760,7 @@ async function cargarFacturas(){
     <table>
       <thead><tr>
         <th>Empresa</th><th>Fecha</th><th>N° Factura</th><th>Tipo</th>
-        <th>Cliente</th><th>Total</th><th>Estado</th><th>Vence</th><th>Acciones</th>
+        <th>Cliente</th><th>Total</th><th style="text-align:center">Rem.</th><th>Estado</th><th>Vence</th><th>Acciones</th>
       </tr></thead>
       <tbody>${rows.length?rows.map(r=>{
         const venc=r.estado_visual==='vencida';
@@ -772,7 +771,8 @@ async function cargarFacturas(){
           <td class="mono">${r.numero_factura||'—'}</td>
           <td><span class="estado ${r.tipo==='NC'?'anulada':'pendiente'}" style="${r.tipo==='NC'?'background:rgba(239,68,68,0.1);color:var(--red)':'background:var(--bg3);color:var(--muted)'}">${r.tipo}</span></td>
           <td>${r.clientes?.nombre||'—'}</td>
-          <td class="mono" onclick="abrirDetalleFc('${r.id}')" title="Ver detalle" style="cursor:pointer;text-decoration:underline dotted;text-underline-offset:3px;font-weight:600;color:${esNC(r)?'#a78bfa':r.estado==='cobrada'?'#22d3a0':r.estado_visual==='vencida'?'#f16262':'#fbbf24'}">${esNC(r)?'−':''}${fmt(r.monto_total)}<span style="display:inline-flex;align-items:center;gap:2px;margin-left:6px;font-size:9px;font-weight:700;padding:1px 5px;border-radius:4px;vertical-align:middle;background:${r.estado==='cobrada'?(r.remitos_ids&&r.remitos_ids.length?'rgba(34,211,160,0.15)':'rgba(241,98,98,0.12)'):(r.remitos_ids&&r.remitos_ids.length?'rgba(79,142,247,0.15)':'transparent')};color:${r.estado==='cobrada'?(r.remitos_ids&&r.remitos_ids.length?'#22d3a0':'#f16262'):(r.remitos_ids&&r.remitos_ids.length?'#4f8ef7':'transparent')};border:1px solid ${r.estado==='cobrada'?(r.remitos_ids&&r.remitos_ids.length?'rgba(34,211,160,0.3)':'rgba(241,98,98,0.25)'):(r.remitos_ids&&r.remitos_ids.length?'rgba(79,142,247,0.3)':'transparent')};">${esNC(r)?'':r.estado==='cobrada'?(r.remitos_ids&&r.remitos_ids.length?'✓rem':'!rem'):(r.remitos_ids&&r.remitos_ids.length?'rem':'')}</span></td>
+          <td class="mono" style="cursor:pointer;text-decoration:underline dotted;text-underline-offset:3px" onclick="abrirDetalleFc('${r.id}')" title="Ver detalle">${esNC(r)?'−':''}${fmt(r.monto_total)}</td>
+          <td style="text-align:center">${(r.remitos_ids&&r.remitos_ids.length)?'<span title="Tiene remitos vinculados" style="display:inline-block;width:10px;height:10px;border-radius:50%;background:#22d3a0"></span>':'<span title="Sin remitos vinculados" style="display:inline-block;width:10px;height:10px;border-radius:50%;background:transparent;border:2px solid #5a6278"></span>'}</td>
           <td><span class="estado ${r.estado_visual}">${r.estado_visual}</span></td>
           <td>${r.fecha_cobro_estimada?`<span style="font-size:12px${venc?';color:var(--red)':''}">${fmtF(r.fecha_cobro_estimada)}${venc?` <span class="dias-badge">${dias}d</span>`:''}</span>`:'—'}</td>
           <td>
