@@ -1190,6 +1190,8 @@ function cerrarModal(id){ document.getElementById(id).classList.remove('show'); 
 // ── REMITOS EN FACTURA ────────────────────────────────────────
 let _remitosSeleccionados=[];
 let _remitosDisponibles=[];
+let _remitosDetalles={};
+let _itemsNoVinculados=new Set();
 
 async function cargarRemitosParaFactura(){
   const empId=document.getElementById('nf-empresa').value;
