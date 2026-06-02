@@ -746,7 +746,7 @@ async function cargarFacturas(){
           <td class="mono">${r.numero_factura||'—'}</td>
           <td><span class="estado ${r.tipo==='NC'?'anulada':'pendiente'}" style="${r.tipo==='NC'?'background:rgba(239,68,68,0.1);color:var(--red)':'background:var(--bg3);color:var(--muted)'}">${r.tipo}</span></td>
           <td>${r.clientes?.nombre||'—'}</td>
-          <td class="mono" style="color:${esNC(r)?'var(--red)':'var(--text)'}">${esNC(r)?'-':''}${fmt(r.monto_total)}</td>
+          <td class="mono" style="color:${esNC(r)?'var(--red)':'var(--text)'};cursor:pointer;text-decoration:underline dotted;text-underline-offset:3px" onclick="abrirDetalleFc('${r.id}')" title="Ver detalle de factura">${esNC(r)?'-':''}\${fmt(r.monto_total)}</td>
           <td><span class="estado ${r.estado_visual}">${r.estado_visual}</span></td>
           <td>${r.fecha_cobro_estimada?`<span style="font-size:12px${venc?';color:var(--red)':''}">${fmtF(r.fecha_cobro_estimada)}${venc?` <span class="dias-badge">${dias}d</span>`:''}</span>`:'—'}</td>
           <td>
@@ -1376,7 +1376,180 @@ document.addEventListener('DOMContentLoaded',()=>{
 
 // logout() → ahora en ERP.logout() (erp-sidebar.js)
 
+// ── MODAL DETALLE FACTURA ─────────────────────────────────────
+async function abrirDetalleFc(facturaId){
+  document.getElementById('modal-detalle-fc').classList.add('show');
+  document.getElementById('dfc-loading').style.display='flex';
+  document.getElementById('dfc-content').style.display='none';
+
+  try {
+    const fc = await FacturasAPI.getFacturaById(facturaId);
+    if(!fc) throw new Error('Factura no encontrada');
+
+    document.getElementById('dfc-titulo').textContent  = `Factura ${fc.numero_factura||'—'}`;
+    document.getElementById('dfc-cliente').textContent = fc.clientes?.nombre || '—';
+    document.getElementById('dfc-fecha').textContent   = fmtF(fc.fecha_emision);
+    document.getElementById('dfc-estado').innerHTML    = `<span class="estado ${fc.estado}">${fc.estado}</span>`;
+    document.getElementById('dfc-neto').textContent    = fmt(fc.monto_neto||0);
+    document.getElementById('dfc-iva').textContent     = fmt(fc.monto_iva||0);
+    document.getElementById('dfc-total').textContent   = fmt(fc.monto_total||0);
+    document.getElementById('dfc-btn-editar').onclick  = ()=>{ cerrarModal('modal-detalle-fc'); editarFactura(facturaId); };
+
+    const obsEl = document.getElementById('dfc-obs-section');
+    if(fc.observaciones){ obsEl.style.display='block'; document.getElementById('dfc-obs').textContent=fc.observaciones; }
+    else obsEl.style.display='none';
+
+    const remitosIds  = fc.remitos_ids||[];
+    const secRemitos  = document.getElementById('dfc-remitos-section');
+    const secSinRem   = document.getElementById('dfc-sin-remitos');
+    const tbody       = document.getElementById('dfc-items-body');
+    const totalRemEl  = document.getElementById('dfc-total-remitos');
+    const difEl       = document.getElementById('dfc-diferencia');
+
+    if(!remitosIds.length){
+      secRemitos.style.display='none';
+      secSinRem.style.display='block';
+      difEl.textContent='—';
+    } else {
+      secRemitos.style.display='block';
+      secSinRem.style.display='none';
+
+      const detalles = await Promise.all(remitosIds.map(async rid=>{
+        try {
+          const [remito, items] = await Promise.all([RemitosAPI.getRemitoById(rid), RemitosAPI.getItemsRemito(rid)]);
+          return { remito, items: items||[] };
+        } catch(e){ return { remito:{ id:rid, numero_formateado: rid.slice(0,8) }, items:[] }; }
+      }));
+
+      let totalRemitos=0, htmlRows='';
+      detalles.forEach(({ remito, items }, di) => {
+        const nro   = remito?.numero_formateado || remito?.id?.slice(0,8) || '—';
+        const fecha = fmtF(remito?.fecha);
+        if(!items.length){
+          const tv=parseFloat(remito?.total_valorizado)||0;
+          totalRemitos+=tv;
+          htmlRows+=`<tr>
+            <td class="mono" style="font-weight:600;font-size:12px">${nro}</td>
+            <td class="mono" style="font-size:12px">${fecha}</td>
+            <td colspan="3" style="font-size:12px;color:var(--muted)">Sin ítems detallados</td>
+            <td style="text-align:right;font-family:'JetBrains Mono',monospace;font-size:12px;color:var(--orange)">${tv?fmt(tv):'—'}</td>
+          </tr>`;
+        } else {
+          items.forEach((it,i)=>{
+            const cant=parseFloat(it.cantidad_num||it.cantidad)||0;
+            const precio=parseFloat(it.precio_unitario)||0;
+            const sub=cant*precio;
+            totalRemitos+=sub;
+            htmlRows+=`<tr>
+              <td class="mono" style="font-weight:600;font-size:12px">${i===0?nro:''}</td>
+              <td class="mono" style="font-size:12px">${i===0?fecha:''}</td>
+              <td style="font-size:12px">${it.descripcion||'—'}</td>
+              <td style="text-align:center;font-family:'JetBrains Mono',monospace;font-size:12px">${cant||'—'}</td>
+              <td style="text-align:right;font-family:'JetBrains Mono',monospace;font-size:12px">${precio?fmt(precio):'—'}</td>
+              <td style="text-align:right;font-family:'JetBrains Mono',monospace;font-size:12px;color:var(--orange)">${sub?fmt(sub):'—'}</td>
+            </tr>`;
+          });
+        }
+        if(di < detalles.length-1)
+          htmlRows+=`<tr><td colspan="6" style="padding:0;border-bottom:2px solid var(--border)"></td></tr>`;
+      });
+
+      tbody.innerHTML=htmlRows;
+      totalRemEl.textContent=fmt(totalRemitos);
+      const diff=(fc.monto_total||0)-totalRemitos;
+      difEl.textContent=(diff>=0?'+':'')+fmt(diff);
+      difEl.style.color=Math.abs(diff)<1?'var(--green)':diff>0?'var(--orange)':'var(--red)';
+    }
+
+    document.getElementById('dfc-loading').style.display='none';
+    document.getElementById('dfc-content').style.display='block';
+  } catch(e){
+    manejarError(e,'cargar detalle de factura');
+    cerrarModal('modal-detalle-fc');
+  }
+}
+
 init();
 </script>
-</body>
-</html>
+<!-- MODAL DETALLE FACTURA -->
+<div class="modal-overlay" id="modal-detalle-fc">
+  <div class="modal" style="max-width:720px;width:96vw">
+    <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:20px">
+      <div>
+        <h3 style="margin-bottom:4px" id="dfc-titulo">Detalle de factura</h3>
+        <div style="font-size:13px;color:var(--muted)">
+          Cliente: <strong id="dfc-cliente" style="color:var(--text-soft)">—</strong>
+          &nbsp;·&nbsp; Fecha: <strong id="dfc-fecha" style="color:var(--text-soft)">—</strong>
+          &nbsp;·&nbsp; Estado: <span id="dfc-estado"></span>
+        </div>
+      </div>
+      <button class="btn btn-ghost btn-sm" onclick="cerrarModal('modal-detalle-fc')">✕</button>
+    </div>
+
+    <div id="dfc-loading" class="spinner-wrap" style="display:none"><div class="spinner"></div>Cargando...</div>
+
+    <div id="dfc-content" style="display:none">
+      <!-- Montos principales -->
+      <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;margin-bottom:20px">
+        <div style="background:var(--bg3);border-radius:10px;padding:14px 16px;text-align:center">
+          <div style="font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:0.8px;margin-bottom:6px">Neto</div>
+          <div id="dfc-neto" style="font-family:'JetBrains Mono',monospace;font-size:16px;font-weight:700;color:var(--text)">—</div>
+        </div>
+        <div style="background:var(--bg3);border-radius:10px;padding:14px 16px;text-align:center">
+          <div style="font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:0.8px;margin-bottom:6px">IVA</div>
+          <div id="dfc-iva" style="font-family:'JetBrains Mono',monospace;font-size:16px;font-weight:700;color:var(--muted)">—</div>
+        </div>
+        <div style="background:rgba(79,142,247,0.1);border:1px solid rgba(79,142,247,0.2);border-radius:10px;padding:14px 16px;text-align:center">
+          <div style="font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:0.8px;margin-bottom:6px">Total factura</div>
+          <div id="dfc-total" style="font-family:'JetBrains Mono',monospace;font-size:18px;font-weight:700;color:var(--blue)">—</div>
+        </div>
+      </div>
+
+      <!-- Remitos asociados -->
+      <div id="dfc-remitos-section" style="display:none">
+        <div style="font-size:11px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:0.9px;margin-bottom:10px">Remitos vinculados</div>
+        <div style="overflow-x:auto;max-height:320px;overflow-y:auto;border:1px solid var(--border);border-radius:10px">
+          <table>
+            <thead><tr>
+              <th>Remito</th><th>Fecha</th><th>Ítem</th>
+              <th style="text-align:center">Cant.</th>
+              <th style="text-align:right">Precio unit.</th>
+              <th style="text-align:right">Subtotal</th>
+            </tr></thead>
+            <tbody id="dfc-items-body"></tbody>
+            <tfoot>
+              <tr style="background:var(--bg3)">
+                <td colspan="5" style="padding:10px 16px;font-size:12px;font-weight:600;text-align:right;color:var(--muted)">Total remitos</td>
+                <td style="padding:10px 16px;font-family:'JetBrains Mono',monospace;font-size:14px;font-weight:700;color:var(--orange);text-align:right" id="dfc-total-remitos">—</td>
+              </tr>
+            </tfoot>
+          </table>
+        </div>
+
+        <!-- Diferencia -->
+        <div style="margin-top:12px;padding:12px 16px;border-radius:10px;background:var(--bg3);display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px">
+          <span style="font-size:12px;color:var(--muted)">Diferencia (Factura − Remitos)</span>
+          <span id="dfc-diferencia" style="font-family:'JetBrains Mono',monospace;font-size:16px;font-weight:700">—</span>
+        </div>
+      </div>
+
+      <!-- Sin remitos -->
+      <div id="dfc-sin-remitos" style="display:none;padding:20px;text-align:center;color:var(--muted);font-size:13px;border:1px solid var(--border);border-radius:10px">
+        Esta factura no tiene remitos asociados.
+      </div>
+
+      <!-- Observaciones -->
+      <div id="dfc-obs-section" style="display:none;margin-top:14px">
+        <div style="font-size:11px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:0.9px;margin-bottom:6px">Observaciones</div>
+        <div id="dfc-obs" style="font-size:13px;color:var(--text-soft);padding:10px 14px;background:var(--bg3);border-radius:8px"></div>
+      </div>
+    </div>
+
+    <div class="modal-footer">
+      <button class="btn btn-ghost" onclick="cerrarModal('modal-detalle-fc')">Cerrar</button>
+      <button class="btn btn-ghost" id="dfc-btn-editar" onclick="">Editar factura →</button>
+    </div>
+  </div>
+</div>
+
+
