@@ -269,7 +269,7 @@
 
     <div class="modal-footer">
       <button class="btn btn-ghost" onclick="cerrarModal('modal-simulacion')">Cerrar</button>
-      <button class="btn btn-primary" onclick="cerrarModal('modal-simulacion');facturarDesdeSimulacion()">→ Ir a facturar estos remitos</button>
+      <button class="btn btn-primary" onclick="facturarDesdeSimulacion()">→ Vincular a factura existente</button>
     </div>
   </div>
 </div>
@@ -1314,11 +1314,164 @@ async function anularRemito(id){
 function facturarDesdeSimulacion(){
   const ids=[..._selPendientes.keys()];
   if(!ids.length) return;
-  window.location.href='facturas.html?remitos='+ids.join(',');
+  if(ids.length===1){
+    // Un solo remito: flujo normal de vinculación
+    cerrarModal('modal-simulacion');
+    abrirVincularFC(ids[0]);
+    return;
+  }
+  // Varios remitos: validar mismo cliente y abrir vinculación múltiple
+  const remitos=[..._selPendientes.values()];
+  const clientes=[...new Set(remitos.map(r=>r.cliente_id).filter(Boolean))];
+  if(clientes.length>1){
+    toast('Para vincular a una factura, todos los remitos deben ser del mismo cliente.','warn');
+    return;
+  }
+  cerrarModal('modal-simulacion');
+  abrirVincularFCMultiple(ids, remitos[0]);
+}
+
+async function abrirVincularFCMultiple(remitoIds, primerRemito){
+  // Para múltiples remitos usamos el mismo modal pero con lógica de vinculación múltiple
+  _vfcRemitoId  = remitoIds; // array en este caso
+  _vfcClienteId = primerRemito.cliente_id;
+  _vfcEmpresaId = primerRemito.empresa_id;
+  _vfcFacturas  = [];
+
+  document.getElementById('vfc-remito-nro').textContent    = `${remitoIds.length} remitos seleccionados`;
+  document.getElementById('vfc-cliente-nombre').textContent = primerRemito.clientes?.nombre || '—';
+  document.getElementById('vfc-buscar').value  = '';
+  document.getElementById('vfc-estado').value  = 'pendiente';
+  document.getElementById('vfc-lista').innerHTML = '';
+  document.getElementById('vfc-loading').style.display = 'flex';
+  document.getElementById('modal-vincular-fc').classList.add('show');
+
+  try {
+    let q = db.from('facturas_emitidas')
+      .select('id,numero_factura,fecha_emision,monto_total,estado,tipo')
+      .eq('empresa_id', _vfcEmpresaId)
+      .neq('estado','anulada')
+      .order('fecha_emision', { ascending: false })
+      .limit(200);
+    if(_vfcClienteId) q = q.eq('cliente_id', _vfcClienteId);
+    const { data, error } = await q;
+    if(error) throw error;
+    _vfcFacturas = data || [];
+  } catch(e) {
+    toast('Error cargando facturas: ' + (e.message||e), 'error');
+    _vfcFacturas = [];
+  }
+
+  document.getElementById('vfc-loading').style.display = 'none';
+  filtrarFacturasVFC();
+}
+
+// Override de confirmarVincularFC para manejar el caso múltiple
+// ── Override unificado: maneja 1 o N remitos ─────────────────
+async function confirmarVincularFC(facturaId, nroFactura){
+  const esMultiple = Array.isArray(_vfcRemitoId);
+  const msg = esMultiple
+    ? `¿Vincular ${_vfcRemitoId.length} remitos a la factura ${nroFactura}?\nTodos pasarán a estado "Facturado".`
+    : `¿Vincular el remito a la factura ${nroFactura}?\nEl remito pasará a estado "Facturado" y se dará de baja en pendientes.`;
+
+  const ok = await confirmar(msg);
+  if(!ok) return;
+
+  try {
+    const ids = esMultiple ? _vfcRemitoId : [_vfcRemitoId];
+    for(const rid of ids){
+      await RemitosAPI.vincularRemitoFactura(rid, facturaId);
+    }
+    cerrarModal('modal-vincular-fc');
+    limpiarSeleccion();
+    toast(`✓ ${ids.length > 1 ? ids.length + ' remitos vinculados' : 'Remito vinculado'} a factura ${nroFactura}`, 'success');
+    cargarPendientes();
+  } catch(e) {
+    manejarError(e, 'vincular remito a factura');
+  }
 }
 
 function irAFacturar(id){
-  window.location.href=`facturas.html?remito=${id}`;
+  // Ahora abre el modal de vinculación a FC existente en vez de ir a facturas.html
+  abrirVincularFC(id);
+}
+
+// ── Estado del modal vincular FC ─────────────────────────────
+let _vfcRemitoId  = null;
+let _vfcClienteId = null;
+let _vfcEmpresaId = null;
+let _vfcFacturas  = []; // cache de facturas cargadas
+
+async function abrirVincularFC(remitoId){
+  _vfcRemitoId = remitoId;
+  _vfcFacturas = [];
+
+  // Cargar datos del remito
+  const r = await RemitosAPI.getRemitoById(remitoId);
+  if(!r){ toast('No se encontró el remito.','error'); return; }
+  _vfcClienteId = r.cliente_id;
+  _vfcEmpresaId = r.empresa_id;
+
+  document.getElementById('vfc-remito-nro').textContent    = r.numero_formateado || r.id.slice(0,8);
+  document.getElementById('vfc-cliente-nombre').textContent = r.clientes?.nombre || '—';
+  document.getElementById('vfc-buscar').value  = '';
+  document.getElementById('vfc-estado').value  = 'pendiente';
+  document.getElementById('vfc-lista').innerHTML = '';
+  document.getElementById('vfc-loading').style.display = 'flex';
+  document.getElementById('modal-vincular-fc').classList.add('show');
+
+  // Cargar facturas del cliente desde la BD
+  try {
+    let q = db.from('facturas_emitidas')
+      .select('id,numero_factura,fecha_emision,monto_total,estado,tipo')
+      .eq('empresa_id', _vfcEmpresaId)
+      .neq('estado','anulada')
+      .order('fecha_emision', { ascending: false })
+      .limit(200);
+    if(_vfcClienteId) q = q.eq('cliente_id', _vfcClienteId);
+    const { data, error } = await q;
+    if(error) throw error;
+    _vfcFacturas = data || [];
+  } catch(e) {
+    toast('Error cargando facturas: ' + (e.message||e), 'error');
+    _vfcFacturas = [];
+  }
+
+  document.getElementById('vfc-loading').style.display = 'none';
+  filtrarFacturasVFC();
+}
+
+function filtrarFacturasVFC(){
+  const buscar = (document.getElementById('vfc-buscar')?.value || '').toLowerCase().trim();
+  const estado = document.getElementById('vfc-estado')?.value || '';
+  const lista  = document.getElementById('vfc-lista');
+  if(!lista) return;
+
+  let rows = _vfcFacturas;
+  if(estado)  rows = rows.filter(f => f.estado === estado);
+  if(buscar)  rows = rows.filter(f => (f.numero_factura||'').toLowerCase().includes(buscar));
+
+  if(!rows.length){
+    lista.innerHTML = `<div style="padding:32px;text-align:center;color:var(--muted);font-size:13px">
+      ${_vfcFacturas.length ? 'Sin facturas que coincidan con el filtro.' : 'Este cliente no tiene facturas cargadas aún.'}
+    </div>`;
+    return;
+  }
+
+  lista.innerHTML = rows.map(f => {
+    const colorEstado = f.estado==='pendiente'?'var(--orange)':f.estado==='cobrada'?'var(--green)':'var(--blue)';
+    return `<div style="display:flex;align-items:center;gap:12px;padding:12px 16px;border-bottom:1px solid var(--border);cursor:pointer;transition:background 0.1s"
+      onmouseover="this.style.background='var(--bg3)'" onmouseout="this.style.background=''"
+      onclick="confirmarVincularFC('${f.id}','${(f.numero_factura||'').replace(/'/g,"\\'")}')">
+      <div style="flex:1">
+        <div style="font-family:'DM Mono',monospace;font-weight:600;font-size:13px">${f.numero_factura||'—'}</div>
+        <div style="font-size:11px;color:var(--muted);margin-top:2px">${fmtF(f.fecha_emision)} · ${f.tipo}</div>
+      </div>
+      <div style="font-family:'DM Mono',monospace;font-size:14px;font-weight:600">${fmt(f.monto_total)}</div>
+      <span style="font-size:11px;padding:3px 10px;border-radius:12px;background:rgba(0,0,0,0.2);color:${colorEstado};border:1px solid ${colorEstado};opacity:0.9">${f.estado}</span>
+      <button class="btn btn-sm btn-success" style="white-space:nowrap">Vincular →</button>
+    </div>`;
+  }).join('');
 }
 
 // ─── Fase 6: Facturar múltiples remitos desde la tabla ───────────────
@@ -2036,5 +2189,42 @@ async function eliminarPlantilla(id) {
 }
 
 </script>
-</body>
-</html>
+<!-- MODAL VINCULAR REMITO A FACTURA EXISTENTE -->
+<div class="modal-overlay" id="modal-vincular-fc">
+  <div class="modal" style="max-width:680px;width:96vw">
+    <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:20px">
+      <div>
+        <h3 style="margin-bottom:4px">Vincular a factura existente</h3>
+        <div style="font-size:13px;color:var(--muted)">Remito: <strong id="vfc-remito-nro" style="color:var(--text);font-family:'DM Mono',monospace">—</strong> &nbsp;·&nbsp; Cliente: <strong id="vfc-cliente-nombre" style="color:var(--text)">—</strong></div>
+      </div>
+      <button class="btn btn-ghost btn-sm" onclick="cerrarModal('modal-vincular-fc')">✕</button>
+    </div>
+
+    <!-- Buscador -->
+    <div style="display:flex;gap:8px;margin-bottom:14px">
+      <input type="text" id="vfc-buscar" placeholder="N° factura, ej: 00002-00000123..."
+        oninput="filtrarFacturasVFC()"
+        style="flex:1;padding:10px 14px;background:var(--bg3);border:1px solid var(--border);border-radius:8px;color:var(--text);font-size:13px;font-family:'DM Sans',sans-serif;outline:none">
+      <select id="vfc-estado" onchange="filtrarFacturasVFC()"
+        style="padding:10px 12px;background:var(--bg3);border:1px solid var(--border);border-radius:8px;color:var(--text);font-size:13px;font-family:'DM Sans',sans-serif;outline:none">
+        <option value="">Todos los estados</option>
+        <option value="pendiente" selected>Pendiente</option>
+        <option value="cobrada_parcial">Cobrada parcial</option>
+        <option value="cobrada">Cobrada</option>
+      </select>
+    </div>
+
+    <!-- Lista de facturas -->
+    <div id="vfc-loading" class="spinner-wrap" style="display:none"><div class="spinner"></div>Cargando facturas...</div>
+    <div id="vfc-lista" style="max-height:380px;overflow-y:auto;border:1px solid var(--border);border-radius:10px"></div>
+    <div style="font-size:12px;color:var(--muted);margin-top:10px">
+      Mostrando facturas del cliente. Al vincular, el remito pasa a <strong>Facturado</strong> y se da de baja en pendientes.
+    </div>
+
+    <div class="modal-footer">
+      <button class="btn btn-ghost" onclick="cerrarModal('modal-vincular-fc')">Cancelar</button>
+    </div>
+  </div>
+</div>
+
+
