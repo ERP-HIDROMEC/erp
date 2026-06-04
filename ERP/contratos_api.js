@@ -88,9 +88,10 @@ const ContratosAPI = (() => {
       .order('descripcion');
     if (error) throw error;
     // Ordenar por número de ítem correlativo (orden del contrato PDF)
+    // Formato: "NOMBRE — Ítem N° X"
     const sorted = (data || []).sort((a, b) => {
-      const na = parseInt((a.descripcion || '').match(/^Ítem N° (\d+)/)?.[1] || '0');
-      const nb = parseInt((b.descripcion || '').match(/^Ítem N° (\d+)/)?.[1] || '0');
+      const na = parseInt((a.descripcion || '').match(/Ítem N° (\d+)$/)?.[1] || '0');
+      const nb = parseInt((b.descripcion || '').match(/Ítem N° (\d+)$/)?.[1] || '0');
       return na - nb;
     });
     return sorted;
