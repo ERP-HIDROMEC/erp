@@ -36,7 +36,7 @@
 
   /* MODAL */
   /* UPLOAD ZONE */
-  .vencida-row @media(max-width:768px){.main{margin-left:0;padding:16px;}}
+  @media(max-width:768px){.main{margin-left:0;padding:16px;}}
 </style>
 </head>
 <body>
@@ -130,13 +130,23 @@
       </div>
       <div class="form-group">
         <label>Tipo</label>
-        <select id="nf-tipo">
+        <select id="nf-tipo" onchange="toggleFacturaOrigen()">
           <option value="A">Factura A</option>
           <option value="B">Factura B</option>
           <option value="FCE">FCE</option>
           <option value="NC">Nota de crédito</option>
           <option value="ND">Nota de débito</option>
         </select>
+      </div>
+    </div>
+    <!-- Factura de origen — solo visible para NC / ND -->
+    <div class="form-row full" id="grupo-fc-origen" style="display:none">
+      <div class="form-group">
+        <label>Factura de origen <span style="color:var(--red)">*</span> <span style="color:var(--muted);font-weight:400;text-transform:none;font-size:11px">(la FC/FCE que esta NC cancela)</span></label>
+        <select id="nf-fc-origen">
+          <option value="">— Seleccionar factura —</option>
+        </select>
+        <div id="nf-fc-origen-info" style="display:none;margin-top:6px;padding:8px 12px;background:rgba(239,68,68,0.08);border:1px solid rgba(239,68,68,0.2);border-radius:8px;font-size:12px;color:var(--muted)"></div>
       </div>
     </div>
     <div class="form-row">
@@ -679,6 +689,56 @@ async function confirmarCobroMultiple() {
   setTimeout(() => toast(msg, errores > 0 ? 'warn' : 'success'), 100);
 }
 
+// ============ NC/ND — FACTURA ORIGEN ============
+function toggleFacturaOrigen(){
+  const tipo = document.getElementById('nf-tipo').value;
+  const esNcNd = tipo === 'NC' || tipo === 'ND';
+  document.getElementById('grupo-fc-origen').style.display = esNcNd ? '' : 'none';
+  if(esNcNd) cargarFacturasOrigen();
+}
+
+async function cargarFacturasOrigen(){
+  const empId   = document.getElementById('nf-empresa').value;
+  const cliId   = document.getElementById('nf-cliente').value;
+  const sel     = document.getElementById('nf-fc-origen');
+  sel.innerHTML = '<option value="">Cargando...</option>';
+  try {
+    const filtros = { empresaId: empId, excluirAnuladas: true };
+    if(cliId) filtros.clienteId = cliId;
+    const data = await FacturasAPI.getFacturas(filtros);
+    // Solo FC, FCE, FA, FB — excluir otras NC/ND
+    const elegibles = (data||[]).filter(r => !['NC','ND'].includes(r.tipo));
+    sel.innerHTML = '<option value="">— Seleccionar factura —</option>' +
+      elegibles.map(r =>
+        `<option value="${r.id}" data-monto="${r.monto_total}" data-numero="${r.numero_factura}" data-estado="${r.estado}">
+          ${r.numero_factura} — ${r.clientes?.nombre||'?'} — ${fmt(r.monto_total)} — ${r.estado}
+        </option>`
+      ).join('');
+  } catch(e) {
+    sel.innerHTML = '<option value="">Error al cargar facturas</option>';
+  }
+  sel.onchange = mostrarInfoFcOrigen;
+}
+
+function mostrarInfoFcOrigen(){
+  const sel     = document.getElementById('nf-fc-origen');
+  const opt     = sel.options[sel.selectedIndex];
+  const infoEl  = document.getElementById('nf-fc-origen-info');
+  if(!sel.value){ infoEl.style.display='none'; return; }
+  const monto   = opt.dataset.monto;
+  const numero  = opt.dataset.numero;
+  const estado  = opt.dataset.estado;
+  infoEl.style.display = '';
+  infoEl.innerHTML = `⚠ Al guardar esta NC, la factura <strong>${numero}</strong> (${fmt(monto)}) pasará a estado <strong>anulada</strong>.`;
+  // Precompletar monto total de la NC con el de la FC origen
+  const totalEl = document.getElementById('nf-total');
+  const netoEl  = document.getElementById('nf-neto');
+  if(totalEl && !totalEl.value) {
+    totalEl.value = monto;
+    if(netoEl && !netoEl.value) netoEl.value = monto;
+  }
+}
+
 async function init(){
   const usuario = await ERP.initLayout('facturas');
   if(!usuario) return;
@@ -853,6 +913,8 @@ async function cargarClientesPorEmpresa(){
   const data=await ClientesAPI.getClientesSelect(empId);
   const sel=document.getElementById('nf-cliente');
   sel.innerHTML=(data||[]).map(c=>`<option value="${c.id}">${c.nombre}</option>`).join('');
+  const tipo = document.getElementById('nf-tipo').value;
+  if(tipo==='NC'||tipo==='ND') cargarFacturasOrigen();
 }
 
 async function cargarClientesRemito(){
@@ -878,7 +940,10 @@ function abrirNuevaFactura(){
   document.getElementById('nf-total').value='';
   document.getElementById('nf-obs').value='';
   document.getElementById('nf-estado').value='pendiente';
+  document.getElementById('nf-tipo').value='A';
   document.getElementById('nf-fecha-emision').value=hoy();
+  document.getElementById('grupo-fc-origen').style.display='none';
+  document.getElementById('nf-fc-origen-info').style.display='none';
   renderRemitosSeleccionados();
   cargarRemitosParaFactura();
   document.getElementById('modal-factura').classList.add('show');
@@ -926,10 +991,20 @@ async function editarFactura(id){
 }
 
 async function guardarFactura(){
+  const tipo = document.getElementById('nf-tipo').value;
+  const esNcNd = tipo === 'NC' || tipo === 'ND';
+  const fcOrigenId = document.getElementById('nf-fc-origen')?.value || null;
+
+  // Validar que NC/ND tenga factura de origen
+  if(esNcNd && !fcOrigenId && !facturaEditId){
+    toast('Una Nota de Crédito/Débito debe tener una factura de origen asociada.', 'warn');
+    return;
+  }
+
   const payload={
     empresa_id:document.getElementById('nf-empresa').value,
     cliente_id:document.getElementById('nf-cliente').value,
-    tipo:document.getElementById('nf-tipo').value,
+    tipo,
     numero_factura:document.getElementById('nf-numero').value,
     fecha_emision:document.getElementById('nf-fecha-emision').value,
     fecha_cobro_estimada:document.getElementById('nf-fecha-cobro').value||null,
@@ -939,8 +1014,8 @@ async function guardarFactura(){
     estado:document.getElementById('nf-estado').value,
     observaciones:document.getElementById('nf-obs').value||null,
     remitos_ids:_remitosSeleccionados,
+    factura_origen_id: fcOrigenId || null,
   };
-  // Limpiar campos uuid vacíos — Supabase rechaza string vacío como uuid
   if(!payload.cliente_id)  payload.cliente_id  = null;
   if(!payload.proyecto_id) payload.proyecto_id = null;
   if(!payload.contrato_id) payload.contrato_id = null;
@@ -952,7 +1027,8 @@ async function guardarFactura(){
   } else {
     try{ data=await FacturasAPI.crearFactura(payload); }catch(e){error=e;}
   }
-  if(error){toast('Error: ', 'error');return;}
+  if(error){toast('Error al guardar: '+(error?.message||String(error)), 'error');return;}
+
   // Marcar remitos como facturados
   const factId=data?.id||facturaEditId;
   if(_remitosSeleccionados.length&&factId){
@@ -960,9 +1036,25 @@ async function guardarFactura(){
       await RemitosAPI.vincularRemitoFactura(rid, factId);
     }
   }
+
+  // Si es NC/ND con FC origen → anular la factura origen
+  if(esNcNd && fcOrigenId && !facturaEditId){
+    try {
+      await FacturasAPI.anularFactura(fcOrigenId);
+    } catch(e) {
+      console.warn('No se pudo anular la factura origen:', e);
+      toast('NC guardada, pero no se pudo anular la factura de origen automáticamente.', 'warn');
+    }
+  }
+
   cerrarModal('modal-factura');
   _remitosSeleccionados=[];
   cargarFacturas();
+  if(esNcNd && fcOrigenId && !facturaEditId){
+    const sel = document.getElementById('nf-fc-origen');
+    const numero = sel?.options[sel.selectedIndex]?.dataset?.numero || '';
+    setTimeout(()=>toast(`NC guardada. Factura ${numero} marcada como anulada.`, 'success'), 100);
+  }
 }
 
 async function anularFactura(id,numero){
