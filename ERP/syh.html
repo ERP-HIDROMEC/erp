@@ -910,8 +910,8 @@ function previsualizarPDFEPP(){
 // PDF EPP — Resolución 299/11 Anexo I
 function generarPDFEPP(entrega,emp,items,empIdOEmpresaNombre){
   const {jsPDF}=window.jspdf;
-  const doc=new jsPDF({format:'a4',unit:'mm'});
-  const L=10,R=200,W=190,midX=105;
+  const doc=new jsPDF({format:'a4',unit:'mm',orientation:'landscape'});
+  const L=10,R=287,W=277,midX=148.5;
   const fmtD=d=>d?new Date(d+'T12:00:00').toLocaleDateString('es-AR'):'';
 
   // Obtener nombre empresa
@@ -972,14 +972,14 @@ function generarPDFEPP(entrega,emp,items,empIdOEmpresaNombre){
   doc.setFillColor(220,220,220);doc.rect(L,yT,W,7,'F');
   doc.setFontSize(8);doc.setFont('helvetica','bold');doc.setTextColor(0,0,0);
   const cols=[
-    {x:L+1,w:4,label:'N'},
-    {x:L+6,w:44,label:'Producto'},
-    {x:L+52,w:34,label:'Tipo / Modelo'},
-    {x:L+88,w:24,label:'Marca'},
-    {x:L+114,w:22,label:'Certificacion'},
-    {x:L+138,w:12,label:'Cant.'},
-    {x:L+152,w:26,label:'Fecha entrega'},
-    {x:L+180,w:18,label:'Firma'},
+    {x:L+1,w:6,label:'N'},
+    {x:L+8,w:70,label:'Producto / Elemento de Proteccion'},
+    {x:L+80,w:50,label:'Tipo / Modelo'},
+    {x:L+132,w:36,label:'Marca'},
+    {x:L+170,w:28,label:'Certificacion'},
+    {x:L+200,w:16,label:'Cant.'},
+    {x:L+218,w:32,label:'Fecha entrega'},
+    {x:L+252,w:25,label:'Firma'},
   ];
   cols.forEach(c=>doc.text(c.label,c.x+1,yT+5));
   doc.setLineWidth(0.2);
@@ -987,40 +987,40 @@ function generarPDFEPP(entrega,emp,items,empIdOEmpresaNombre){
   let xLine=L;
   cols.forEach(c=>{xLine+=c.w;if(xLine<R) doc.line(xLine,yT,xLine,yT+7);});
 
-  // Rows — 18 filas (igual que planilla original)
+  // Rows — 20 filas (igual que planilla original)
   doc.setFont('helvetica','normal');doc.setFontSize(8);
-  for(let i=0;i<18;i++){
-    const ry=yT+7+(i*8);
+  for(let i=0;i<20;i++){
+    const ry=yT+7+(i*9);
     const item=items[i]||null;
     if(i%2===0){doc.setFillColor(252,252,252);}else{doc.setFillColor(246,246,246);}
-    doc.rect(L,ry,W,8,'F');
+    doc.rect(L,ry,W,9,'F');
     doc.setTextColor(0,0,0);
-    doc.text(String(i+1),cols[0].x+1,ry+5.5);
+    doc.text(String(i+1),cols[0].x+1,ry+6);
     if(item){
-      doc.text(doc.splitTextToSize(item.producto||'',cols[1].w-2)[0],cols[1].x+1,ry+5.5);
-      doc.text(doc.splitTextToSize(item.tipo_modelo||'',cols[2].w-2)[0],cols[2].x+1,ry+5.5);
-      doc.text(doc.splitTextToSize(item.marca||'',cols[3].w-2)[0],cols[3].x+1,ry+5.5);
-      doc.text(item.certificacion||'',cols[4].x+6,ry+5.5,{align:'center'});
-      doc.text(String(item.cantidad||1),cols[5].x+4,ry+5.5,{align:'center'});
-      doc.text(fmtD(entrega.fecha_entrega),cols[6].x+1,ry+5.5);
+      doc.text(doc.splitTextToSize(item.producto||'',cols[1].w-2)[0],cols[1].x+1,ry+6);
+      doc.text(doc.splitTextToSize(item.tipo_modelo||'',cols[2].w-2)[0],cols[2].x+1,ry+6);
+      doc.text(doc.splitTextToSize(item.marca||'',cols[3].w-2)[0],cols[3].x+1,ry+6);
+      doc.text(item.certificacion||'',cols[4].x+8,ry+6,{align:'center'});
+      doc.text(String(item.cantidad||1),cols[5].x+5,ry+6,{align:'center'});
+      doc.text(fmtD(entrega.fecha_entrega),cols[6].x+1,ry+6);
     }
     // Grid lines
-    doc.setLineWidth(0.2);doc.rect(L,ry,W,8);
-    let xL=L;cols.forEach(c=>{xL+=c.w;if(xL<R) doc.line(xL,ry,xL,ry+8);});
+    doc.setLineWidth(0.2);doc.rect(L,ry,W,9);
+    let xL=L;cols.forEach(c=>{xL+=c.w;if(xL<R) doc.line(xL,ry,xL,ry+9);});
   }
 
-  const yF=yT+7+(18*8)+6;
+  const yF=yT+7+(20*9)+6;
   doc.setFontSize(8);doc.setFont('helvetica','normal');
   doc.text('Informacion adicional:',L,yF);
   doc.setLineWidth(0.3);doc.line(L,yF+8,R,yF+8);
 
   // Firma
   const yFirma=yF+16;
-  doc.line(L+20,yFirma,L+80,yFirma);
-  doc.line(L+110,yFirma,L+175,yFirma);
+  doc.line(L+20,yFirma,L+110,yFirma);
+  doc.line(L+155,yFirma,L+255,yFirma);
   doc.setFontSize(8);
   doc.text('Firma del responsable de entrega',L+20,yFirma+5);
-  doc.text('Firma del trabajador / Aclaracion',L+110,yFirma+5);
+  doc.text('Firma del trabajador / Aclaracion',L+155,yFirma+5);
 
   doc.setFontSize(7);doc.setTextColor(100,100,100);
   doc.text(`Sistema ERP Hidromec/Placemem  |  Generado: ${new Date().toLocaleString('es-AR')}`,midX,yFirma+14,{align:'center'});

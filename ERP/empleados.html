@@ -1939,7 +1939,13 @@ function renderFrancos(rows) {
     <div class="panel">
       <div class="panel-header">
         <h3>Historial completo</h3>
-        <div style="display:flex;gap:8px">
+        <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
+          <select id="filtro-franco-empleado" onchange="filtrarFrancos()" style="padding:6px 10px;background:var(--bg3);border:1px solid var(--border);border-radius:8px;color:var(--text);font-size:12px;min-width:170px">
+            <option value="">Todos los empleados</option>
+            ${[...new Map(rows.map(r=>[r.empleado_id,r.empleados?.nombre||'—'])).entries()]
+              .sort((a,b)=>a[1].localeCompare(b[1]))
+              .map(([id,nom])=>`<option value="${id}">${nom}</option>`).join('')}
+          </select>
           <select id="filtro-franco-estado" onchange="filtrarFrancos()" style="padding:6px 10px;background:var(--bg3);border:1px solid var(--border);border-radius:8px;color:var(--text);font-size:12px">
             <option value="">Todos los estados</option>
             <option value="pendiente">Pendientes</option>
@@ -1991,8 +1997,11 @@ function renderTablaFrancos(rows) {
 }
 
 function filtrarFrancos() {
-  const estado = document.getElementById('filtro-franco-estado')?.value || '';
-  const filtered = estado ? _francosData.filter(r => r.estado === estado) : _francosData;
+  const estado   = document.getElementById('filtro-franco-estado')?.value || '';
+  const empleado = document.getElementById('filtro-franco-empleado')?.value || '';
+  let filtered = _francosData;
+  if (empleado) filtered = filtered.filter(r => r.empleado_id === empleado);
+  if (estado)   filtered = filtered.filter(r => r.estado === estado);
   const wrap = document.getElementById('tabla-francos');
   if (wrap) wrap.innerHTML = '<div style="overflow-x:auto">' + renderTablaFrancos(filtered) + '</div>';
 }
