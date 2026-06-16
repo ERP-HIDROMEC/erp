@@ -1264,11 +1264,19 @@ async function guardarPlan(){
     } else {
       // Insertar la cuota actual
       await db.from('planes_pago_afip').insert(payload);
-      // Si cuota_actual > 1, generar automáticamente las anteriores como pagadas
+      // Si cuota_actual > 1, generar las anteriores que NO existan aún
       const cuotaActual = parseInt(payload.cuota_actual)||1;
       if(cuotaActual > 1){
+        // Consultar cuáles cuotas anteriores ya existen para este plan
+        const { data: existentes } = await db.from('planes_pago_afip')
+          .select('cuota_actual')
+          .eq('empresa_id', payload.empresa_id)
+          .eq('nro_plan', payload.nro_plan)
+          .lt('cuota_actual', cuotaActual);
+        const nrosExistentes = new Set((existentes||[]).map(r => r.cuota_actual));
         const anteriores = [];
         for(let i=1; i<cuotaActual; i++){
+          if(nrosExistentes.has(i)) continue; // ya existe, no duplicar
           anteriores.push({
             empresa_id:   payload.empresa_id,
             nro_plan:     payload.nro_plan,
@@ -1284,8 +1292,10 @@ async function guardarPlan(){
         }
         if(anteriores.length){
           await db.from('planes_pago_afip').insert(anteriores);
+          toast(`Cuota ${cuotaActual} registrada + ${anteriores.length} cuota(s) anterior(es) generadas como pagas`,'success');
+        } else {
+          toast(`Cuota ${cuotaActual} registrada`,'success');
         }
-        toast(`Cuota ${cuotaActual} registrada + ${cuotaActual-1} cuota(s) anterior(es) marcadas como pagas`,'success');
       } else {
         toast('Cuota registrada','success');
       }
