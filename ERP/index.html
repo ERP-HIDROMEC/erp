@@ -685,6 +685,18 @@ async function qEgresos(empId, ini, fin) {
   } catch(e) { return []; }
 }
 
+async function qRetenciones(empId, ini, fin, extraCols) {
+  try {
+    const cols = extraCols ? `monto,tipo,fecha,empresa_id` : `monto,fecha,empresa_id`;
+    const { data, error } = await db.from('retenciones')
+      .select(cols)
+      .gte('fecha', ini).lte('fecha', fin);
+    if (error) { console.warn('retenciones:', error.message); return []; }
+    const rows = data || [];
+    return empId ? rows.filter(r => r.empresa_id === empId) : rows;
+  } catch(e) { return []; }
+}
+
 // ══════════════════════════════════════════════════════════════
 // VISTA GENERAL
 // ══════════════════════════════════════════════════════════════
@@ -718,7 +730,7 @@ async function cargarKPIsGeneral(fechas) {
     const [
       facMes, cobMes, egrMes, facAnio,
       vencidas, xPagar, remitosP,
-      sueldos, pagosImp, impVarios, planes
+      sueldos, pagosImp, impVarios, planes, retMes
     ] = await Promise.all([
       FacturasAPI.getFacturas({ empresaId: empId||undefined, excluirAnuladas:true, fechaDesde:ini, fechaHasta:fin }),
       qCobros(empId, ini, fin),
@@ -731,6 +743,7 @@ async function cargarKPIsGeneral(fechas) {
       qPagosImp(empId, ini, fin),
       qImpVarios(empId, ini, fin),
       qPlanes(empId, mesIni, mesIni),
+      qRetenciones(empId, ini, fin),
     ]);
 
     // Filtrar vencidas / x pagar / remitos si hay empresa seleccionada
@@ -751,7 +764,8 @@ async function cargarKPIsGeneral(fechas) {
     const totalImpP  = sumArr(pagosImp,  'monto');
     const totalImpV  = sumArr(impVarios, 'monto');
     const totalPlan  = sumArr(planes,    'monto_cuota');
-    const totalGasto = totalEgr + totalSue + totalImpP + totalImpV + totalPlan;
+    const totalRet   = sumArr(retMes,    'monto');
+    const totalGasto = totalEgr + totalSue + totalImpP + totalImpV + totalPlan + totalRet;
     const resultado  = totalCob - totalGasto;
 
     // Renderizar KPIs fila 1
@@ -764,6 +778,7 @@ async function cargarKPIsGeneral(fechas) {
     if (totalSue  > 0) sub.push('Sueldos '  + fmt(totalSue));
     if (totalImpP + totalImpV + totalPlan > 0)
       sub.push('Imp. ' + fmt(totalImpP + totalImpV + totalPlan));
+    if (totalRet  > 0) sub.push('Ret. ' + fmt(totalRet));
     setText('g-egr-sub', sub.join(' · '));
 
     const resEl = document.getElementById('g-res-mes');
@@ -989,7 +1004,7 @@ async function cargarKPIsPeriodo(ini, fin) {
     const mesIni = ini.substring(0, 7);
     const mesFin = fin.substring(0, 7);
 
-    const [facData, cobData, egrData, sueldosData, pagosImpData, impVarData, planesData] = await Promise.all([
+    const [facData, cobData, egrData, sueldosData, pagosImpData, impVarData, planesData, retData] = await Promise.all([
       FacturasAPI.getFacturas({ empresaId: empId||undefined, excluirAnuladas:true, fechaDesde:ini, fechaHasta:fin }),
       qCobros(empId, ini, fin),
       EgresosAPI.getEgresos({ empresaId: empId||undefined, pagado:true, fechaDesde:ini, fechaHasta:fin }),
@@ -997,6 +1012,7 @@ async function cargarKPIsPeriodo(ini, fin) {
       qPagosImp(empId, ini, fin),
       qImpVarios(empId, ini, fin),
       qPlanes(empId, mesIni, mesFin),
+      qRetenciones(empId, ini, fin),
     ]);
 
     const totalFac  = sumArr(facData,      'monto_total');
@@ -1004,7 +1020,8 @@ async function cargarKPIsPeriodo(ini, fin) {
     const totalEgr  = sumArr(egrData,      'monto');
     const totalSue  = sumArr(sueldosData,  'monto_bruto');
     const totalImp  = sumArr(pagosImpData, 'monto') + sumArr(impVarData, 'monto') + sumArr(planesData, 'monto_cuota');
-    const totalEgrT = totalEgr + totalSue + totalImp;
+    const totalRet  = sumArr(retData,      'monto');
+    const totalEgrT = totalEgr + totalSue + totalImp + totalRet;
     // Resultado = facturado del período vs total egresos (no cobros — evita duplicar)
     const resultado = totalFac - totalEgrT;
 
@@ -1016,6 +1033,7 @@ async function cargarKPIsPeriodo(ini, fin) {
     if (totalEgr > 0) sub.push('Compras ' + fmt(totalEgr));
     if (totalSue > 0) sub.push('Sueldos ' + fmt(totalSue));
     if (totalImp > 0) sub.push('Imp. '    + fmt(totalImp));
+    if (totalRet > 0) sub.push('Ret. '    + fmt(totalRet));
     setText('p-egr-total-sub', sub.join(' · '));
 
     const resEl = document.getElementById('p-resultado');
@@ -1054,7 +1072,7 @@ async function cargarBalance(ini, fin) {
     const mesIni = ini.substring(0, 7);
     const mesFin = fin.substring(0, 7);
 
-    const [cobros, facPer, egresos, sueldos, pagosImp, impVarios, planes] = await Promise.all([
+    const [cobros, facPer, egresos, sueldos, pagosImp, impVarios, planes, retenciones] = await Promise.all([
       qCobros(empId, ini, fin),
       FacturasAPI.getFacturas({ empresaId: empId||undefined, excluirAnuladas:true, fechaDesde:ini, fechaHasta:fin }),
       EgresosAPI.getEgresos({ empresaId: empId||undefined, pagado:true, fechaDesde:ini, fechaHasta:fin }),
@@ -1062,6 +1080,7 @@ async function cargarBalance(ini, fin) {
       qPagosImp(empId, ini, fin, true),
       qImpVarios(empId, ini, fin, true),
       qPlanes(empId, mesIni, mesFin),
+      qRetenciones(empId, ini, fin, true),
     ]);
 
     const totalCob = sumArr(cobros,  'monto');
@@ -1091,8 +1110,9 @@ async function cargarBalance(ini, fin) {
     const totalImpP = sumArr(pagosImp, 'monto');
     const totalImpV = sumArr(impVarios,'monto');
     const totalPlan = sumArr(planes,   'monto_cuota');
+    const totalRet  = sumArr(retenciones, 'monto');
     const totalImp  = totalImpP + totalImpV + totalPlan;
-    const egrTotal  = totalEgr + totalSue + totalImp;
+    const egrTotal  = totalEgr + totalSue + totalImp + totalRet;
     setText('b-egr-total', fmt(egrTotal));
 
     // Desglose impuestos por tipo
@@ -1111,6 +1131,14 @@ async function cargarBalance(ini, fin) {
     });
     if (totalPlan > 0) porTipoImp['planes_afip'] = totalPlan;
     IMP_LABELS['planes_afip'] = 'Planes AFIP';
+
+    // Desglose retenciones por tipo (IVA / IIBB)
+    const RET_LABELS = { iva:'IVA', iibb:'IIBB' };
+    const porTipoRet = {};
+    (retenciones||[]).forEach(r => {
+      const k = r.tipo || 'otro';
+      porTipoRet[k] = (porTipoRet[k] || 0) + Number(r.monto || 0);
+    });
 
     elEgr.innerHTML =
       (totalEgr > 0 ? `
@@ -1131,6 +1159,16 @@ async function cargarBalance(ini, fin) {
         Object.entries(porTipoImp).sort((a,b) => b[1]-a[1]).map(([tipo, monto]) => `
         <div class="balance-row" style="padding-left:32px">
           <div class="balance-row-label" style="color:var(--muted)">↳ ${IMP_LABELS[tipo]||tipo}</div>
+          <div><span class="balance-row-value" style="font-size:12px">${fmt(monto)}</span></div>
+        </div>`).join('') : '') +
+      (totalRet > 0 ? `
+        <div class="balance-row">
+          <div class="balance-row-label"><div class="balance-row-dot" style="background:var(--teal)"></div>Retenciones sufridas</div>
+          <div><span class="balance-row-value" style="color:var(--teal)">${fmt(totalRet)}</span><span class="balance-row-pct">${(retenciones||[]).length} reg.</span></div>
+        </div>` +
+        Object.entries(porTipoRet).sort((a,b) => b[1]-a[1]).map(([tipo, monto]) => `
+        <div class="balance-row" style="padding-left:32px">
+          <div class="balance-row-label" style="color:var(--muted)">↳ ${RET_LABELS[tipo]||tipo}</div>
           <div><span class="balance-row-value" style="font-size:12px">${fmt(monto)}</span></div>
         </div>`).join('') : '') +
       (egrTotal === 0 ? '<div class="empty">Sin egresos en el período</div>' : '');
@@ -1162,12 +1200,13 @@ async function cargarGraficoPeriodo(ini, fin) {
       return;
     }
 
-    const [facData, egrData, sueldosData, pagosImpData, planesData] = await Promise.all([
+    const [facData, egrData, sueldosData, pagosImpData, planesData, retData] = await Promise.all([
       FacturasAPI.getFacturaMensual(empId, ini, fin),
       qEgresos(empId, ini, fin),
       qSueldos(empId, mesIni, mesFin, true),
       qPagosImp(empId, ini, fin),
       qPlanes(empId, mesIni, mesFin),
+      qRetenciones(empId, ini, fin),
     ]);
 
     const porMes = {};
@@ -1192,6 +1231,10 @@ async function cargarGraficoPeriodo(ini, fin) {
     (planesData||[]).forEach(r => {
       const m = r.periodo?.substring(0, 7);
       if (porMes[m]) porMes[m].egr += Number(r.monto_cuota || 0);
+    });
+    (retData||[]).forEach(r => {
+      const m = r.fecha?.substring(0, 7);
+      if (porMes[m]) porMes[m].egr += Number(r.monto || 0);
     });
 
     const maxV = Math.max(...Object.values(porMes).map(v => Math.max(v.ing, v.egr)), 1);
