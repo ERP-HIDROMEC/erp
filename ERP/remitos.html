@@ -571,13 +571,16 @@ function renderRemitos(rows){
         <td style="font-size:12px;color:var(--muted)">${r.orden_compra||'—'}</td>
         <td style="font-size:12px">${r.factura_id?`<span style="color:var(--green);font-family:'DM Mono',monospace">${r._nroFactura||'✓'}</span>`:'<span style="color:var(--muted)">—</span>'}</td>
         <td class="mono" style="cursor:pointer;text-decoration:underline dotted;text-underline-offset:3px;color:${r.total_valorizado?'inherit':'var(--muted)'}" onclick="abrirDetalleItems('${r.id}')" title="Ver detalle de ítems">${r.total_valorizado?fmt(r.total_valorizado):'—'}</td>
-        <td><span class="estado ${r.estado}">${r.estado}</span></td>
+        <td><span class="estado ${r.estado}">${r.estado}</span>
+          ${r.reemplaza_a_numero?`<span style="font-size:10px;background:rgba(59,130,246,0.12);color:var(--blue);padding:1px 6px;border-radius:4px;margin-left:4px" title="Reemplaza al remito ${r.reemplaza_a_numero}">↻ ${r.reemplaza_a_numero}</span>`:''}
+        </td>
         <td><div style="display:flex;gap:6px;flex-wrap:wrap">
           ${!r.migrado&&r.estado!=='anulado'?`<button class="btn btn-sm btn-ghost" onclick="generarPDF('${r.id}')">PDF</button>`:''}
           ${!r.migrado&&['borrador','emitido'].includes(r.estado)?`<button class="btn btn-sm btn-ghost" onclick="editarRemito('${r.id}')">Editar</button>`:''}
           ${!r.migrado&&['emitido','enviado','aceptado'].includes(r.estado)&&r.estado!=='facturado'?`<button class="btn btn-sm btn-success" onclick="irAFacturar('${r.id}')">Facturar</button>`:''}
           ${!r.migrado&&r.estado!=='anulado'&&r.estado!=='facturado'?`<button class="btn btn-sm btn-danger" onclick="anularRemito('${r.id}')">Anular</button>`:''}
           ${r.migrado&&r.estado!=='facturado'?`<button class="btn btn-sm btn-success" onclick="marcarHistoricoFacturado('${r.id}')">✓ Facturado</button>`:''}
+          ${r.migrado&&r.estado!=='facturado'?`<button class="btn btn-sm btn-primary" onclick="rehacerRemito('${r.id}')">↻ Rehacer</button>`:''}
           ${r.migrado&&r.estado==='facturado'?`<button class="btn btn-sm btn-ghost" onclick="marcarHistoricoPendiente('${r.id}')">← Pendiente</button>`:''}
         </div></td>
       </tr>`).join(''):'<tr><td colspan="9" style="text-align:center;padding:40px;color:var(--muted)">Sin remitos</td></tr>'}</tbody>
@@ -693,10 +696,12 @@ function filtrarPendientesLocal(){
       <td>
         <span class="estado ${r.estado}">${r.estado==='aceptado_parcial'?'Acept. parcial':r.estado}</span>
         ${r.migrado?'<span style="font-size:10px;background:rgba(139,92,246,0.15);color:var(--purple);padding:1px 6px;border-radius:4px;margin-left:4px">Hist.</span>':''}
+        ${r.reemplaza_a_numero?`<span style="font-size:10px;background:rgba(59,130,246,0.12);color:var(--blue);padding:1px 6px;border-radius:4px;margin-left:4px" title="Reemplaza al remito ${r.reemplaza_a_numero}">↻ Reemplaza ${r.reemplaza_a_numero}</span>`:''}
       </td>
       <td><div style="display:flex;gap:6px">
         ${esFacturable?`<button class="btn btn-sm btn-success" onclick="irAFacturar('${r.id}')">→ Facturar</button>`:''}
         ${r.migrado?`<button class="btn btn-sm btn-success" onclick="marcarHistoricoFacturado('${r.id}')">✓ Facturado</button>`:''}
+        ${r.migrado?`<button class="btn btn-sm btn-primary" onclick="rehacerRemito('${r.id}')">↻ Rehacer</button>`:''}
       </div></td>
     </tr>`;
   };
@@ -1081,6 +1086,8 @@ function recalcularTotales(){
 
 function abrirNuevo(){
   editId=null;
+  _rehaciendoDesdeId=null;
+  _rehaciendoDesdeNumero=null;
   _itemsContratoCache=[];
   document.getElementById('rem-titulo').textContent='Nuevo remito';
   document.getElementById('nr-tipo').value='servicio';
@@ -1097,6 +1104,8 @@ async function editarRemito(id){
   const r=await RemitosAPI.getRemitoSimple(id);
   if(!r) return;
   editId=id;
+  _rehaciendoDesdeId=null;
+  _rehaciendoDesdeNumero=null;
   document.getElementById('rem-titulo').textContent='Editar remito';
   document.getElementById('nr-empresa').value=r.empresa_id;
   document.getElementById('nr-tipo').value=r.tipo;
@@ -1240,6 +1249,10 @@ async function guardarRemito(estado){
     sector:document.getElementById('nr-sector').value||null,
     estado, migrado:false,
   };
+  if(!editId && _rehaciendoDesdeId){
+    payload.reemplaza_a_remito_id = _rehaciendoDesdeId;
+    payload.reemplaza_a_numero    = _rehaciendoDesdeNumero;
+  }
 
   if(estado==='emitido'&&numero){
     payload.numero=numero;
@@ -1930,6 +1943,7 @@ function cerrarModal(id){
   const modalId = id || 'modal-remito';
   const el = document.getElementById(modalId);
   if (el) el.classList.remove('show');
+  if (!id || id === 'modal-remito') { _rehaciendoDesdeId = null; _rehaciendoDesdeNumero = null; }
 }
 function cerrarModal2(){document.getElementById('modal-talonario').classList.remove('show');}
 // logout() → ahora en ERP.logout() (erp-sidebar.js)
@@ -1947,6 +1961,108 @@ async function marcarHistoricoPendiente(id){
   try{ await RemitosAPI.marcarRemitoEmitido(id); }catch(e){error=e;}
   if(error){toast('Error: '+(error?.message||String(error)), 'error');return;}
   recargar();
+}
+
+// ── Rehacer remito histórico ─────────────────────────────────
+// Marca el histórico como "facturado" (sale de pendientes) y abre
+// el modal de nuevo remito precargado con los mismos datos, listo
+// para emitir con número de talonario propio. Queda trazabilidad
+// vía reemplaza_a_remito_id.
+let _rehaciendoDesdeId = null;
+let _rehaciendoDesdeNumero = null;
+
+async function rehacerRemito(id){
+  if(!(await confirmar('Este remito histórico se marcará como facturado y se abrirá un remito nuevo con los mismos datos para emitir. ¿Continuar?'))) return;
+
+  const r = await RemitosAPI.getRemitoSimple(id);
+  if(!r){ toast('No se pudo cargar el remito histórico.','error'); return; }
+
+  // 1. Sacar el histórico de pendientes
+  try{
+    await RemitosAPI.marcarRemitoFacturado(id);
+  }catch(e){
+    toast('Error al marcar facturado: '+(e?.message||String(e)), 'error');
+    return;
+  }
+
+  // 2. Abrir modal de nuevo remito (NO edición) precargado igual que editarRemito,
+  //    pero sin id, sin numero, y guardando referencia al histórico de origen.
+  editId = null;
+  _rehaciendoDesdeId = id;
+  _rehaciendoDesdeNumero = r.numero_formateado || r.id.slice(0,8);
+  document.getElementById('rem-titulo').textContent = `Rehacer remito — reemplaza a ${r.numero_formateado||r.id.slice(0,8)}`;
+  document.getElementById('nr-empresa').value = r.empresa_id;
+  document.getElementById('nr-tipo').value    = r.tipo;
+  document.getElementById('nr-fecha').value   = hoy();
+  document.getElementById('nr-oc').value      = r.orden_compra||'';
+  document.getElementById('nr-sector').value  = r.sector||'';
+  await cargarDatosModal();
+  document.getElementById('nr-cliente').value = r.cliente_id||'';
+  toggleContrato();
+
+  const items = await RemitosAPI.getItemsRemito(id);
+  const tbody = document.getElementById('items-body');
+  tbody.innerHTML = '';
+
+  if(r.tipo==='contrato' && r.contrato_id){
+    const sel = document.getElementById('nr-contrato');
+    await cargarContratos();
+    if(sel) sel.value = r.contrato_id;
+    try{
+      const empId2 = document.getElementById('nr-empresa').value;
+      const ci = await ContratosAPI.getItemsContrato(r.contrato_id, empId2);
+      _itemsContratoCache = ci||[];
+    }catch(e){ _itemsContratoCache=[]; }
+    let hayItemsSinMatch=false;
+    (items||[]).forEach(it=>{
+      const match=_itemsContratoCache.find(ci=>ci.id===it.contrato_item_id)
+               ||_itemsContratoCache.find(ci=>ci.descripcion===it.descripcion)
+               ||null;
+      const precioVigente=match?(match.precio_unitario||0):(it.precio_unitario||0);
+      if(!match && it.descripcion) hayItemsSinMatch=true;
+      agregarItemRow(
+        it.cantidad_num!=null?it.cantidad_num:(it.cantidad||''),
+        it.descripcion,
+        precioVigente,
+        false,
+        match?.id||''
+      );
+      if(match){
+        const lastRow=tbody.lastElementChild;
+        if(lastRow){
+          const selRow=lastRow.querySelector('select');
+          if(selRow) selRow.value=match.id;
+          const precioHidden=lastRow.querySelector('[data-precio]');
+          if(precioHidden) precioHidden.value=precioVigente;
+        }
+      }
+    });
+    if(hayItemsSinMatch){
+      const msgEl=document.getElementById('msg-items-contrato');
+      if(msgEl){
+        msgEl.innerHTML=`⚠ Algunos ítems no pudieron asociarse al contrato automáticamente — seleccioná el ítem del dropdown para actualizar el precio vigente.`;
+        msgEl.style.display='block';
+        msgEl.style.background='rgba(245,158,11,0.08)';
+        msgEl.style.borderColor='rgba(245,158,11,0.3)';
+        msgEl.style.color='var(--orange)';
+      }
+    }
+    if(!items||items.length<3) for(let i=(items||[]).length;i<3;i++) agregarItemRow();
+  } else {
+    (items||[]).forEach(it=>agregarItemRow(
+      it.cantidad_num!=null?it.cantidad_num:(it.cantidad||''),
+      it.descripcion,
+      it.precio_unitario||0,
+      false
+    ));
+    if(!items||items.length<3) for(let i=(items||[]).length;i<3;i++) agregarItemRow();
+    const msgEl=document.getElementById('msg-items-contrato');
+    if(msgEl) msgEl.style.display='none';
+  }
+
+  recalcularTotales();
+  document.getElementById('modal-remito').classList.add('show');
+  toast('Histórico marcado como facturado. Completá los datos y emití el remito nuevo.','success');
 }
 
 init();
