@@ -1985,14 +1985,35 @@ async function rehacerRemito(id){
     return;
   }
 
-  // 2. Abrir modal de nuevo remito (NO edición) precargado igual que editarRemito,
-  //    pero sin id, sin numero, y guardando referencia al histórico de origen.
+  // 2. Buscar el contrato ACTIVO actual del cliente — sin importar si el
+  //    histórico era tipo "servicio" o tenía un contrato_id viejo/vencido.
+  //    La idea: lo que antes se facturaba suelto, ahora puede estar
+  //    contemplado en el contrato vigente y debe valorizarse por ahí.
+  let contratoActivo = null;
+  if(r.cliente_id){
+    try{
+      const contratosCliente = await ContratosAPI.getContratos({
+        empresaId: r.empresa_id,
+        clienteId: r.cliente_id,
+        estado: 'activo',
+      });
+      if(contratosCliente && contratosCliente.length){
+        // Si el histórico ya apuntaba a un contrato y ese sigue activo, preferirlo.
+        // Si no, tomar el contrato activo más reciente del cliente.
+        contratoActivo = contratosCliente.find(c => c.id === r.contrato_id) || contratosCliente[0];
+      }
+    }catch(e){ console.warn('No se pudo buscar contrato activo del cliente:', e); }
+  }
+  const usarContrato = !!contratoActivo;
+
+  // 3. Abrir modal de nuevo remito (NO edición) precargado, sin id, sin numero,
+  //    guardando referencia al histórico de origen.
   editId = null;
   _rehaciendoDesdeId = id;
   _rehaciendoDesdeNumero = r.numero_formateado || r.id.slice(0,8);
   document.getElementById('rem-titulo').textContent = `Rehacer remito — reemplaza a ${r.numero_formateado||r.id.slice(0,8)}`;
   document.getElementById('nr-empresa').value = r.empresa_id;
-  document.getElementById('nr-tipo').value    = r.tipo;
+  document.getElementById('nr-tipo').value    = usarContrato ? 'contrato' : r.tipo;
   document.getElementById('nr-fecha').value   = hoy();
   document.getElementById('nr-oc').value      = r.orden_compra||'';
   document.getElementById('nr-sector').value  = r.sector||'';
@@ -2004,19 +2025,25 @@ async function rehacerRemito(id){
   const tbody = document.getElementById('items-body');
   tbody.innerHTML = '';
 
-  if(r.tipo==='contrato' && r.contrato_id){
+  if(usarContrato){
     const sel = document.getElementById('nr-contrato');
     await cargarContratos();
-    if(sel) sel.value = r.contrato_id;
+    if(sel) sel.value = contratoActivo.id;
     try{
       const empId2 = document.getElementById('nr-empresa').value;
-      const ci = await ContratosAPI.getItemsContrato(r.contrato_id, empId2);
+      const ci = await ContratosAPI.getItemsContrato(contratoActivo.id, empId2);
       _itemsContratoCache = ci||[];
     }catch(e){ _itemsContratoCache=[]; }
     let hayItemsSinMatch=false;
     (items||[]).forEach(it=>{
+      // Match por contrato_item_id (si el contrato es el mismo y el item persiste)
+      // o por descripción — esto es lo que permite que un remito viejo tipo
+      // "servicio" (ej: "Rectificadora") encuentre su equivalente en el
+      // contrato vigente aunque antes no estuviera asociado a ningún contrato.
       const match=_itemsContratoCache.find(ci=>ci.id===it.contrato_item_id)
                ||_itemsContratoCache.find(ci=>ci.descripcion===it.descripcion)
+               ||_itemsContratoCache.find(ci=>(ci.descripcion||'').toLowerCase().includes((it.descripcion||'').toLowerCase().trim())
+                                            ||(it.descripcion||'').toLowerCase().includes((ci.descripcion||'').toLowerCase().trim()))
                ||null;
       const precioVigente=match?(match.precio_unitario||0):(it.precio_unitario||0);
       if(!match && it.descripcion) hayItemsSinMatch=true;
@@ -2062,7 +2089,11 @@ async function rehacerRemito(id){
 
   recalcularTotales();
   document.getElementById('modal-remito').classList.add('show');
-  toast('Histórico marcado como facturado. Completá los datos y emití el remito nuevo.','success');
+  if(usarContrato){
+    toast(`Histórico facturado. Remito cargado contra el contrato ${contratoActivo.numero_contrato||''} — revisá los ítems antes de emitir.`,'success');
+  } else {
+    toast('Histórico marcado como facturado. El cliente no tiene contrato activo — revisá los datos y emití el remito nuevo.','warn');
+  }
 }
 
 init();
