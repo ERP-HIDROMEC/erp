@@ -834,13 +834,17 @@ async function guardarEPP(){
   const emp=await EmpleadosAPI.getEmpleadoById(empleadoId);
   const u=await getUsuario();
 
-  let entrega=null; try{ entrega=await SyhAPI.registrarEntregaEPP({
-    empresa_id:empId,empleado_id:empleadoId,
-    fecha_entrega:fecha,puesto:document.getElementById('se-puesto').value||null,
-    elementos_necesarios:document.getElementById('se-necesarios').value||null,
-    items:items,
-  }); }catch(e){error=e;}
-  if(error){toast('Error: '+error.message, 'error');return;}
+  let entrega=null, error=null;
+  try{
+    entrega=await SyhAPI.registrarEntregaEPP({
+      empresa_id:empId,empleado_id:empleadoId,
+      fecha_entrega:fecha,puesto:document.getElementById('se-puesto').value||null,
+      elementos_necesarios:document.getElementById('se-necesarios').value||null,
+      items:items,
+    });
+  }catch(e){ error=e; }
+  if(error){ toast('Error al guardar: '+(error?.message||String(error)), 'error'); return; }
+  if(!entrega){ toast('No se pudo guardar la entrega de EPP.', 'error'); return; }
 
   // Generate PDF
   generarPDFEPP(entrega,emp,items,empId);
@@ -1000,8 +1004,8 @@ function generarPDFEPP(entrega,emp,items,empIdOEmpresaNombre){
       doc.text(doc.splitTextToSize(item.producto||'',cols[1].w-2)[0],cols[1].x+1,ry+6);
       doc.text(doc.splitTextToSize(item.tipo_modelo||'',cols[2].w-2)[0],cols[2].x+1,ry+6);
       doc.text(doc.splitTextToSize(item.marca||'',cols[3].w-2)[0],cols[3].x+1,ry+6);
-      doc.text(item.certificacion||'',cols[4].x+8,ry+6,{align:'center'});
-      doc.text(String(item.cantidad||1),cols[5].x+5,ry+6,{align:'center'});
+      doc.text(item.certificacion||'',cols[4].x+(cols[4].w/2),ry+6,{align:'center'});
+      doc.text(String(item.cantidad||1),cols[5].x+(cols[5].w/2),ry+6,{align:'center'});
       doc.text(fmtD(entrega.fecha_entrega),cols[6].x+1,ry+6);
     }
     // Grid lines
@@ -1433,8 +1437,9 @@ async function editarVencimientoPortal(id){
   const nuevaFecha=prompt('Nueva fecha de vencimiento (YYYY-MM-DD):');
   if(!nuevaFecha) return;
   if(!/^\d{4}-\d{2}-\d{2}$/.test(nuevaFecha)){toast('Formato invalido. Usa YYYY-MM-DD', 'warn');return;}
+  let error=null;
   try{ await SyhAPI.renovarDocumentoPortal(id,nuevaFecha); }catch(e){error=e;}
-  if(error){toast('Error: ', 'error');return;}
+  if(error){toast('Error: '+(error?.message||String(error)), 'error');return;}
   cargarPortales();
 }
 

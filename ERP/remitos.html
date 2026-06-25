@@ -1264,11 +1264,13 @@ async function guardarRemito(estado){
   }
 
   let remitoId=editId;
+  let _esNuevoRemito=false;
   if(editId){
     let error;
     try{ await RemitosAPI.actualizarRemito(editId,payload); }catch(e){error=e;}
     if(error){toast('Error: '+(error?.message||String(error)), 'error');return;}
   } else {
+    _esNuevoRemito=true;
     if(estado==='borrador'){
       // Para borrador: numero y punto_venta null para no violar unique constraint
       delete payload.numero;
@@ -1330,6 +1332,14 @@ async function guardarRemito(estado){
     }
   }
 
+  if(_esNuevoRemito){
+    const detalleRehacer = payload.reemplaza_a_numero ? `Reemplaza al remito ${payload.reemplaza_a_numero}` : null;
+    await registrarAuditoria('remitos', payload.reemplaza_a_remito_id?'rehacer_crear':'crear', 'remitos_v2', remitoId,
+      detalleRehacer || `Número ${payload.numero_formateado||''}`);
+  } else {
+    await registrarAuditoria('remitos','editar','remitos_v2',remitoId,null);
+  }
+
   cerrarModal();
   await verificarCAI();
   cargarRemitos();
@@ -1339,6 +1349,7 @@ async function guardarRemito(estado){
 async function anularRemito(id){
   if(!(await confirmar('¿Anular este remito?'))) return;
   await RemitosAPI.anularRemito(id);
+  await registrarAuditoria('remitos','anular','remitos_v2',id,null);
   cargarRemitos();
 }
 
@@ -1466,6 +1477,9 @@ async function confirmarVincularFC(facturaId, nroFactura){
     cerrarModal('modal-vincular-fc');
     limpiarSeleccion();
     toast(`✓ ${ids.length > 1 ? ids.length + ' remitos vinculados' : 'Remito vinculado'} a factura ${nroFactura}`, 'success');
+    for(const rid of ids){
+      await registrarAuditoria('remitos','vincular_factura','remitos_v2',rid,`Vinculado a factura ${nroFactura}`);
+    }
     cargarPendientes();
   } catch(e) {
     manejarError(e, 'vincular remito a factura');
@@ -1953,6 +1967,7 @@ async function marcarHistoricoFacturado(id){
   let error;
   try{ await RemitosAPI.marcarRemitoFacturado(id); }catch(e){error=e;}
   if(error){toast('Error: '+(error?.message||String(error)), 'error');return;}
+  await registrarAuditoria('remitos','marcar_facturado_historico','remitos_v2',id,null);
   recargar();
 }
 
@@ -1960,6 +1975,7 @@ async function marcarHistoricoPendiente(id){
   if(!(await confirmar('¿Volver este remito a pendiente de facturación?'))) return;
   try{ await RemitosAPI.marcarRemitoEmitido(id); }catch(e){error=e;}
   if(error){toast('Error: '+(error?.message||String(error)), 'error');return;}
+  await registrarAuditoria('remitos','marcar_pendiente_historico','remitos_v2',id,null);
   recargar();
 }
 
@@ -1984,6 +2000,7 @@ async function rehacerRemito(id){
     toast('Error al marcar facturado: '+(e?.message||String(e)), 'error');
     return;
   }
+  await registrarAuditoria('remitos','rehacer_marcar_facturado','remitos_v2',id,null);
 
   // 2. Buscar el contrato ACTIVO actual del cliente — sin importar si el
   //    histórico era tipo "servicio" o tenía un contrato_id viejo/vencido.

@@ -650,6 +650,7 @@ async function confirmarCobroMultiple() {
         observaciones: obs ? obs + ' | OP: ' + nroOP : 'OP: ' + nroOP,
       });
       await FacturasAPI.marcarFacturaCobrada(id);
+      await registrarAuditoria('facturas','marcar_cobrada','facturas_emitidas',id,null);
     } catch(e) {
       console.warn('Error cobrando factura', id, e);
       errores++;
@@ -1029,11 +1030,15 @@ async function guardarFactura(){
   }
   if(error){toast('Error al guardar: '+(error?.message||String(error)), 'error');return;}
 
-  // Marcar remitos como facturados
   const factId=data?.id||facturaEditId;
+  await registrarAuditoria('facturas', facturaEditId?'editar':'crear', 'facturas_emitidas', factId,
+    `Número ${payload.numero_factura}`);
+
+  // Marcar remitos como facturados
   if(_remitosSeleccionados.length&&factId){
     for(const rid of _remitosSeleccionados){
       await RemitosAPI.vincularRemitoFactura(rid, factId);
+      await registrarAuditoria('facturas','vincular_remito','remitos_v2',rid,`Vinculado a factura ${payload.numero_factura}`);
     }
   }
 
@@ -1041,6 +1046,7 @@ async function guardarFactura(){
   if(esNcNd && fcOrigenId && !facturaEditId){
     try {
       await FacturasAPI.anularFactura(fcOrigenId);
+      await registrarAuditoria('facturas','anular','facturas_emitidas',fcOrigenId,`Anulada por NC/ND ${payload.numero_factura}`);
     } catch(e) {
       console.warn('No se pudo anular la factura origen:', e);
       toast('NC guardada, pero no se pudo anular la factura de origen automáticamente.', 'warn');
@@ -1060,6 +1066,7 @@ async function guardarFactura(){
 async function anularFactura(id,numero){
   if(!(await confirmar(`¿Anular la factura ${numero}? Esta acción no se puede deshacer.`))) return;
   await FacturasAPI.anularFactura(id);
+  await registrarAuditoria('facturas','anular','facturas_emitidas',id,`Número ${numero}`);
   cargarFacturas();
 }
 
@@ -1134,6 +1141,7 @@ async function guardarCobro(){
 
   // Marcar factura como cobrada
   await FacturasAPI.marcarFacturaCobrada(cobroFacturaId);
+  await registrarAuditoria('facturas','marcar_cobrada','facturas_emitidas',cobroFacturaId,`Monto cobro ${monto}`);
 
   // Guardar retenciones si hay alguna
   const periodo=document.getElementById('nc-periodo-ret').value;
