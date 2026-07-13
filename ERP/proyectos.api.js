@@ -27,7 +27,7 @@ const ProyectosAPI = (() => {
 
   async function getProyectosSelect(empresaId, estados = ['activo']) {
     const { data, error } = await db.from('proyectos')
-      .select('id,nombre')
+      .select('id,nombre,cliente_id')
       .eq('empresa_id', empresaId)
       .in('estado', estados)
       .order('nombre');

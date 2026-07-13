@@ -15,6 +15,7 @@
 <script src="proyectos.api.js"></script>
 <script src="contratos.api.js"></script>
 <script src="empleados.api.js"></script>
+<script src="costo_laboral.api.js"></script>
 <style>
   tr:hover .estado-badge{display:inline-block;padding:3px 10px;border-radius:20px;font-size:11px;font-weight:500;}
   .estado-badge.activo{background:rgba(16,185,129,0.15);color:var(--green);}
@@ -217,17 +218,17 @@
       </div>
       <div class="form-group">
         <label>Proyecto</label>
-        <select id="nh-proyecto"></select>
+        <select id="nh-proyecto" onchange="recalcularCostoHoraBase()"></select>
       </div>
     </div>
     <div class="form-row">
       <div class="form-group">
         <label>Empleado</label>
-        <select id="nh-empleado" onchange="cargarCostoEmpleado()"></select>
+        <select id="nh-empleado" onchange="recalcularCostoHoraBase()"></select>
       </div>
       <div class="form-group">
         <label>Rol en la tarea</label>
-        <select id="nh-rol">
+        <select id="nh-rol" onchange="recalcularCostoHoraBase()">
           <option value="oficial">Oficial</option>
           <option value="ayudante">Ayudante</option>
           <option value="oficial_esp">Of. Especializado</option>
@@ -268,6 +269,7 @@
       <div class="form-group">
         <label>Costo/hora</label>
         <input type="number" id="nh-costo-hora" placeholder="0.00" oninput="calcularCostoHoras()">
+        <span id="nh-costo-info" style="font-size:11px;color:var(--muted)"></span>
       </div>
       <div class="form-group">
         <label>Costo total calculado</label>
@@ -569,8 +571,10 @@ async function editarProyecto(id){
 
 let _costosRoles={ayudante:0,oficial:0,oficial_esp:0,supervisor:0,higiene:0};
 
-async function cargarCostosRoles(){
-  const empId=document.getElementById('np-empresa').value;
+async function cargarCostosRoles(empIdParam){
+  const empId=empIdParam||document.getElementById('np-empresa')?.value;
+  if(!empId) return;
+  _costosRoles={ayudante:0,oficial:0,oficial_esp:0,supervisor:0,higiene:0};
   const data=await ProyectosAPI.getCostosRoles(empId);
   if(data) data.forEach(r=>{_costosRoles[r.rol]=Number(r.costo_hora||0);});
 }
@@ -661,21 +665,50 @@ async function verDetalle(id,nombre){
 }
 
 // ===== HORAS =====
+let _clienteExtraCache={};
+async function getClienteExtraHora(clienteId){
+  if(!clienteId) return 0;
+  if(_clienteExtraCache[clienteId]!==undefined) return _clienteExtraCache[clienteId];
+  let total=0;
+  try{ total = await CostoLaboralAPI.getTotalAdicionalCliente(clienteId); }catch(e){ total=0; }
+  _clienteExtraCache[clienteId]=total;
+  return total;
+}
+
 async function cargarDatosHoras(){
   const empId=document.getElementById('nh-empresa').value;
   const [{data:proyectos},{data:empleados}]=await Promise.all([
     ProyectosAPI.getProyectosSelect(empId).then(d=>({data:d})),
     EmpleadosAPI.getEmpleados({empresaId:empId}).then(d=>({data:d})),
   ]);
-  document.getElementById('nh-proyecto').innerHTML=(proyectos||[]).map(p=>`<option value="${p.id}">${p.nombre}</option>`).join('');
+  await cargarCostosRoles(empId);
+  document.getElementById('nh-proyecto').innerHTML=(proyectos||[]).map(p=>`<option value="${p.id}" data-cliente="${p.cliente_id||''}">${p.nombre}</option>`).join('');
   document.getElementById('nh-empleado').innerHTML=(empleados||[]).map(e=>`<option value="${e.id}" data-costo="${e.costo_hora}">${e.nombre}</option>`).join('');
-  cargarCostoEmpleado();
+  recalcularCostoHoraBase();
 }
 
-function cargarCostoEmpleado(){
-  const sel=document.getElementById('nh-empleado');
-  const opt=sel.options[sel.selectedIndex];
-  if(opt) document.getElementById('nh-costo-hora').value=opt.dataset.costo||0;
+// Costo/hora = base del rol elegido (costos_roles, ya actualizado desde la
+// calculadora UOCRA de Empleados) + adicional fijo del cliente del proyecto.
+// Si el rol no tiene base cargada (ej. "administrativo"), usa el costo
+// manual del empleado como respaldo. El campo sigue siendo editable a mano.
+async function recalcularCostoHoraBase(){
+  const selEmp=document.getElementById('nh-empleado');
+  const optEmp=selEmp.options[selEmp.selectedIndex];
+  const rol=document.getElementById('nh-rol').value;
+  const selProy=document.getElementById('nh-proyecto');
+  const optProy=selProy.options[selProy.selectedIndex];
+  const clienteId=optProy?.dataset?.cliente||'';
+
+  const baseRol=_costosRoles[rol];
+  const base=(baseRol!==undefined && baseRol>0) ? baseRol : (parseFloat(optEmp?.dataset?.costo)||0);
+  const extra=await getClienteExtraHora(clienteId);
+  const total=base+extra;
+
+  document.getElementById('nh-costo-hora').value=total.toFixed(2);
+  const info=document.getElementById('nh-costo-info');
+  if(info) info.textContent = extra>0
+    ? `Base ${rol}: ${fmt(base)} + adicional cliente: ${fmt(extra)} = ${fmt(total)}/h`
+    : `Base ${rol}: ${fmt(base)}/h (sin adicional de cliente)`;
   calcularCostoHoras();
 }
 

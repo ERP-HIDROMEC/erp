@@ -13,6 +13,7 @@
 <script src="empleados.api.js"></script>
 <script src="clientes.api.js"></script>
 <script src="proyectos.api.js"></script>
+<script src="costo_laboral.api.js"></script>
 <style>
   tr:last-child tr:hover .tag{display:inline-block;padding:3px 10px;border-radius:20px;font-size:11px;font-weight:500;}
   .tag.activo{background:rgba(16,185,129,0.15);color:var(--green);}
@@ -855,22 +856,59 @@ async function toggleCliente(id,activo){
 }
 
 // ===== COSTOS POR CATEGORÍA =====
+let _clSupuestos=null;
+let _clCategorias=[];
+let _clEppItems=[];
+let _clUltimoCalculo={}; // categoria_id -> resultado del último cálculo (para "Aplicar como base")
+let _clClienteSel=null;
+
 async function cargarCostos(){
   document.getElementById('kpis').innerHTML='';
   document.getElementById('contenido').innerHTML='<div class="spinner-wrap"><div class="spinner"></div>Cargando...</div>';
   const emp=document.getElementById('f-empresa').value||'a1000000-0000-0000-0000-000000000001';
-  const data=await ProyectosAPI.getCostosRolesCompleto(emp);
-  const rows=data||[];
+
+  const [supuestos, categorias, rolesData, clientesData] = await Promise.all([
+    CostoLaboralAPI.getSupuestos(),
+    CostoLaboralAPI.getCategorias(),
+    ProyectosAPI.getCostosRolesCompleto(emp),
+    ClientesAPI.getClientes({}),
+  ]);
+  _clSupuestos = supuestos;
+  _clEppItems = JSON.parse(JSON.stringify(supuestos.epp_items||[]));
+  _clCategorias = categorias;
+  const rolesRows = rolesData||[];
   const LABELS={ayudante:'Ayudante',oficial:'Oficial',oficial_esp:'Oficial Especializado',supervisor:'Supervisor',higiene:'Técnico S. e Higiene'};
 
   document.getElementById('contenido').innerHTML=`
-    <div class="panel">
+    <div class="panel" style="margin-bottom:16px">
       <div class="panel-header">
-        <h3>Costo hora por categoría — ${rows[0]?.empresas?.nombre||emp}</h3>
+        <h3>Calculadora de costo laboral — UOCRA (CCT 76/75)</h3>
+        <span style="font-size:12px;color:var(--muted)">Ajustá los supuestos cuando haya un aumento paritario y recalculá todo</span>
+      </div>
+      <div style="padding:20px">
+        <div style="font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:0.6px;margin-bottom:10px">Supuestos generales</div>
+        <div id="cl-supuestos-grid" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:12px;margin-bottom:16px"></div>
+
+        <div style="font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:0.6px;margin-bottom:10px">EPP básico por trabajador (costo mensual amortizado)</div>
+        <div id="cl-epp-tabla" style="margin-bottom:10px"></div>
+        <button class="btn btn-ghost btn-sm" onclick="clAgregarEpp()" style="margin-bottom:16px">+ Agregar ítem EPP</button>
+
+        <div style="display:flex;justify-content:flex-end;margin-bottom:20px">
+          <button class="btn btn-primary" onclick="clGuardarSupuestos()">Guardar supuestos</button>
+        </div>
+
+        <div style="font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:0.6px;margin-bottom:10px">Categorías (jornal paritaria — editable)</div>
+        <div id="cl-categorias-tabla"></div>
+      </div>
+    </div>
+
+    <div class="panel" style="margin-bottom:16px">
+      <div class="panel-header">
+        <h3>Costo hora por rol (base — usado por Proyectos) — ${rolesRows[0]?.empresas?.nombre||emp}</h3>
         <span style="font-size:12px;color:var(--muted)">Hora normal = base. Hora 50% = ×1.5. Hora 100% = ×2.0</span>
       </div>
       <div style="padding:24px;display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:16px">
-        ${rows.map(r=>{
+        ${rolesRows.map(r=>{
           const h50=((r.costo_hora||0)*1.5);
           const h100=((r.costo_hora||0)*2);
           return`
@@ -905,9 +943,192 @@ async function cargarCostos(){
             <button class="btn btn-primary" style="width:100%;padding:8px" onclick="guardarCostoRol('${r.id}','${r.empresa_id}','${r.rol}')">Guardar</button>
           </div>`;
         }).join('')}
-        ${!rows.length?'<div style="color:var(--muted);font-size:13px">No hay roles configurados.</div>':''}
+        ${!rolesRows.length?'<div style="color:var(--muted);font-size:13px">No hay roles configurados.</div>':''}
+      </div>
+    </div>
+
+    <div class="panel">
+      <div class="panel-header">
+        <h3>Costos adicionales por cliente ($/hora)</h3>
+        <span style="font-size:12px;color:var(--muted)">Se suman al costo base del rol cuando se imputan horas a un proyecto de ese cliente</span>
+      </div>
+      <div style="padding:20px">
+        <div class="form-row full" style="margin-bottom:16px">
+          <div class="form-group">
+            <label>Cliente</label>
+            <select id="cl-cliente-select" onchange="clCargarAdicionalesCliente()">
+              <option value="">— Seleccionar cliente —</option>
+              ${(clientesData||[]).map(c=>`<option value="${c.id}">${c.nombre}${c.empresas?.nombre?' — '+c.empresas.nombre:''}</option>`).join('')}
+            </select>
+          </div>
+        </div>
+        <div id="cl-cliente-adicionales"><div style="color:var(--muted);font-size:13px">Elegí un cliente para ver/editar sus adicionales.</div></div>
       </div>
     </div>`;
+
+  clRenderSupuestos();
+  clRenderEpp();
+  clRenderCategorias();
+}
+
+// ── Supuestos ────────────────────────────────────────────────
+const CL_SUPUESTOS_CAMPOS = [
+  {key:'pct_acuerdo_empresarial',      label:'% Acuerdo empresarial (s/ jornal)', pct:true},
+  {key:'jornales_mes',                 label:'Horas trabajadas / mes', pct:false},
+  {key:'pct_presentismo',              label:'Premio presentismo (%)', pct:true},
+  {key:'feriados_anio',                label:'Feriados pagos / año', pct:false},
+  {key:'sac_factor',                   label:'SAC (fracción mensual)', pct:false},
+  {key:'dias_vacaciones',              label:'Días vacaciones / año', pct:false, warnHigh:35},
+  {key:'pct_cargas_sociales',          label:'Contrib. Seg. Social (%)', pct:true},
+  {key:'pct_obra_social',              label:'Aporte Obra Social (%)', pct:true},
+  {key:'pct_fondo_cese',               label:'Fondo Cese Laboral (%)', pct:true},
+  {key:'pct_art',                      label:'Alícuota ART (%)', pct:true},
+  {key:'seguro_vida_mensual',          label:'Seguro de Vida ($/mes fijo)', pct:false},
+  {key:'pct_contingencia_enfermedad',  label:'Continge. enfermedad (%)', pct:true},
+];
+
+function clRenderSupuestos(){
+  const grid=document.getElementById('cl-supuestos-grid');
+  grid.innerHTML = CL_SUPUESTOS_CAMPOS.map(c=>{
+    const val = _clSupuestos[c.key];
+    const showVal = c.pct ? (Number(val)*100) : val;
+    const warn = c.warnHigh && Number(val)>c.warnHigh;
+    return `<div class="form-group">
+      <label>${c.label}${warn?' ⚠':''}</label>
+      <input type="number" step="any" id="cl-sup-${c.key}" value="${showVal}" oninput="clRecalcular()"
+        style="${warn?'border-color:var(--orange)':''}">
+      ${warn?`<span style="font-size:10px;color:var(--orange)">Valor alto — verificá si corresponde (viene así de tu Excel origen)</span>`:''}
+    </div>`;
+  }).join('');
+}
+
+function clLeerSupuestosDelDOM(){
+  const s={...(_clSupuestos||{})};
+  CL_SUPUESTOS_CAMPOS.forEach(c=>{
+    const raw=parseFloat(document.getElementById('cl-sup-'+c.key)?.value)||0;
+    s[c.key] = c.pct ? raw/100 : raw;
+  });
+  s.epp_items = _clEppItems;
+  return s;
+}
+
+async function clGuardarSupuestos(){
+  const payload = clLeerSupuestosDelDOM();
+  try{
+    await CostoLaboralAPI.actualizarSupuestos(payload);
+    _clSupuestos = payload;
+    toast('Supuestos guardados', 'success');
+  }catch(e){ toast('Error: '+(e?.message||String(e)), 'error'); }
+}
+
+// ── EPP ──────────────────────────────────────────────────────
+function clRenderEpp(){
+  const el=document.getElementById('cl-epp-tabla');
+  const total = CostoLaboralAPI.eppTotalMensual(_clEppItems);
+  el.innerHTML = `
+    <table style="width:100%">
+      <thead><tr><th>Elemento</th><th>Precio unitario</th><th>Vida útil (meses)</th><th>Costo mensual</th><th></th></tr></thead>
+      <tbody>
+        ${_clEppItems.map((it,i)=>{
+          const mensual = (Number(it.precio_unitario)||0)/(Number(it.vida_util_meses)||1);
+          return `<tr>
+            <td><input type="text" value="${it.concepto||''}" oninput="clEppCampo(${i},'concepto',this.value)" style="width:100%"></td>
+            <td><input type="number" value="${it.precio_unitario||0}" oninput="clEppCampo(${i},'precio_unitario',this.value)" style="width:120px"></td>
+            <td><input type="number" value="${it.vida_util_meses||1}" oninput="clEppCampo(${i},'vida_util_meses',this.value)" style="width:90px"></td>
+            <td class="mono">${fmt(mensual)}</td>
+            <td><button class="btn btn-sm btn-danger" onclick="clQuitarEpp(${i})">Quitar</button></td>
+          </tr>`;
+        }).join('')}
+        <tr><td colspan="3" style="text-align:right;font-weight:600">TOTAL EPP / mes</td><td class="mono" style="font-weight:600">${fmt(total)}</td><td></td></tr>
+      </tbody>
+    </table>`;
+}
+
+function clEppCampo(i,campo,valor){
+  _clEppItems[i][campo] = campo==='concepto' ? valor : parseFloat(valor)||0;
+  clRenderEpp();
+  clRecalcular();
+}
+function clAgregarEpp(){
+  _clEppItems.push({concepto:'Nuevo ítem',precio_unitario:0,vida_util_meses:12});
+  clRenderEpp();
+  clRecalcular();
+}
+function clQuitarEpp(i){
+  _clEppItems.splice(i,1);
+  clRenderEpp();
+  clRecalcular();
+}
+
+// ── Categorías / cálculo ─────────────────────────────────────
+function clRenderCategorias(){
+  const el=document.getElementById('cl-categorias-tabla');
+  el.innerHTML = `
+    <table style="width:100%">
+      <thead><tr>
+        <th>Categoría</th><th>Jornal paritaria</th><th>Costo total/hora</th><th>Costo total/mes</th><th></th>
+      </tr></thead>
+      <tbody id="cl-cat-rows"></tbody>
+    </table>`;
+  document.getElementById('cl-cat-rows').innerHTML = _clCategorias.map(c=>`
+    <tr>
+      <td>${c.label}${c.nota?` <span title="${c.nota}" style="color:var(--muted);cursor:help">ⓘ</span>`:''}</td>
+      <td><input type="number" id="cl-jornal-${c.id}" value="${c.jornal_paritaria}" oninput="clRecalcular()" style="width:120px"></td>
+      <td class="mono" id="cl-hora-${c.id}">—</td>
+      <td class="mono" id="cl-mes-${c.id}">—</td>
+      <td style="display:flex;gap:6px">
+        <button class="btn btn-sm btn-ghost" onclick="clGuardarJornal('${c.id}')">Guardar jornal</button>
+        ${c.rol_app?`<button class="btn btn-sm btn-success" onclick="clAplicarComoBase('${c.id}','${c.rol_app}')">Aplicar como base</button>`:'<span style="font-size:11px;color:var(--muted);align-self:center">Sin rol en ERP</span>'}
+      </td>
+    </tr>`).join('');
+  clRecalcular();
+}
+
+function clRecalcular(){
+  if(!_clSupuestos) return;
+  const s = clLeerSupuestosDelDOM();
+  clRenderEpp(); // refleja el total de EPP actualizado en la tabla
+  _clCategorias.forEach(c=>{
+    const jornal = parseFloat(document.getElementById('cl-jornal-'+c.id)?.value)||0;
+    const r = CostoLaboralAPI.calcular(jornal, s);
+    _clUltimoCalculo[c.id] = r;
+    const elH=document.getElementById('cl-hora-'+c.id);
+    const elM=document.getElementById('cl-mes-'+c.id);
+    if(elH) elH.textContent = fmt(r.costoTotalHora);
+    if(elM) elM.textContent = fmt(r.costoTotalMes);
+  });
+}
+
+async function clGuardarJornal(catId){
+  const jornal = parseFloat(document.getElementById('cl-jornal-'+catId).value)||0;
+  try{
+    await CostoLaboralAPI.actualizarJornalCategoria(catId, jornal);
+    toast('Jornal guardado', 'success');
+  }catch(e){ toast('Error: '+(e?.message||String(e)), 'error'); }
+}
+
+// Aplica el costo/hora calculado como base en costos_roles, para TODAS las
+// empresas que tengan ese rol configurado (el costo laboral UOCRA es el
+// mismo convenio para todas las empresas).
+async function clAplicarComoBase(catId, rolApp){
+  const calc = _clUltimoCalculo[catId];
+  if(!calc){ toast('Recalculá primero', 'warn'); return; }
+  if(!(await confirmar(`¿Aplicar ${fmt(calc.costoTotalHora)}/h como costo base del rol "${rolApp}" en todas las empresas? Esto va a pisar el valor manual que tengan cargado hoy.`))) return;
+
+  try{
+    const empresas = await EmpresasAPI.getEmpresas();
+    let actualizados=0;
+    for(const emp of (empresas||[])){
+      const roles = await ProyectosAPI.getCostosRolesCompleto(emp.id);
+      const fila = (roles||[]).find(r=>r.rol===rolApp);
+      if(fila){
+        await ProyectosAPI.actualizarCostoRol(fila.id, calc.costoTotalHora);
+        actualizados++;
+      }
+    }
+    toast(`Base actualizada en ${actualizados} empresa(s)`, 'success');
+    cargarCostos();
+  }catch(e){ toast('Error: '+(e?.message||String(e)), 'error'); }
 }
 
 function actualizarRecargos(id){
@@ -920,12 +1141,77 @@ function actualizarRecargos(id){
 
 async function guardarCostoRol(id,empId,rol){
   const monto=parseFloat(document.getElementById('costo-'+id).value)||0;
+  let error;
   try{ await ProyectosAPI.actualizarCostoRol(id,monto); }catch(e){error=e;}
   if(error){toast('Error: '+(error?.message||String(error)), 'error');return;}
   const btn=event.target;
   btn.textContent='✓ Guardado';
   btn.style.background='var(--green)';
   setTimeout(()=>{btn.textContent='Guardar';btn.style.background='';},2000);
+}
+
+// ── Adicionales por cliente ────────────────────────────────────
+async function clCargarAdicionalesCliente(){
+  const clienteId = document.getElementById('cl-cliente-select').value;
+  _clClienteSel = clienteId;
+  const cont = document.getElementById('cl-cliente-adicionales');
+  if(!clienteId){ cont.innerHTML='<div style="color:var(--muted);font-size:13px">Elegí un cliente para ver/editar sus adicionales.</div>'; return; }
+  cont.innerHTML='<div class="spinner-wrap"><div class="spinner"></div></div>';
+  const items = await CostoLaboralAPI.getCostosAdicionalesCliente(clienteId);
+  clRenderAdicionalesCliente(items);
+}
+
+function clRenderAdicionalesCliente(items){
+  const cont = document.getElementById('cl-cliente-adicionales');
+  const total = items.filter(i=>i.activo).reduce((s,i)=>s+Number(i.monto_hora||0),0);
+  cont.innerHTML = `
+    <table style="width:100%;margin-bottom:12px">
+      <thead><tr><th>Concepto</th><th>$/hora</th><th>Activo</th><th></th></tr></thead>
+      <tbody>
+        ${items.map(it=>`
+          <tr>
+            <td><input type="text" id="cla-concepto-${it.id}" value="${it.concepto}" style="width:100%"></td>
+            <td><input type="number" id="cla-monto-${it.id}" value="${it.monto_hora}" style="width:120px"></td>
+            <td><input type="checkbox" id="cla-activo-${it.id}" ${it.activo?'checked':''}></td>
+            <td style="display:flex;gap:6px">
+              <button class="btn btn-sm btn-ghost" onclick="clGuardarAdicional('${it.id}')">Guardar</button>
+              <button class="btn btn-sm btn-danger" onclick="clEliminarAdicional('${it.id}')">Quitar</button>
+            </td>
+          </tr>`).join('')}
+        ${!items.length?'<tr><td colspan="4" style="color:var(--muted);font-size:13px">Sin adicionales cargados.</td></tr>':''}
+      </tbody>
+    </table>
+    <div style="display:flex;justify-content:space-between;align-items:center">
+      <button class="btn btn-ghost btn-sm" onclick="clAgregarAdicional()">+ Agregar adicional</button>
+      <span style="font-size:13px;color:var(--muted)">Total adicional activo: <strong style="color:var(--green);font-family:'DM Mono',monospace">${fmt(total)}/h</strong></span>
+    </div>`;
+}
+
+async function clAgregarAdicional(){
+  if(!_clClienteSel){ toast('Elegí un cliente primero', 'warn'); return; }
+  try{
+    await CostoLaboralAPI.crearCostoAdicionalCliente({cliente_id:_clClienteSel, concepto:'Nuevo adicional', monto_hora:0, activo:true});
+    clCargarAdicionalesCliente();
+  }catch(e){ toast('Error: '+(e?.message||String(e)), 'error'); }
+}
+
+async function clGuardarAdicional(id){
+  const concepto = document.getElementById('cla-concepto-'+id).value;
+  const monto = parseFloat(document.getElementById('cla-monto-'+id).value)||0;
+  const activo = document.getElementById('cla-activo-'+id).checked;
+  try{
+    await CostoLaboralAPI.actualizarCostoAdicionalCliente(id, {concepto, monto_hora:monto, activo});
+    toast('Guardado', 'success');
+    clCargarAdicionalesCliente();
+  }catch(e){ toast('Error: '+(e?.message||String(e)), 'error'); }
+}
+
+async function clEliminarAdicional(id){
+  if(!(await confirmar('¿Quitar este adicional?'))) return;
+  try{
+    await CostoLaboralAPI.eliminarCostoAdicionalCliente(id);
+    clCargarAdicionalesCliente();
+  }catch(e){ toast('Error: '+(e?.message||String(e)), 'error'); }
 }
 
 
