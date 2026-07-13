@@ -902,50 +902,7 @@ async function cargarCostos(){
       </div>
     </div>
 
-    <div class="panel" style="margin-bottom:16px">
-      <div class="panel-header">
-        <h3>Costo hora por rol (base — usado por Proyectos) — ${rolesRows[0]?.empresas?.nombre||emp}</h3>
-        <span style="font-size:12px;color:var(--muted)">Hora normal = base. Hora 50% = ×1.5. Hora 100% = ×2.0</span>
-      </div>
-      <div style="padding:24px;display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:16px">
-        ${rolesRows.map(r=>{
-          const h50=((r.costo_hora||0)*1.5);
-          const h100=((r.costo_hora||0)*2);
-          return`
-          <div style="background:var(--bg3);border:1px solid var(--border);border-radius:10px;padding:18px">
-            <div style="font-size:12px;color:var(--muted);text-transform:uppercase;letter-spacing:0.8px;margin-bottom:12px;font-weight:500">${LABELS[r.rol]||r.rol}</div>
-
-            <div style="font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:0.6px;margin-bottom:4px">Hora normal (×1.0)</div>
-            <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px">
-              <input type="number" id="costo-${r.id}" value="${r.costo_hora||0}"
-                style="flex:1;padding:9px 12px;background:var(--bg2);border:1px solid var(--border);border-radius:8px;color:var(--text);font-size:15px;font-family:'DM Mono',monospace;outline:none"
-                placeholder="0.00"
-                oninput="actualizarRecargos('${r.id}')"
-                onfocus="this.style.borderColor='var(--blue)'"
-                onblur="this.style.borderColor='var(--border)'">
-              <span style="font-size:12px;color:var(--muted)">/h</span>
-            </div>
-
-            <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:12px">
-              <div style="background:rgba(245,158,11,0.08);border:1px solid rgba(245,158,11,0.2);border-radius:8px;padding:8px 10px">
-                <div style="font-size:10px;color:var(--orange);text-transform:uppercase;letter-spacing:0.6px;margin-bottom:3px">Hora 50% (×1.5)</div>
-                <div id="h50-${r.id}" style="font-family:'DM Mono',monospace;font-size:14px;font-weight:600;color:var(--orange)">${fmt(h50)}/h</div>
-              </div>
-              <div style="background:rgba(239,68,68,0.08);border:1px solid rgba(239,68,68,0.2);border-radius:8px;padding:8px 10px">
-                <div style="font-size:10px;color:var(--red);text-transform:uppercase;letter-spacing:0.6px;margin-bottom:3px">Hora 100% (×2.0)</div>
-                <div id="h100-${r.id}" style="font-family:'DM Mono',monospace;font-size:14px;font-weight:600;color:var(--red)">${fmt(h100)}/h</div>
-              </div>
-            </div>
-
-            <div style="font-size:11px;color:var(--muted);margin-bottom:10px">
-              Mensual 176h normal: <strong style="color:var(--text);font-family:'DM Mono',monospace">${fmt((r.costo_hora||0)*176)}</strong>
-            </div>
-            <button class="btn btn-primary" style="width:100%;padding:8px" onclick="guardarCostoRol('${r.id}','${r.empresa_id}','${r.rol}')">Guardar</button>
-          </div>`;
-        }).join('')}
-        ${!rolesRows.length?'<div style="color:var(--muted);font-size:13px">No hay roles configurados.</div>':''}
-      </div>
-    </div>
+    <div class="panel" style="margin-bottom:16px" id="cl-roles-panel"></div>
 
     <div class="panel">
       <div class="panel-header">
@@ -966,9 +923,70 @@ async function cargarCostos(){
       </div>
     </div>`;
 
+  renderPanelRoles(rolesRows, emp);
   clRenderSupuestos();
   clRenderEpp();
   clRenderCategorias();
+
+  // Auto-sync silencioso: al abrir la pestaña, empuja el cálculo actual de la
+  // calculadora a costos_roles (por si quedó desactualizado) y refresca las
+  // tarjetas para que siempre reflejen el resultado de la calculadora.
+  await clAplicarTodasLasCategorias();
+  const rolesFrescos = await ProyectosAPI.getCostosRolesCompleto(emp);
+  renderPanelRoles(rolesFrescos, emp);
+}
+
+const CL_LABELS_ROL={ayudante:'Ayudante',oficial:'Oficial',oficial_esp:'Oficial Especializado',supervisor:'Supervisor',higiene:'Técnico S. e Higiene'};
+
+function renderPanelRoles(rolesRows, emp){
+  const panel=document.getElementById('cl-roles-panel');
+  panel.innerHTML=`
+    <div class="panel-header">
+      <h3>Costo hora por rol (base — usado por Proyectos) — ${rolesRows[0]?.empresas?.nombre||emp}</h3>
+      <span style="font-size:12px;color:var(--muted)">Hora normal = base. Hora 50% = ×1.5. Hora 100% = ×2.0</span>
+    </div>
+    <div style="padding:24px;display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:16px">
+      ${rolesRows.map(r=>{
+        const h50=((r.costo_hora||0)*1.5);
+        const h100=((r.costo_hora||0)*2);
+        const esUocra = _clCategorias.some(c=>c.rol_app===r.rol);
+        return`
+        <div style="background:var(--bg3);border:1px solid var(--border);border-radius:10px;padding:18px">
+          <div style="font-size:12px;color:var(--muted);text-transform:uppercase;letter-spacing:0.8px;margin-bottom:12px;font-weight:500;display:flex;justify-content:space-between;align-items:center">
+            <span>${CL_LABELS_ROL[r.rol]||r.rol}</span>
+            ${esUocra?'<span style="font-size:10px;color:var(--green);text-transform:none;letter-spacing:0" title="Calculado por la calculadora UOCRA de arriba">🔗 auto</span>':''}
+          </div>
+
+          <div style="font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:0.6px;margin-bottom:4px">Hora normal (×1.0)</div>
+          <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px">
+            <input type="number" id="costo-${r.id}" value="${r.costo_hora||0}" ${esUocra?'readonly':''}
+              style="flex:1;padding:9px 12px;background:${esUocra?'var(--bg)':'var(--bg2)'};border:1px solid var(--border);border-radius:8px;color:${esUocra?'var(--muted)':'var(--text)'};font-size:15px;font-family:'DM Mono',monospace;outline:none;${esUocra?'cursor:not-allowed':''}"
+              placeholder="0.00"
+              ${esUocra?'':`oninput="actualizarRecargos('${r.id}')" onfocus="this.style.borderColor='var(--blue)'" onblur="this.style.borderColor='var(--border)'"`}>
+            <span style="font-size:12px;color:var(--muted)">/h</span>
+          </div>
+
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:12px">
+            <div style="background:rgba(245,158,11,0.08);border:1px solid rgba(245,158,11,0.2);border-radius:8px;padding:8px 10px">
+              <div style="font-size:10px;color:var(--orange);text-transform:uppercase;letter-spacing:0.6px;margin-bottom:3px">Hora 50% (×1.5)</div>
+              <div id="h50-${r.id}" style="font-family:'DM Mono',monospace;font-size:14px;font-weight:600;color:var(--orange)">${fmt(h50)}/h</div>
+            </div>
+            <div style="background:rgba(239,68,68,0.08);border:1px solid rgba(239,68,68,0.2);border-radius:8px;padding:8px 10px">
+              <div style="font-size:10px;color:var(--red);text-transform:uppercase;letter-spacing:0.6px;margin-bottom:3px">Hora 100% (×2.0)</div>
+              <div id="h100-${r.id}" style="font-family:'DM Mono',monospace;font-size:14px;font-weight:600;color:var(--red)">${fmt(h100)}/h</div>
+            </div>
+          </div>
+
+          <div style="font-size:11px;color:var(--muted);margin-bottom:10px">
+            Mensual 176h normal: <strong style="color:var(--text);font-family:'DM Mono',monospace">${fmt((r.costo_hora||0)*176)}</strong>
+          </div>
+          ${esUocra
+            ? `<div style="font-size:11px;color:var(--muted);text-align:center;padding:8px">Editá el jornal en la calculadora de arriba ↑</div>`
+            : `<button class="btn btn-primary" style="width:100%;padding:8px" onclick="guardarCostoRol('${r.id}','${r.empresa_id}','${r.rol}')">Guardar</button>`}
+        </div>`;
+      }).join('')}
+      ${!rolesRows.length?'<div style="color:var(--muted);font-size:13px">No hay roles configurados.</div>':''}
+    </div>`;
 }
 
 // ── Supuestos ────────────────────────────────────────────────
@@ -1017,7 +1035,9 @@ async function clGuardarSupuestos(){
   try{
     await CostoLaboralAPI.actualizarSupuestos(payload);
     _clSupuestos = payload;
-    toast('Supuestos guardados', 'success');
+    await clAplicarTodasLasCategorias();
+    toast('Supuestos guardados y base actualizada', 'success');
+    cargarCostos();
   }catch(e){ toast('Error: '+(e?.message||String(e)), 'error'); }
 }
 
@@ -1076,9 +1096,9 @@ function clRenderCategorias(){
       <td><input type="number" id="cl-jornal-${c.id}" value="${c.jornal_paritaria}" oninput="clRecalcular()" style="width:120px"></td>
       <td class="mono" id="cl-hora-${c.id}">—</td>
       <td class="mono" id="cl-mes-${c.id}">—</td>
-      <td style="display:flex;gap:6px">
-        <button class="btn btn-sm btn-ghost" onclick="clGuardarJornal('${c.id}')">Guardar jornal</button>
-        ${c.rol_app?`<button class="btn btn-sm btn-success" onclick="clAplicarComoBase('${c.id}','${c.rol_app}')">Aplicar como base</button>`:'<span style="font-size:11px;color:var(--muted);align-self:center">Sin rol en ERP</span>'}
+      <td>
+        <button class="btn btn-sm btn-ghost" onclick="clGuardarJornal('${c.id}')">Guardar</button>
+        ${c.rol_app?'<span style="font-size:11px;color:var(--green);margin-left:6px" title="Este valor se aplica automáticamente al rol \''+c.rol_app+'\' en todas las empresas">🔗 auto → '+c.rol_app+'</span>':'<span style="font-size:11px;color:var(--muted);margin-left:6px">Sin rol en ERP</span>'}
       </td>
     </tr>`).join('');
   clRecalcular();
@@ -1103,32 +1123,37 @@ async function clGuardarJornal(catId){
   const jornal = parseFloat(document.getElementById('cl-jornal-'+catId).value)||0;
   try{
     await CostoLaboralAPI.actualizarJornalCategoria(catId, jornal);
-    toast('Jornal guardado', 'success');
+    const cat = _clCategorias.find(c=>c.id===catId);
+    if(cat?.rol_app) await clAplicarCategoria(catId, cat.rol_app, /*silencioso*/true);
+    toast('Jornal guardado y base actualizada', 'success');
+    cargarCostos();
   }catch(e){ toast('Error: '+(e?.message||String(e)), 'error'); }
 }
 
 // Aplica el costo/hora calculado como base en costos_roles, para TODAS las
 // empresas que tengan ese rol configurado (el costo laboral UOCRA es el
-// mismo convenio para todas las empresas).
-async function clAplicarComoBase(catId, rolApp){
+// mismo convenio para todas las empresas). Se llama automáticamente al
+// guardar supuestos o jornal — el usuario ya no necesita aplicarlo a mano.
+async function clAplicarCategoria(catId, rolApp, silencioso){
   const calc = _clUltimoCalculo[catId];
-  if(!calc){ toast('Recalculá primero', 'warn'); return; }
-  if(!(await confirmar(`¿Aplicar ${fmt(calc.costoTotalHora)}/h como costo base del rol "${rolApp}" en todas las empresas? Esto va a pisar el valor manual que tengan cargado hoy.`))) return;
-
-  try{
-    const empresas = await EmpresasAPI.getEmpresas();
-    let actualizados=0;
-    for(const emp of (empresas||[])){
-      const roles = await ProyectosAPI.getCostosRolesCompleto(emp.id);
-      const fila = (roles||[]).find(r=>r.rol===rolApp);
-      if(fila){
-        await ProyectosAPI.actualizarCostoRol(fila.id, calc.costoTotalHora);
-        actualizados++;
-      }
+  if(!calc) return 0;
+  const empresas = await EmpresasAPI.getEmpresas();
+  let actualizados=0;
+  for(const emp of (empresas||[])){
+    const roles = await ProyectosAPI.getCostosRolesCompleto(emp.id);
+    const fila = (roles||[]).find(r=>r.rol===rolApp);
+    if(fila){
+      await ProyectosAPI.actualizarCostoRol(fila.id, calc.costoTotalHora);
+      actualizados++;
     }
-    toast(`Base actualizada en ${actualizados} empresa(s)`, 'success');
-    cargarCostos();
-  }catch(e){ toast('Error: '+(e?.message||String(e)), 'error'); }
+  }
+  return actualizados;
+}
+
+async function clAplicarTodasLasCategorias(){
+  for(const c of _clCategorias){
+    if(c.rol_app) await clAplicarCategoria(c.id, c.rol_app, true);
+  }
 }
 
 function actualizarRecargos(id){
