@@ -18,7 +18,7 @@ const FacturasAPI = (() => {
     if (filtros.clienteId)  q = q.eq('cliente_id', filtros.clienteId);
     if (filtros.proyectoId) q = q.eq('proyecto_id', filtros.proyectoId);
     if (filtros.fechaDesde) q = q.gte('fecha_emision', filtros.fechaDesde);
-    if (filtros.fechaHasta) q = q.lt('fecha_emision', filtros.fechaHasta);
+    if (filtros.fechaHasta) q = q.lte('fecha_emision', filtros.fechaHasta);
     if (filtros.excluirAnuladas) q = q.neq('estado', 'anulada');
     if (filtros.soloVencidas) q = q.not('estado', 'in', '("cobrada","anulada")').lt('fecha_cobro_estimada', hoy());
     if (filtros.limit)      q = q.limit(filtros.limit);
@@ -37,10 +37,10 @@ const FacturasAPI = (() => {
     ] = await Promise.all([
       db.from('facturas_emitidas').select('monto_total')
         .eq('empresa_id', empresaId).neq('estado', 'anulada')
-        .gte('fecha_emision', fechaIni).lt('fecha_emision', fechaFin),
+        .gte('fecha_emision', fechaIni).lte('fecha_emision', fechaFin),
       db.from('facturas_emitidas').select('monto_total')
         .eq('empresa_id', empresaId).neq('estado', 'anulada')
-        .gte('fecha_emision', anioIni).lt('fecha_emision', anioFin),
+        .gte('fecha_emision', anioIni).lte('fecha_emision', anioFin),
       db.from('facturas_emitidas').select('monto_total')
         .eq('empresa_id', empresaId).not('estado', 'in', '("cobrada","anulada")'),
       db.from('facturas_emitidas').select('id')
@@ -67,7 +67,7 @@ const FacturasAPI = (() => {
       .select('monto_total,fecha_emision,empresas(nombre)')
       .neq('estado', 'anulada')
       .gte('fecha_emision', fechaIni)
-      .lt('fecha_emision', fechaFin)
+      .lte('fecha_emision', fechaFin)
       .order('fecha_emision');
     if (empresaId) q = q.eq('empresa_id', empresaId);
     const { data, error } = await q;
@@ -80,7 +80,7 @@ const FacturasAPI = (() => {
       .select('monto_total,clientes(nombre),empresas(nombre),empresa_id')
       .neq('estado', 'anulada')
       .gte('fecha_emision', fechaIni)
-      .lt('fecha_emision', fechaFin);
+      .lte('fecha_emision', fechaFin);
     if (empresaId) q = q.eq('empresa_id', empresaId);
     const { data, error } = await q;
     if (error) throw error;
@@ -164,6 +164,18 @@ const FacturasAPI = (() => {
     if (error) throw error;
   }
 
+  // Aplica el monto de una NC a su factura de origen de forma atómica.
+  // El RPC decide si queda 'anulada' (cubre el 100%) o 'anulada_parcial'
+  // (cubre menos), y devuelve el nuevo estado + saldo pendiente.
+  async function aplicarNotaCredito(facturaOrigenId, montoNC) {
+    const { data, error } = await db.rpc('aplicar_nc_a_factura', {
+      p_factura_id: facturaOrigenId,
+      p_monto_nc: montoNC,
+    });
+    if (error) throw error;
+    return (data && data[0]) || null; // { nuevo_estado, nuevo_acumulado, monto_total }
+  }
+
   async function marcarFacturaCobrada(id) {
     const { error } = await db.from('facturas_emitidas')
       .update({ estado: 'cobrada' })
@@ -198,7 +210,7 @@ const FacturasAPI = (() => {
       .select('monto')
       .eq('empresa_id', empresaId)
       .gte('fecha', fechaIni)
-      .lt('fecha', fechaFin);
+      .lte('fecha', fechaFin);
     if (error) throw error;
     return data || [];
   }
@@ -254,6 +266,7 @@ const FacturasAPI = (() => {
     crearFactura,
     actualizarFactura,
     anularFactura,
+    aplicarNotaCredito,
     marcarFacturaCobrada,
     importarFacturas,
     getCobros,

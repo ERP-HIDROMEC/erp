@@ -711,8 +711,8 @@ async function cargarFacturasOrigen(){
     const elegibles = (data||[]).filter(r => !['NC','ND'].includes(r.tipo));
     sel.innerHTML = '<option value="">— Seleccionar factura —</option>' +
       elegibles.map(r =>
-        `<option value="${r.id}" data-monto="${r.monto_total}" data-numero="${r.numero_factura}" data-estado="${r.estado}">
-          ${r.numero_factura} — ${r.clientes?.nombre||'?'} — ${fmt(r.monto_total)} — ${r.estado}
+        `<option value="${r.id}" data-monto="${r.monto_total}" data-acumulado="${r.monto_nc_acumulado||0}" data-numero="${r.numero_factura}" data-estado="${r.estado}">
+          ${r.numero_factura} — ${r.clientes?.nombre||'?'} — ${fmt(r.monto_total)}${r.monto_nc_acumulado>0?` (saldo: ${fmt(r.monto_total-r.monto_nc_acumulado)})`:''} — ${r.estado}
         </option>`
       ).join('');
   } catch(e) {
@@ -726,19 +726,52 @@ function mostrarInfoFcOrigen(){
   const opt     = sel.options[sel.selectedIndex];
   const infoEl  = document.getElementById('nf-fc-origen-info');
   if(!sel.value){ infoEl.style.display='none'; return; }
-  const monto   = opt.dataset.monto;
-  const numero  = opt.dataset.numero;
-  const estado  = opt.dataset.estado;
+  const monto      = parseFloat(opt.dataset.monto)||0;
+  const acumulado  = parseFloat(opt.dataset.acumulado)||0;
+  const numero     = opt.dataset.numero;
+  const saldo      = Math.max(monto - acumulado, 0);
   infoEl.style.display = '';
-  infoEl.innerHTML = `⚠ Al guardar esta NC, la factura <strong>${numero}</strong> (${fmt(monto)}) pasará a estado <strong>anulada</strong>.`;
-  // Precompletar monto total de la NC con el de la FC origen
+
+  // Precompletar monto total de la NC con el SALDO pendiente (no el bruto)
   const totalEl = document.getElementById('nf-total');
   const netoEl  = document.getElementById('nf-neto');
   if(totalEl && !totalEl.value) {
-    totalEl.value = monto;
-    if(netoEl && !netoEl.value) netoEl.value = monto;
+    totalEl.value = saldo.toFixed(2);
+    if(netoEl && !netoEl.value) netoEl.value = saldo.toFixed(2);
+  }
+
+  actualizarInfoNC();
+
+  // Reaccionar en vivo si el usuario cambia el monto de la NC
+  if(totalEl && !totalEl._ncListenerAttached) {
+    totalEl.addEventListener('input', actualizarInfoNC);
+    totalEl._ncListenerAttached = true;
   }
 }
+
+function actualizarInfoNC(){
+  const sel    = document.getElementById('nf-fc-origen');
+  const opt    = sel?.options[sel.selectedIndex];
+  const infoEl = document.getElementById('nf-fc-origen-info');
+  if(!sel?.value || !opt){ return; }
+  const monto     = parseFloat(opt.dataset.monto)||0;
+  const acumulado = parseFloat(opt.dataset.acumulado)||0;
+  const numero    = opt.dataset.numero;
+  const saldo     = Math.max(monto - acumulado, 0);
+  const montoNC   = parseFloat(document.getElementById('nf-total')?.value)||0;
+
+  if(montoNC <= 0) {
+    infoEl.innerHTML = `⚠ Ingresá el monto de la NC para ver el efecto sobre la factura <strong>${numero}</strong> (saldo actual: ${fmt(saldo)}).`;
+    return;
+  }
+  if(montoNC + 0.01 >= saldo) {
+    infoEl.innerHTML = `⚠ Al guardar esta NC, la factura <strong>${numero}</strong> queda con saldo <strong>$0</strong> y pasa a estado <strong>anulada</strong>.`;
+  } else {
+    const saldoRestante = saldo - montoNC;
+    infoEl.innerHTML = `⚠ Al guardar esta NC, la factura <strong>${numero}</strong> pasa a estado <strong>anulada parcial</strong>. Saldo restante a favor: <strong>${fmt(saldoRestante)}</strong>.`;
+  }
+}
+
 
 async function init(){
   const usuario = await ERP.initLayout('facturas');
@@ -786,12 +819,10 @@ async function cargarFacturas(){
   if(estado) filtros.estado=estado;
   if(mes){
     filtros.fechaDesde=mes+'-01';
-    // Construir fechaHasta sin timezone: sumar 1 mes al string directamente
+    // fechaHasta = último día del mes (incluyente) — FacturasAPI.getFacturas usa .lte
     const [ym,mm]=mes.split('-').map(Number);
-    const nextM=mm===12?1:mm+1;
-    const nextY=mm===12?ym+1:ym;
-    filtros.fechaHasta=`${nextY}-${String(nextM).padStart(2,'0')}-01`;
-    // Usar lt (no lte) en la API — ya está definido así en FacturasAPI.getFacturas
+    const ultimoDia=new Date(ym,mm,0).getDate(); // día 0 del mes siguiente = último día de este mes
+    filtros.fechaHasta=`${ym}-${String(mm).padStart(2,'0')}-${String(ultimoDia).padStart(2,'0')}`;
   }
   const facData=await FacturasAPI.getFacturas(filtros);
   let data=facData, error=null;
@@ -806,15 +837,19 @@ async function cargarFacturas(){
   }));
 
   const esNC=r=>r.tipo==='NC';
+  // Bruto: solo facturas activas (no NC, no anuladas totalmente)
   const totalFac=rows.filter(r=>!esNC(r)&&r.estado!=='anulada').reduce((s,r)=>s+Number(r.monto_total||0),0);
+  // Crédito ya aplicado a esas mismas facturas (vive en monto_nc_acumulado, no se vuelve a sumar por NC aparte)
+  const totalAcreditado=rows.filter(r=>!esNC(r)&&r.estado!=='anulada').reduce((s,r)=>s+Number(r.monto_nc_acumulado||0),0);
+  // Informativo: total de NC emitidas en el período (para mostrar aparte, no participa del cálculo del neto)
   const totalNC=rows.filter(r=>esNC(r)).reduce((s,r)=>s+Number(r.monto_total||0),0);
-  const neto=totalFac-totalNC;
+  const neto=totalFac-totalAcreditado;
 
   document.getElementById('contenido').innerHTML=`
     <div style="padding:12px 20px;display:flex;gap:20px;border-bottom:1px solid var(--border);flex-wrap:wrap">
       <span style="font-size:12px;color:var(--muted)">${rows.length} registros</span>
       <span style="font-size:12px;color:var(--muted)">Facturado: <strong style="color:var(--text)">${fmt(totalFac)}</strong></span>
-      ${totalNC>0?`<span style="font-size:12px;color:var(--muted)">NC: <strong style="color:var(--red)">-${fmt(totalNC)}</strong></span>`:''}
+      ${totalNC>0?`<span style="font-size:12px;color:var(--muted)" title="Informativo — ya reflejado en el saldo de cada factura, no se resta dos veces">NC emitidas: <strong style="color:var(--red)">-${fmt(totalNC)}</strong></span>`:''}
       <span style="font-size:12px;color:var(--muted)">Neto: <strong style="color:var(--green)">${fmt(neto)}</strong></span>
     </div>
     <div style="overflow-x:auto">
@@ -826,21 +861,23 @@ async function cargarFacturas(){
       <tbody>${rows.length?rows.map(r=>{
         const venc=r.estado_visual==='vencida';
         const dias=r.fecha_cobro_estimada?Math.floor((new Date()-new Date(r.fecha_cobro_estimada+'T12:00:00'))/86400000):0;
+        const acumNC=Number(r.monto_nc_acumulado||0);
+        const saldoNeto=Math.max(Number(r.monto_total||0)-acumNC,0);
         return `<tr class="${venc?'vencida-row':''}">
           <td style="font-size:12px">${r.empresas?.nombre||'—'}</td>
           <td class="mono">${fmtF(r.fecha_emision)}</td>
           <td class="mono">${r.numero_factura||'—'}</td>
           <td><span class="estado ${r.tipo==='NC'?'anulada':'pendiente'}" style="${r.tipo==='NC'?'background:rgba(239,68,68,0.1);color:var(--red)':'background:var(--bg3);color:var(--muted)'}">${r.tipo}</span></td>
           <td>${r.clientes?.nombre||'—'}</td>
-          <td class="mono" style="cursor:pointer;text-decoration:underline dotted;text-underline-offset:3px" onclick="abrirDetalleFc('${r.id}')" title="Ver detalle">${esNC(r)?'−':''}${fmt(r.monto_total)}</td>
+          <td class="mono" style="cursor:pointer;text-decoration:underline dotted;text-underline-offset:3px" onclick="abrirDetalleFc('${r.id}')" title="Ver detalle">${esNC(r)?'−':''}${fmt(r.monto_total)}${!esNC(r)&&acumNC>0?`<div style="font-size:10px;color:var(--purple)">saldo: ${fmt(saldoNeto)}</div>`:''}</td>
           <td style="text-align:center">${(r.remitos_ids&&r.remitos_ids.length)?'<span title="Tiene remitos vinculados" style="display:inline-block;width:10px;height:10px;border-radius:50%;background:#22d3a0"></span>':'<span title="Sin remitos vinculados" style="display:inline-block;width:10px;height:10px;border-radius:50%;background:transparent;border:2px solid #5a6278"></span>'}</td>
-          <td><span class="estado ${r.estado_visual}">${r.estado_visual}</span></td>
+          <td><span class="estado ${r.estado_visual}">${r.estado_visual==='anulada_parcial'?'anulada parcial':r.estado_visual}</span></td>
           <td>${r.fecha_cobro_estimada?`<span style="font-size:12px${venc?';color:var(--red)':''}">${fmtF(r.fecha_cobro_estimada)}${venc?` <span class="dias-badge">${dias}d</span>`:''}</span>`:'—'}</td>
           <td>
             <div style="display:flex;gap:6px">
               ${r.estado!=='cobrada'&&r.estado!=='anulada'&&!esNC(r)?`
-                <input type="checkbox" class="cb-factura" id="cb-fac-${r.id}" onchange="toggleSeleccionFactura('${r.id}','${r.empresa_id}',${r.monto_total||0})" style="cursor:pointer;width:14px;height:14px">
-                <button class="btn btn-sm btn-success" onclick="abrirCobro('${r.id}','${r.empresa_id}','${r.numero_factura}','${r.monto_total}','${r.monto_neto||0}')">Cobrar</button>`:''}
+                <input type="checkbox" class="cb-factura" id="cb-fac-${r.id}" onchange="toggleSeleccionFactura('${r.id}','${r.empresa_id}',${saldoNeto})" style="cursor:pointer;width:14px;height:14px">
+                <button class="btn btn-sm btn-success" onclick="abrirCobro('${r.id}','${r.empresa_id}','${r.numero_factura}','${saldoNeto}','${r.monto_neto||0}')">Cobrar</button>`:''}
               <button class="btn btn-sm btn-ghost" onclick="editarFactura('${r.id}')">Editar</button>
               ${r.estado!=='anulada'&&!esNC(r)?`<button class="btn btn-sm btn-danger" onclick="anularFactura('${r.id}','${r.numero_factura}')">Anular</button>`:''}
             </div>
@@ -1042,24 +1079,30 @@ async function guardarFactura(){
     }
   }
 
-  // Si es NC/ND con FC origen → anular la factura origen
+  // Si es NC/ND con FC origen → aplicar el crédito a la factura origen
+  // (anula completo si cubre el 100%, o queda 'anulada_parcial' con saldo)
+  let resultadoNC = null;
   if(esNcNd && fcOrigenId && !facturaEditId){
     try {
-      await FacturasAPI.anularFactura(fcOrigenId);
-      await registrarAuditoria('facturas','anular','facturas_emitidas',fcOrigenId,`Anulada por NC/ND ${payload.numero_factura}`);
+      resultadoNC = await FacturasAPI.aplicarNotaCredito(fcOrigenId, payload.monto_total);
+      await registrarAuditoria('facturas', tipo==='NC'?'aplicar_nc':'aplicar_nd', 'facturas_emitidas', fcOrigenId,
+        `${payload.numero_factura} — monto ${fmt(payload.monto_total)} — nuevo estado: ${resultadoNC?.nuevo_estado||'?'}`);
     } catch(e) {
-      console.warn('No se pudo anular la factura origen:', e);
-      toast('NC guardada, pero no se pudo anular la factura de origen automáticamente.', 'warn');
+      console.warn('No se pudo aplicar la NC/ND a la factura origen:', e);
+      toast('NC/ND guardada, pero no se pudo aplicar el crédito a la factura de origen automáticamente.', 'warn');
     }
   }
 
   cerrarModal('modal-factura');
   _remitosSeleccionados=[];
   cargarFacturas();
-  if(esNcNd && fcOrigenId && !facturaEditId){
+  if(esNcNd && fcOrigenId && !facturaEditId && resultadoNC){
     const sel = document.getElementById('nf-fc-origen');
     const numero = sel?.options[sel.selectedIndex]?.dataset?.numero || '';
-    setTimeout(()=>toast(`NC guardada. Factura ${numero} marcada como anulada.`, 'success'), 100);
+    const msg = resultadoNC.nuevo_estado === 'anulada'
+      ? `NC guardada. Factura ${numero} anulada (saldo $0).`
+      : `NC guardada. Factura ${numero} queda con saldo a favor de ${fmt(Number(resultadoNC.monto_total) - Number(resultadoNC.nuevo_acumulado))}.`;
+    setTimeout(()=>toast(msg, 'success'), 100);
   }
 }
 
@@ -1524,7 +1567,8 @@ async function abrirDetalleFc(facturaId){
     document.getElementById('dfc-estado').innerHTML    = `<span class="estado ${fc.estado}">${fc.estado}</span>`;
     document.getElementById('dfc-neto').textContent    = fmt(fc.monto_neto||0);
     document.getElementById('dfc-iva').textContent     = fmt(fc.monto_iva||0);
-    document.getElementById('dfc-total').textContent   = fmt(fc.monto_total||0);
+    document.getElementById('dfc-total').textContent   = fmt(fc.monto_total||0)
+      + (Number(fc.monto_nc_acumulado||0)>0 ? `  ·  NC aplicada: -${fmt(fc.monto_nc_acumulado)}  ·  saldo: ${fmt(Math.max(Number(fc.monto_total||0)-Number(fc.monto_nc_acumulado||0),0))}` : '');
     document.getElementById('dfc-btn-editar').onclick  = ()=>{ cerrarModal('modal-detalle-fc'); editarFactura(facturaId); };
 
     const obsEl = document.getElementById('dfc-obs-section');
