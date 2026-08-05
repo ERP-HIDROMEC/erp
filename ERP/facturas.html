@@ -923,7 +923,7 @@ async function cargarCobros(){
   const mes=document.getElementById('c-mes').value;
   let cobData=await FacturasAPI.getCobros({});
   if(emp) cobData=cobData.filter(r=>r.empresa_id===emp);
-  if(mes){const mI=mes+'-01';const mF=new Date(mes+'-01');mF.setMonth(mF.getMonth()+1);const mFin=mF.toISOString().split('T')[0];cobData=cobData.filter(r=>r.fecha>=mI&&r.fecha<mFin);}
+  if(mes){const mI=mes+'-01';const mFin=finMesExclusivo(mes);cobData=cobData.filter(r=>r.fecha>=mI&&r.fecha<mFin);}
   const data=cobData;
   const rows=data||[];
   const total=rows.reduce((s,r)=>s+Number(r.monto||0),0);
@@ -1288,8 +1288,17 @@ function procesarExcel(input){
     }
     const rows=json.slice(hrIdx+1).filter(r=>r[0]&&r[27]);
     importRows=rows.map(r=>{
-      const fecha=String(r[0]||'');
-      const fechaISO=fecha.includes('/')?fecha.split('/').reverse().join('-'):fecha;
+      const fechaRaw=r[0];
+      let fechaISO;
+      if(typeof fechaRaw==='number'){
+        // Excel guarda fechas como serial numérico (días desde 1899-12-30)
+        // cuando la celda tiene formato de fecha real (no texto).
+        const d=XLSX.SSF.parse_date_code(fechaRaw);
+        fechaISO=`${d.y}-${String(d.m).padStart(2,'0')}-${String(d.d).padStart(2,'0')}`;
+      } else {
+        const fecha=String(fechaRaw||'');
+        fechaISO=fecha.includes('/')?fecha.split('/').reverse().join('-'):fecha;
+      }
       const tipo=getTipo(String(r[1]||''));
       const pv=parseInt(r[2])||0;
       const nro=parseInt(r[3])||0;

@@ -601,6 +601,39 @@ async function confirmarOPMultiple(){
   const anioActual = new Date().getFullYear();
   const anioStr = String(anioActual);
 
+  let maxNro = 0;
+  try {
+    const { data: maxData, error: maxErr } = await db.rpc('get_max_op_nro', {
+      p_empresa_id: empresaIdOP,
+      p_anio: anioStr
+    });
+    if(maxErr) throw maxErr;
+    maxNro = maxData || 0;
+  } catch(rpcErr) {
+    console.warn('[OP] RPC falló, usando fallback JS:', rpcErr.message);
+    try {
+      const { data: fallback } = await db
+        .from('egresos')
+        .select('orden_pago_nro')
+        .eq('empresa_id', empresaIdOP)
+        .not('orden_pago_nro', 'is', null)
+        .gte('orden_pago_at', anioStr + '-01-01')
+        .lte('orden_pago_at', anioStr + '-12-31T23:59:59')
+        .limit(500);
+      const nros = (fallback || [])
+        .map(r => { const m = r.orden_pago_nro && r.orden_pago_nro.match(/OP-0*(\d+)-\d{4}/i); return m ? parseInt(m[1]) : 0; })
+        .filter(n => n > 0);
+      maxNro = nros.length ? Math.max(...nros) : 0;
+    } catch(fbErr) {
+      console.error('[OP] Fallback también falló:', fbErr);
+      toast('Error al calcular número de OP. Intentá de nuevo.', 'error');
+      return;
+    }
+  }
+  if(maxNro === 0){
+    if(!(await confirmar('No se pudo determinar el último número de OP.\n¿Querés continuar de todas formas?'))) return;
+  }
+
   // Cheques
   let chequesData=[];
   if(metodo==='cheques'){
@@ -632,19 +665,8 @@ async function confirmarOPMultiple(){
   const grupos = Object.values(gruposPorProveedor);
 
   for(const grupo of grupos){
-    let nroOrden;
-    try {
-      const { data: _nro, error: _ne } = await db.rpc('get_next_op_nro', {
-        p_empresa_id: grupo[0]?.empresa_id || empresaIdOP,
-        p_anio: anioActual
-      });
-      if(_ne) throw _ne;
-      nroOrden = _nro;
-    } catch(e) {
-      console.error('[OP] Error obteniendo número de OP:', e);
-      toast('Error al generar el número de OP para '+(grupo[0]?.proveedores?.nombre||'un proveedor')+'. Se detuvo el proceso.', 'error');
-      break;
-    }
+    maxNro++;
+    const nroOrden = 'OP-'+String(maxNro).padStart(4,'0')+'-'+anioStr;
     const totalGrupo = grupo.reduce((s,r)=>s+montosOP[r.id].monto, 0);
 
     for(const r of grupo){
@@ -1286,7 +1308,7 @@ async function cargarEgresos(){
   if(emp) egData=egData.filter(r=>r.empresa_id===emp);
   if(tipo) egData=egData.filter(r=>r.tipo===tipo);
   if(pagado!=='') egData=egData.filter(r=>r.pagado===(pagado==='true'));
-  if(mes){const mI=mes+'-01';const mF=new Date(mes+'-01');mF.setMonth(mF.getMonth()+1);const mFin=mF.toISOString().split('T')[0];egData=egData.filter(r=>r.fecha_egreso>=mI&&r.fecha_egreso<mFin);}
+  if(mes){const mI=mes+'-01';const mFin=finMesExclusivo(mes);egData=egData.filter(r=>r.fecha_egreso>=mI&&r.fecha_egreso<mFin);}
   const data=egData;
   let rows=data||[];
   if(buscar) rows=rows.filter(r=>(r.proveedores?.nombre||r.descripcion||'').toLowerCase().includes(buscar)||(r.descripcion||'').toLowerCase().includes(buscar));
@@ -1295,7 +1317,6 @@ async function cargarEgresos(){
   const pagados=rows.filter(r=>r.pagado).reduce((s,r)=>s+Number(r.monto||0),0);
   const pendiente=rows.filter(r=>!r.pagado).reduce((s,r)=>s+Number(r.monto||0),0);
   const conFactura=rows.filter(r=>r.numero_factura).length;
-  window._egresosRows = rows;
 
   document.getElementById('kpis-compras').innerHTML=`
     <div class="kpi-card red"><div class="kpi-label">Total egresos</div><div class="kpi-value">${fmt(total)}</div></div>
@@ -1333,7 +1354,7 @@ async function cargarEgresos(){
             ${!r.pagado&&!r.liberado_pago?`<button class="btn btn-sm btn-primary" onclick="abrirLiberar('${r.id}','${r.descripcion}','${r.monto}')">Liberar</button>`:''}
             ${!r.pagado&&r.liberado_pago?`<button class="btn btn-sm btn-ghost" onclick="cancelarLiberar('${r.id}')">Quitar</button>`:''}
             <button class="btn btn-sm btn-ghost" onclick="editarEgreso('${r.id}')">Editar</button>
-            ${!r.pagado?`<button class="btn btn-sm btn-danger" onclick="borrarEgreso('${r.id}')">Borrar</button>`:''}
+            <button class="btn btn-sm btn-danger" onclick="borrarEgreso('${r.id}')">Borrar</button>
           </div></td>
         </tr>`;
       }).join(''):'<tr><td colspan="9" style="text-align:center;padding:40px;color:var(--muted)">Sin egresos</td></tr>'}</tbody>
@@ -1477,13 +1498,6 @@ async function guardarEgreso(){
 }
 
 async function borrarEgreso(id){
-  // Defensa extra: nunca permitir borrar un egreso ya pagado (rompe la numeración de OP)
-  const rows = window._egresosRows || [];
-  const eg = rows.find(r => r.id === id);
-  if (eg?.pagado) {
-    toast('No se puede borrar un egreso ya pagado. Contactá al administrador si necesitás revertirlo.', 'error');
-    return;
-  }
   if(!(await confirmar('¿Borrar este egreso?'))) return;
   await EgresosAPI.eliminarEgreso(id);
   cargarEgresos();

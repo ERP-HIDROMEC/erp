@@ -524,7 +524,7 @@ async function cargarRemitos(){
   // Filtrar por migrado en memoria (la API no lo filtra)
   if(tabActual==='historico') rows=rows.filter(r=>r.migrado);
   if(tabActual==='todos') rows=rows.filter(r=>!r.migrado);
-  if(mes){const mI=mes+'-01';const mF=new Date(mes+'-01');mF.setMonth(mF.getMonth()+1);const mFin=mF.toISOString().split('T')[0];rows=rows.filter(r=>r.fecha>=mI&&r.fecha<mFin);}
+  if(mes){const mI=mes+'-01';const mFin=finMesExclusivo(mes);rows=rows.filter(r=>r.fecha>=mI&&r.fecha<mFin);}
   // Ordenar por número según estado
   rows.sort((a,b)=>ordenAsc?(a.numero||0)-(b.numero||0):(b.numero||0)-(a.numero||0));
   // Enriquecer con número de factura
@@ -1035,6 +1035,12 @@ async function cargarContratos(){
   // Limpiar items al recargar lista de contratos
   const msgEl=document.getElementById('msg-items-contrato');
   if(msgEl) msgEl.style.display='none';
+  // Si el <select> quedó con una sola opción, el navegador la preselecciona
+  // solo pero el evento onchange nunca se dispara (no hubo interacción del
+  // usuario) — sin esto, ese único contrato queda "elegido" en apariencia
+  // pero nunca carga sus ítems. Disparamos la carga a mano siempre que haya
+  // algo seleccionado.
+  if(document.getElementById('nr-contrato').value) await cargarItemsContrato();
 }
 
 async function cargarItemsContrato(){
@@ -1339,6 +1345,13 @@ async function guardarRemito(estado){
   } else {
     await registrarAuditoria('remitos','editar','remitos_v2',remitoId,null);
   }
+
+  // Guardado exitoso: limpiar el seguimiento de "rehacer" ANTES de cerrar el
+  // modal, para que cerrarModal() no interprete esto como una cancelación
+  // y revierta el remito original que ya quedó correctamente reemplazado.
+  _rehaciendoDesdeId = null;
+  _rehaciendoDesdeNumero = null;
+  _rehaciendoDesdeEstadoPrevio = null;
 
   cerrarModal();
   await verificarCAI();
@@ -1953,11 +1966,32 @@ async function guardarTalonario(){
   cargarTalonarios();
 }
 
-function cerrarModal(id){
+async function cerrarModal(id){
   const modalId = id || 'modal-remito';
   const el = document.getElementById(modalId);
   if (el) el.classList.remove('show');
-  if (!id || id === 'modal-remito') { _rehaciendoDesdeId = null; _rehaciendoDesdeNumero = null; }
+  if (!id || id === 'modal-remito') {
+    // Si se estaba "rehaciendo" un remito y se cancela sin llegar a guardar
+    // el nuevo, hay que revertir el estado del original — si no, queda
+    // marcado 'facturado' para siempre sin factura real vinculada.
+    if (_rehaciendoDesdeId) {
+      const idRevertir = _rehaciendoDesdeId;
+      const estadoPrevio = _rehaciendoDesdeEstadoPrevio || 'emitido';
+      try {
+        await RemitosAPI.actualizarRemito(idRevertir, { estado: estadoPrevio });
+        await registrarAuditoria('remitos','rehacer_cancelado','remitos_v2',idRevertir,
+          `Vuelve a estado '${estadoPrevio}' — se canceló el rehacer sin crear el remito nuevo`);
+        toast('Se canceló el rehacer — el remito original vuelve a estado pendiente.', 'info');
+      } catch(e) {
+        console.warn('No se pudo revertir el remito al cancelar el rehacer:', e);
+        toast('⚠ No se pudo revertir el remito original automáticamente. Revisalo a mano.', 'warn');
+      }
+      if (typeof recargar === 'function') recargar();
+    }
+    _rehaciendoDesdeId = null;
+    _rehaciendoDesdeNumero = null;
+    _rehaciendoDesdeEstadoPrevio = null;
+  }
 }
 function cerrarModal2(){document.getElementById('modal-talonario').classList.remove('show');}
 // logout() → ahora en ERP.logout() (erp-sidebar.js)
@@ -1986,12 +2020,26 @@ async function marcarHistoricoPendiente(id){
 // vía reemplaza_a_remito_id.
 let _rehaciendoDesdeId = null;
 let _rehaciendoDesdeNumero = null;
+let _rehaciendoDesdeEstadoPrevio = null;
+
+// Si cierran la pestaña/recargan con un "rehacer" a mitad de camino, el
+// remito original ya quedó marcado 'facturado' en la base pero nunca se
+// llega a crear el reemplazo. cerrarModal() revierte esto al cancelar
+// desde la UI, pero un cierre de pestaña se nos escapa — al menos avisamos.
+window.addEventListener('beforeunload', function(e){
+  if(_rehaciendoDesdeId){
+    e.preventDefault();
+    e.returnValue = 'Tenés un "Rehacer remito" sin terminar. Si salís ahora, el remito original va a quedar mal marcado como facturado.';
+    return e.returnValue;
+  }
+});
 
 async function rehacerRemito(id){
   if(!(await confirmar('Este remito histórico se marcará como facturado y se abrirá un remito nuevo con los mismos datos para emitir. ¿Continuar?'))) return;
 
   const r = await RemitosAPI.getRemitoSimple(id);
   if(!r){ toast('No se pudo cargar el remito histórico.','error'); return; }
+  _rehaciendoDesdeEstadoPrevio = r.estado;
 
   // 1. Sacar el histórico de pendientes
   try{
@@ -2249,7 +2297,20 @@ async function usarPlantilla(plantillaId) {
     if (p.contrato_id && p.tipo === 'contrato') {
       await cargarContratos();
       const sel = document.getElementById('nr-contrato');
-      if (sel) { sel.value = p.contrato_id; await cargarItemsContrato(); }
+      if (sel) {
+        const opcionValida = sel.querySelector(`option[value="${p.contrato_id}"]`);
+        if (opcionValida) {
+          // El contrato de la plantilla sigue vigente para este cliente: usarlo.
+          sel.value = p.contrato_id;
+          await cargarItemsContrato();
+        } else {
+          // El contrato guardado en la plantilla ya no está entre los vigentes
+          // (venció, se cerró, etc.) — NO forzar un value inválido que deja el
+          // select trabado. Dejamos lo que cargarContratos() ya seleccionó por
+          // default (el único/primer contrato activo del cliente) y avisamos.
+          toast('El contrato guardado en esta plantilla ya no está activo. Se seleccionó el contrato vigente del cliente — revisalo antes de guardar.', 'warn');
+        }
+      }
     }
 
     // Poblar items — siempre usar precio VIGENTE del contrato, no el guardado en la plantilla

@@ -26,6 +26,30 @@ var fmtF   = d => d ? new Date(d+'T12:00:00').toLocaleDateString('es-AR') : '—
 var fmtNum = (v, isUSD) => (isUSD ? 'U$S ' : '$') + Number(v).toLocaleString('es-AR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 var hoy  = () => new Date().toISOString().split('T')[0];
 
+// Devuelve 'YYYY-MM-DD' del primer día del mes SIGUIENTE a mes='YYYY-MM'.
+// Pensado para usar como límite superior EXCLUSIVO (fecha < finMesExclusivo(mes))
+// en filtros de mes. Aritmética pura con strings/enteros — nunca usar
+// `new Date(mes+'-01')` + setMonth() para esto: al parsear un string
+//'YYYY-MM-DD' con new Date(), JS lo interpreta como medianoche UTC, y en
+// timezones detrás de UTC (como Argentina, UTC-3) eso cae en el día
+// anterior en hora local. setMonth() opera en hora LOCAL, así que termina
+// devolviendo un día de más (ej. filtra "< 31" en vez de "< 1 del mes
+// siguiente"), y el día 31 del mes queda afuera del filtro.
+function finMesExclusivo(mes) {
+  const [y, m] = mes.split('-').map(Number);
+  const nm = m === 12 ? 1 : m + 1;
+  const ny = m === 12 ? y + 1 : y;
+  return `${ny}-${String(nm).padStart(2, '0')}-01`;
+}
+
+// Igual que arriba pero devuelve el ÚLTIMO día del propio mes (incluyente).
+// Usar cuando el consumidor filtra con `.lte()` en vez de `.lt()`.
+function finMesInclusivo(mes) {
+  const [y, m] = mes.split('-').map(Number);
+  const ultimoDia = new Date(y, m, 0).getDate(); // día 0 del mes siguiente = último día de este mes (hora local, sin parsear ISO)
+  return `${y}-${String(m).padStart(2, '0')}-${String(ultimoDia).padStart(2, '0')}`;
+}
+
 // ── Roles y permisos ──────────────────────────────────────────
 //
 // ROLES DEFINIDOS:

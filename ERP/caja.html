@@ -367,10 +367,7 @@ async function cargarKpis(){
   const cuenta=document.getElementById('sel-cuenta').value;
   const mes=document.getElementById('sel-mes').value;
   const ini=mes+'-01';
-  const fin=new Date(mes+'-01');fin.setMonth(fin.getMonth()+1);
-  const finStr=fin.toISOString().split('T')[0];
-
-  const empIdKpi=document.getElementById('sel-empresa').value||null;
+  const finStr=finMesExclusivo(mes);
   const movResumen=await CajaAPI.getResumenCaja(empIdKpi);
   let data=(movResumen.movimientos||[]);
   if(emp) data=data.filter(r=>r.empresa_id===emp);
@@ -402,8 +399,7 @@ async function cargarMovimientos(){
   const cuenta=document.getElementById('sel-cuenta').value;
   const mes=document.getElementById('sel-mes').value;
   const ini=mes+'-01';
-  const fin=new Date(mes+'-01');fin.setMonth(fin.getMonth()+1);
-  const finStr=fin.toISOString().split('T')[0];
+  const finStr=finMesInclusivo(mes);
 
   const filtros={fechaDesde:ini,fechaHasta:finStr};
   if(emp) filtros.empresaId=emp;
