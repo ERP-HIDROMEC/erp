@@ -64,10 +64,10 @@ function finMesInclusivo(mes) {
 var PERMISOS = {
   admin_general:       ['*'],
   gestion_caja:        ['dashboard','facturas','compras','contratos','remitos','impuestos','caja'],
-  operaciones_dash:    ['dashboard','proyectos','remitos','contratos','presupuestos'],
+  operaciones_dash:    ['dashboard','proyectos','remitos','contratos','presupuestos','informes'],
   gestion:             ['facturas','compras','contratos','remitos','impuestos','historial-op'],
-  operaciones:         ['proyectos','remitos','contratos','presupuestos'],
-  gestion_operaciones: ['facturas','compras','contratos','remitos','impuestos','proyectos','presupuestos'],
+  operaciones:         ['proyectos','remitos','contratos','presupuestos','informes'],
+  gestion_operaciones: ['facturas','compras','contratos','remitos','impuestos','proyectos','presupuestos','informes'],
   gestion_full:        ['facturas','compras','contratos','remitos','impuestos','clientes','syh','historial-op'],
   rrhh:                ['empleados','syh','clientes'],
   syh:                 ['syh'],

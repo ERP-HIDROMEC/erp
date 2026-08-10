@@ -1868,7 +1868,7 @@ async function editarPlantilla(id) {
   document.getElementById('mp-elab-nombre').value = p.elab_nombre || '';
   document.getElementById('mp-elab-cargo').value  = p.elab_cargo || '';
   document.getElementById('mp-obj-list').innerHTML = '';
-  (p.objetivos || []).forEach(o => addMpObj(o.text));
+  (p.objetivos || []).forEach(o => addMpObj(o.text, o.done !== false));
   document.getElementById('mp-equipos-container').innerHTML = '';
   (p.equipos || []).forEach(eq => addMpEquipo(eq.nombre, eq.tareas || []));
   document.getElementById('modal-plantilla-form').classList.add('show');
@@ -1876,10 +1876,10 @@ async function editarPlantilla(id) {
 
 // Items en modal plantilla
 let mpEqCount = 0;
-function addMpObj(texto = '') {
+function addMpObj(texto = '', done = true) {
   const li = document.createElement('li');
   li.className = 'cl-item';
-  li.innerHTML = `<input type="checkbox" checked>
+  li.innerHTML = `<input type="checkbox" ${done ? 'checked' : ''}>
     <textarea class="cl-ta" rows="1">${texto}</textarea>
     <button class="cl-del" onclick="this.parentElement.remove()">×</button>`;
   const ta = li.querySelector('textarea');
@@ -1903,14 +1903,14 @@ function addMpEquipo(nombre = '', tareasInit = []) {
       <button class="btn-add-dashed" onclick="addMpTarea('mpcl-${id}')">+ tarea</button>
     </div>`;
   document.getElementById('mp-equipos-container').appendChild(div);
-  if (tareasInit.length) tareasInit.forEach(t => addMpTarea('mpcl-' + id, t.text));
+  if (tareasInit.length) tareasInit.forEach(t => addMpTarea('mpcl-' + id, t.text, t.done !== false));
   else addMpTarea('mpcl-' + id, '');
 }
 
-function addMpTarea(listId, texto = '') {
+function addMpTarea(listId, texto = '', done = true) {
   const li = document.createElement('li');
   li.className = 'cl-item';
-  li.innerHTML = `<input type="checkbox" checked>
+  li.innerHTML = `<input type="checkbox" ${done ? 'checked' : ''}>
     <textarea class="cl-ta" rows="1">${texto}</textarea>
     <button class="cl-del" onclick="this.parentElement.remove()">×</button>`;
   const ta = li.querySelector('textarea');
@@ -1921,7 +1921,7 @@ function addMpTarea(listId, texto = '') {
 function getMpObjetivos() {
   return [...document.querySelectorAll('#mp-obj-list .cl-item')].map(li => ({
     text: li.querySelector('textarea').value.trim(),
-    done: true,
+    done: li.querySelector('input[type=checkbox]').checked,
   })).filter(o => o.text);
 }
 
@@ -1929,7 +1929,8 @@ function getMpEquipos() {
   return [...document.querySelectorAll('#mp-equipos-container .equipo-bloque')].map(div => ({
     nombre: div.querySelector('.equipo-head input').value.trim(),
     tareas: [...div.querySelectorAll('.cl-item')].map(li => ({
-      text: li.querySelector('textarea').value.trim(), done: true,
+      text: li.querySelector('textarea').value.trim(),
+      done: li.querySelector('input[type=checkbox]').checked,
     })).filter(t => t.text),
   })).filter(e => e.nombre || e.tareas.length);
 }
