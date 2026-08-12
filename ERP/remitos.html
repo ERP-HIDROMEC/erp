@@ -731,6 +731,7 @@ function filtrarPendientesLocal(){
     <div class="barra-simulacion" id="barra-simulacion" style="border-top:none;border-radius:0">
       <span style="font-size:13px;color:var(--text);font-weight:500" id="barra-count">0 seleccionados</span>
       <button class="btn btn-primary btn-sm" onclick="abrirSimulacionFacturacion()">🔍 Simular facturación</button>
+      <button class="btn btn-ghost btn-sm" onclick="exportarReclamoPDF()">📄 Exportar PDF (reclamo)</button>
       <button class="btn btn-ghost btn-sm" onclick="limpiarSeleccion()">Limpiar</button>
       <span class="hint-text">← Tildá remitos para simular facturación agrupada</span>
     </div>
@@ -1561,7 +1562,184 @@ async function abrirDetalleItems(remitoId){
   }
 }
 
+async function exportarReclamoPDF(){
+  if(!_selPendientes.size){ toast('Tildá al menos un remito para exportar.','warn'); return; }
+  const remitos=[..._selPendientes.values()];
+
+  // Regla: solo un cliente por exportación (es para reclamarle a ESE cliente)
+  const clientesDistintos=[...new Set(remitos.map(r=>r.cliente_id))];
+  if(clientesDistintos.length>1){
+    toast('Seleccionaste remitos de más de un cliente. Elegí remitos de un solo cliente para exportar el reclamo.','warn');
+    return;
+  }
+
+  if(!window.jspdf||!window.jspdf.jsPDF){
+    toast('Librería PDF no cargada. Recargá la página.','error');
+    return;
+  }
+
+  toast('Generando PDF...', 'info');
+
+  // Traer detalle de ítems de cada remito seleccionado (en paralelo)
+  const itemsPorRemito={};
+  await Promise.all(remitos.map(async r=>{
+    try{ itemsPorRemito[r.id]=await RemitosAPI.getItemsRemito(r.id); }
+    catch(e){ itemsPorRemito[r.id]=[]; }
+  }));
+
+  // Datos completos del cliente (la lista de pendientes solo trae nombre)
+  const clienteId=clientesDistintos[0];
+  let cliente=remitos[0].clientes||{};
+  try{
+    const clienteFull=await ClientesAPI.getClienteById(clienteId);
+    if(clienteFull) cliente=clienteFull;
+  }catch(e){/* seguimos con lo que haya */}
+
+  const esPlacemem=remitos[0].empresa_id==='a2000000-0000-0000-0000-000000000002';
+  const EMP=esPlacemem?{
+    nombre:'PLACEMEM S.R.L.', cuit:'30-71232493-3',
+    dir:'3 de Febrero 353 - Zárate - Bs.As.', email:'administracion@placemem.com.ar',
+  }:{
+    nombre:'HIDROMEC S.R.L.', cuit:'30-71163249-9',
+    dir:'Colectora Oeste 1525 - Zárate - Bs.As.', email:'administracion@hidromecsrl.com.ar',
+  };
+
+  const { jsPDF } = window.jspdf;
+  const doc = new jsPDF({ format:'a4', unit:'mm' });
+  const L=12, R=198, W=186;
+  let y=15;
+
+  const chequearSalto=(alturaNecesaria)=>{
+    if(y+alturaNecesaria>282){ doc.addPage(); y=15; }
+  };
+
+  // ── Encabezado ─────────────────────────────────────────────
+  doc.setFont('helvetica','bold'); doc.setFontSize(13);
+  doc.text(EMP.nombre, L, y);
+  doc.setFont('helvetica','normal'); doc.setFontSize(8.5); doc.setTextColor(90,90,90);
+  y+=5; doc.text(`CUIT: ${EMP.cuit}  ·  ${EMP.dir}  ·  ${EMP.email}`, L, y);
+  doc.setTextColor(0,0,0);
+
+  y+=9;
+  doc.setFont('helvetica','bold'); doc.setFontSize(14);
+  doc.text('Remitos pendientes de facturación', L, y);
+  y+=6;
+  doc.setFont('helvetica','normal'); doc.setFontSize(9);
+  doc.text(`Fecha de emisión: ${new Date().toLocaleDateString('es-AR')}`, L, y);
+
+  y+=8;
+  doc.setDrawColor(200,200,200); doc.line(L,y,R,y);
+  y+=7;
+
+  // ── Datos del cliente ────────────────────────────────────────
+  doc.setFont('helvetica','bold'); doc.setFontSize(10);
+  doc.text('Cliente:', L, y);
+  doc.setFont('helvetica','normal');
+  doc.text(cliente?.nombre||'—', L+20, y);
+  y+=5.5;
+  if(cliente?.cuit){
+    doc.setFont('helvetica','bold'); doc.text('CUIT:', L, y);
+    doc.setFont('helvetica','normal'); doc.text(cliente.cuit, L+20, y);
+    y+=5.5;
+  }
+  if(cliente?.domicilio){
+    doc.setFont('helvetica','bold'); doc.text('Domicilio:', L, y);
+    doc.setFont('helvetica','normal'); doc.text(cliente.domicilio, L+20, y);
+    y+=5.5;
+  }
+
+  y+=3;
+  doc.setFont('helvetica','normal'); doc.setFontSize(8.5); doc.setTextColor(90,90,90);
+  const introLines=doc.splitTextToSize(
+    'Por medio de la presente solicitamos la revisión y aceptación de los siguientes remitos, actualmente pendientes de facturación, a fin de proceder con la emisión de las facturas correspondientes.',
+    W
+  );
+  doc.text(introLines, L, y);
+  y+=introLines.length*4+4;
+  doc.setTextColor(0,0,0);
+
+  // ── Total general ──────────────────────────────────────────
+  const totalGeneral=remitos.reduce((s,r)=>s+Number(r.total_valorizado||0),0);
+  doc.setFillColor(245,158,11); doc.setDrawColor(245,158,11);
+  doc.roundedRect(L,y,W,10,1.5,1.5,'F');
+  doc.setTextColor(255,255,255); doc.setFont('helvetica','bold'); doc.setFontSize(10);
+  doc.text(`${remitos.length} remito${remitos.length>1?'s':''} pendiente${remitos.length>1?'s':''}`, L+4, y+6.5);
+  doc.text(`Total: ${fmt(totalGeneral)}`, R-4, y+6.5, {align:'right'});
+  doc.setTextColor(0,0,0);
+  y+=16;
+
+  // ── Un bloque por remito: resumen + detalle de ítems ────────
+  remitos.forEach(r=>{
+    chequearSalto(22);
+
+    const dias=Math.floor((new Date()-new Date(r.fecha+'T12:00:00'))/86400000);
+
+    // Header del bloque (mismas columnas que se ven en pantalla)
+    doc.setFillColor(240,240,240);
+    doc.rect(L,y,W,7,'F');
+    doc.setFont('helvetica','bold'); doc.setFontSize(9);
+    doc.text(r.numero_formateado||r.numero||'—', L+2, y+5);
+    doc.setFont('helvetica','normal'); doc.setFontSize(8);
+    doc.text(fmtF(r.fecha), L+38, y+5);
+    doc.text(r.tipo==='contrato'?'Contrato':'Servicio', L+62, y+5);
+    doc.text(`OC: ${r.orden_compra||'—'}`, L+90, y+5);
+    doc.text(`${dias}d pendiente`, L+130, y+5);
+    doc.setFont('helvetica','bold');
+    doc.setTextColor(180,95,10);
+    doc.text(r.total_valorizado?fmt(r.total_valorizado):'Sin valor', R-2, y+5, {align:'right'});
+    doc.setTextColor(0,0,0);
+    y+=9;
+
+    // Detalle de ítems (igual al modal "ver detalle")
+    const items=itemsPorRemito[r.id]||[];
+    if(items.length){
+      chequearSalto(6+items.length*5);
+      doc.setFont('helvetica','bold'); doc.setFontSize(7.5); doc.setTextColor(120,120,120);
+      doc.text('Descripción', L+4, y);
+      doc.text('Cant.', L+130, y, {align:'right'});
+      doc.text('P. Unit.', L+160, y, {align:'right'});
+      doc.text('Subtotal', R-2, y, {align:'right'});
+      doc.setTextColor(0,0,0);
+      y+=4;
+      doc.setFont('helvetica','normal'); doc.setFontSize(8);
+      items.forEach(it=>{
+        chequearSalto(6);
+        const cant=parseFloat(it.cantidad_num||it.cantidad)||null;
+        const precio=parseFloat(it.precio_unitario)||0;
+        const sub=cant?cant*precio:0;
+        const descLines=doc.splitTextToSize(it.descripcion||'—', 118);
+        doc.text(descLines, L+4, y);
+        doc.text(it.cantidad?String(it.cantidad):'—', L+130, y, {align:'right'});
+        doc.text(precio?fmt(precio):'—', L+160, y, {align:'right'});
+        doc.text(sub?fmt(sub):'—', R-2, y, {align:'right'});
+        y+=Math.max(descLines.length*4, 5);
+      });
+    } else {
+      doc.setFont('helvetica','italic'); doc.setFontSize(8); doc.setTextColor(140,140,140);
+      doc.text('Sin ítems cargados con valor.', L+4, y);
+      doc.setTextColor(0,0,0);
+      y+=5;
+    }
+    y+=4;
+    doc.setDrawColor(225,225,225); doc.line(L,y,R,y);
+    y+=6;
+  });
+
+  // ── Pie con numeración de página ─────────────────────────────
+  const totalPaginas=doc.internal.getNumberOfPages();
+  for(let p=1;p<=totalPaginas;p++){
+    doc.setPage(p);
+    doc.setFont('helvetica','normal'); doc.setFontSize(7.5); doc.setTextColor(140,140,140);
+    doc.text(`Página ${p} de ${totalPaginas}`, R, 290, {align:'right'});
+  }
+
+  const nombreArchivo=`reclamo-remitos-${(cliente?.nombre||'cliente').toLowerCase().replace(/[^a-z0-9]+/g,'-')}-${new Date().toISOString().slice(0,10)}.pdf`;
+  doc.save(nombreArchivo);
+}
+
 async function abrirVincularFC(remitoId){
+
+
   _vfcRemitoId = remitoId;
   _vfcFacturas = [];
 
