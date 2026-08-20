@@ -287,10 +287,6 @@
         <div class="kpi-value" id="g-fac-anio">—</div>
         <div class="kpi-sub" id="g-anio-sub"></div>
       </div>
-      <div class="kpi-card purple">
-        <div class="kpi-label">Proyectos activos</div>
-        <div class="kpi-value" id="g-proy">—</div>
-      </div>
     </div>
 
     <!-- KPIs fila 2: cuentas -->
@@ -357,13 +353,6 @@
           <span style="font-size:11px;color:var(--muted)" id="top-anio-label"></span>
         </div>
         <div id="top-clientes-general">
-          <div class="spinner-wrap"><div class="spinner"></div></div>
-        </div>
-      </div>
-
-      <div class="panel">
-        <div class="panel-header"><h3>Proyectos activos</h3></div>
-        <div id="proy-lista">
           <div class="spinner-wrap"><div class="spinner"></div></div>
         </div>
       </div>
@@ -724,7 +713,6 @@ async function cargarGeneral() {
       cargarGraficoGeneral(),
       cargarCobrarCliente(null, null, 'cobrar-lista', 'g-cobrar-total'),
       cargarTopClientes(fechas.anioIni, fechas.anioFin, 'top-clientes-general', 'top-anio-label'),
-      cargarProyectos(),
       cargarAlertas(),
     ]);
     console.log('[dash] cargarGeneral OK');
@@ -954,30 +942,6 @@ async function cargarTopClientes(desde, hasta, elId, labelId) {
   } catch(e) {
     console.error('top clientes:', e);
     el.innerHTML = '<div class="empty">Error al cargar</div>';
-  }
-}
-
-async function cargarProyectos() {
-  const el = document.getElementById('proy-lista');
-  try {
-    const empId  = getEmpId();
-    const filtros = { estados: ['activo', 'pausado'] };
-    if (empId) filtros.empresaId = empId;
-    const data = await ProyectosAPI.getProyectos(filtros);
-    setText('g-proy', String((data||[]).length));
-    if (!data.length) { el.innerHTML = '<div class="empty">Sin proyectos activos</div>'; return; }
-    el.innerHTML = '<div style="max-height:280px;overflow-y:auto">' +
-      data.slice(0, 10).map(p => `
-        <div class="proy-row">
-          <div>
-            <div style="font-size:13px;font-weight:500">${p.nombre}</div>
-            <div style="font-size:11px;color:var(--muted)">${p.clientes?.nombre||'—'} · ${p.empresas?.nombre||'—'}</div>
-          </div>
-          <span class="estado ${p.estado}">${p.estado}</span>
-        </div>`).join('') + '</div>';
-  } catch(e) {
-    console.error('proyectos:', e);
-    el.innerHTML = '<div class="empty">Error</div>';
   }
 }
 
