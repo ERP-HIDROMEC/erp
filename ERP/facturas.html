@@ -7,6 +7,7 @@
 <link rel="stylesheet" href="erp-layout.css">
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js"></script>
 <script src="erp-utils.js"></script>
 <script src="erp-sidebar.js"></script>
 <script src="empresas.api.js"></script>
@@ -57,6 +58,7 @@
   <div class="tabs">
     <button class="tab active" onclick="cambiarTab('facturas',this)">Facturas</button>
     <button class="tab" onclick="cambiarTab('cobros',this)">Cobros</button>
+    <button class="tab" onclick="cambiarTab('cuenta-corriente',this)">Cuenta corriente</button>
   </div>
 
   <!-- FILTROS FACTURAS -->
@@ -108,6 +110,17 @@
       <option value="a2000000-0000-0000-0000-000000000002">Placemem</option>
     </select>
     <input type="month" id="c-mes" onchange="cargarCobros()">
+  </div>
+
+  <div id="filtros-cc" class="filtros" style="display:none">
+    <select id="cc-empresa" onchange="cargarClientesCC()">
+      <option value="">— Elegir empresa —</option>
+      <option value="a1000000-0000-0000-0000-000000000001">Hidromec</option>
+      <option value="a2000000-0000-0000-0000-000000000002">Placemem</option>
+    </select>
+    <select id="cc-cliente" onchange="cargarCuentaCorriente()">
+      <option value="">— Elegir cliente —</option>
+    </select>
   </div>
 
   <!-- CONTENIDO -->
@@ -528,6 +541,8 @@
 
 let tabActual='facturas';
 let facturaEditId=null;
+let _facturaOrigenAlAbrir=null;
+let _montoNcAlAbrir=0;
 let cobroFacturaId=null;
 let cobroEmpresaId=null;
 let importRows=[];
@@ -691,11 +706,11 @@ async function confirmarCobroMultiple() {
 }
 
 // ============ NC/ND — FACTURA ORIGEN ============
-function toggleFacturaOrigen(){
+async function toggleFacturaOrigen(){
   const tipo = document.getElementById('nf-tipo').value;
   const esNcNd = tipo === 'NC' || tipo === 'ND';
   document.getElementById('grupo-fc-origen').style.display = esNcNd ? '' : 'none';
-  if(esNcNd) cargarFacturasOrigen();
+  if(esNcNd) await cargarFacturasOrigen();
 }
 
 async function cargarFacturasOrigen(){
@@ -708,7 +723,16 @@ async function cargarFacturasOrigen(){
     if(cliId) filtros.clienteId = cliId;
     const data = await FacturasAPI.getFacturas(filtros);
     // Solo FC, FCE, FA, FB — excluir otras NC/ND
-    const elegibles = (data||[]).filter(r => !['NC','ND'].includes(r.tipo));
+    let elegibles = (data||[]).filter(r => !['NC','ND'].includes(r.tipo));
+    // Si estamos editando una NC ya vinculada a una factura que quedó
+    // anulada (justamente por esta NC), incluirla igual para poder
+    // mostrarla preseleccionada — si no, el select queda vacío.
+    if(_facturaOrigenAlAbrir && !elegibles.some(r=>r.id===_facturaOrigenAlAbrir)){
+      try{
+        const yaVinculada=await FacturasAPI.getFacturaById(_facturaOrigenAlAbrir);
+        if(yaVinculada) elegibles=[yaVinculada,...elegibles];
+      }catch(e){/* si falla, sigue sin ella */}
+    }
     sel.innerHTML = '<option value="">— Seleccionar factura —</option>' +
       elegibles.map(r =>
         `<option value="${r.id}" data-monto="${r.monto_total}" data-acumulado="${r.monto_nc_acumulado||0}" data-numero="${r.numero_factura}" data-estado="${r.estado}">
@@ -793,9 +817,12 @@ function cambiarTab(tab,btn){
   document.getElementById('filtros-facturas').style.display=tab==='facturas'?'flex':'none';
   document.getElementById('filtros-remitos').style.display=tab==='remitos'?'flex':'none';
   document.getElementById('filtros-cobros').style.display=tab==='cobros'?'flex':'none';
+  document.getElementById('filtros-cc').style.display=tab==='cuenta-corriente'?'flex':'none';
+  document.getElementById('btn-nuevo').style.display=tab==='cuenta-corriente'?'none':'';
   document.getElementById('btn-nuevo').textContent=tab==='remitos'?'+ Nuevo remito':tab==='cobros'?'+ Registrar cobro':'+ Nueva factura';
   if(tab==='facturas') cargarFacturas();
   else if(tab==='remitos') cargarRemitos();
+  else if(tab==='cuenta-corriente') cargarCuentaCorriente();
   else cargarCobros();
 }
 
@@ -837,6 +864,15 @@ async function cargarFacturas(){
   }));
 
   const esNC=r=>r.tipo==='NC';
+  // Etiqueta visual del estado — no cambia lo que se guarda en la base
+  // (sigue siendo 'anulada'/'anulada_parcial'), solo aclara en pantalla si
+  // la anulación fue por un pago normal, manual, o por una NC.
+  function estadoLabel(r){
+    const tieneNC = Number(r.monto_nc_acumulado||0) > 0;
+    if(r.estado_visual==='anulada' && tieneNC) return 'cancelada por NC';
+    if(r.estado_visual==='anulada_parcial') return tieneNC ? 'cancelada parcial (NC)' : 'anulada parcial';
+    return r.estado_visual;
+  }
   // Bruto: solo facturas activas (no NC, no anuladas totalmente)
   const totalFac=rows.filter(r=>!esNC(r)&&r.estado!=='anulada').reduce((s,r)=>s+Number(r.monto_total||0),0);
   // Crédito ya aplicado a esas mismas facturas (vive en monto_nc_acumulado, no se vuelve a sumar por NC aparte)
@@ -871,7 +907,7 @@ async function cargarFacturas(){
           <td>${r.clientes?.nombre||'—'}</td>
           <td class="mono" style="cursor:pointer;text-decoration:underline dotted;text-underline-offset:3px" onclick="abrirDetalleFc('${r.id}')" title="Ver detalle">${esNC(r)?'−':''}${fmt(r.monto_total)}${!esNC(r)&&acumNC>0?`<div style="font-size:10px;color:var(--purple)">saldo: ${fmt(saldoNeto)}</div>`:''}</td>
           <td style="text-align:center">${(r.remitos_ids&&r.remitos_ids.length)?'<span title="Tiene remitos vinculados" style="display:inline-block;width:10px;height:10px;border-radius:50%;background:#22d3a0"></span>':'<span title="Sin remitos vinculados" style="display:inline-block;width:10px;height:10px;border-radius:50%;background:transparent;border:2px solid #5a6278"></span>'}</td>
-          <td><span class="estado ${r.estado_visual}">${r.estado_visual==='anulada_parcial'?'anulada parcial':r.estado_visual}</span></td>
+          <td><span class="estado ${r.estado_visual}">${estadoLabel(r)}</span></td>
           <td>${r.fecha_cobro_estimada?`<span style="font-size:12px${venc?';color:var(--red)':''}">${fmtF(r.fecha_cobro_estimada)}${venc?` <span class="dias-badge">${dias}d</span>`:''}</span>`:'—'}</td>
           <td>
             <div style="display:flex;gap:6px">
@@ -970,6 +1006,8 @@ function calcularTotal(){
 
 function abrirNuevaFactura(){
   facturaEditId=null;
+  _facturaOrigenAlAbrir=null;
+  _montoNcAlAbrir=0;
   _remitosSeleccionados=[];
   document.getElementById('modal-titulo').textContent='Nueva factura';
   document.getElementById('nf-numero').value='';
@@ -991,6 +1029,8 @@ async function editarFactura(id){
   const data=await FacturasAPI.getFacturaById(id);
   if(!data) return;
   facturaEditId=id;
+  _facturaOrigenAlAbrir=data.factura_origen_id||null;
+  _montoNcAlAbrir=Number(data.monto_total||0);
   _remitosDetalles={};
   _itemsNoVinculados=new Set();
   document.getElementById('modal-titulo').textContent='Editar factura';
@@ -1007,6 +1047,18 @@ async function editarFactura(id){
   document.getElementById('nf-estado').value=data.estado;
   document.getElementById('nf-obs').value=data.observaciones||'';
   _remitosSeleccionados=data.remitos_ids||[];
+
+  // Si es NC/ND, el onchange de nf-tipo nunca se dispara al setear .value a
+  // mano — hay que llamar el toggle nosotros para que aparezca el selector
+  // de factura origen, y precargar el vínculo que ya tenía (si tenía).
+  if(data.tipo==='NC'||data.tipo==='ND'){
+    await toggleFacturaOrigen();
+    const selOrigen=document.getElementById('nf-fc-origen');
+    if(selOrigen && data.factura_origen_id){
+      selOrigen.value=data.factura_origen_id;
+      actualizarInfoNC();
+    }
+  }
 
   // Cargar items de cada remito ya vinculado para mostrar el detalle y nombre correcto
   if(_remitosSeleccionados.length){
@@ -1033,8 +1085,8 @@ async function guardarFactura(){
   const esNcNd = tipo === 'NC' || tipo === 'ND';
   const fcOrigenId = document.getElementById('nf-fc-origen')?.value || null;
 
-  // Validar que NC/ND tenga factura de origen
-  if(esNcNd && !fcOrigenId && !facturaEditId){
+  // Validar que NC/ND tenga factura de origen (crear o editar)
+  if(esNcNd && !fcOrigenId){
     toast('Una Nota de Crédito/Débito debe tener una factura de origen asociada.', 'warn');
     return;
   }
@@ -1080,15 +1132,29 @@ async function guardarFactura(){
   }
 
   // Si es NC/ND con FC origen → aplicar el crédito a la factura origen
-  // (anula completo si cubre el 100%, o queda 'anulada_parcial' con saldo)
+  // (anula completo si cubre el 100%, o queda 'anulada_parcial' con saldo).
+  // Si estamos EDITANDO una NC/ND que ya tenía un vínculo previo, primero
+  // hay que revertir ese vínculo anterior (si cambió de factura o de monto)
+  // antes de aplicar el nuevo — si no, el crédito quedaría duplicado o mal
+  // repartido entre dos facturas.
   let resultadoNC = null;
-  if(esNcNd && fcOrigenId && !facturaEditId){
+  if(esNcNd && fcOrigenId){
+    const cambioOrigen = facturaEditId && (_facturaOrigenAlAbrir !== fcOrigenId);
+    const cambioMonto  = facturaEditId && (Number(_montoNcAlAbrir) !== Number(payload.monto_total));
     try {
-      resultadoNC = await FacturasAPI.aplicarNotaCredito(fcOrigenId, payload.monto_total);
-      await registrarAuditoria('facturas', tipo==='NC'?'aplicar_nc':'aplicar_nd', 'facturas_emitidas', fcOrigenId,
-        `${payload.numero_factura} — monto ${fmt(payload.monto_total)} — nuevo estado: ${resultadoNC?.nuevo_estado||'?'}`);
+      // Revertir el vínculo previo si corresponde
+      if(facturaEditId && _facturaOrigenAlAbrir && (cambioOrigen || cambioMonto)){
+        await FacturasAPI.revertirNotaCredito(_facturaOrigenAlAbrir, _montoNcAlAbrir);
+      }
+      // Aplicar el vínculo actual — siempre que sea alta nueva, o edición
+      // sin vínculo previo (primer vínculo de una NC importada), o cambió algo
+      if(!facturaEditId || !_facturaOrigenAlAbrir || cambioOrigen || cambioMonto){
+        resultadoNC = await FacturasAPI.aplicarNotaCredito(fcOrigenId, payload.monto_total);
+        await registrarAuditoria('facturas', tipo==='NC'?'aplicar_nc':'aplicar_nd', 'facturas_emitidas', fcOrigenId,
+          `${payload.numero_factura} — monto ${fmt(payload.monto_total)} — nuevo estado: ${resultadoNC?.nuevo_estado||'?'}`);
+      }
     } catch(e) {
-      console.warn('No se pudo aplicar la NC/ND a la factura origen:', e);
+      console.warn('No se pudo aplicar/revertir la NC/ND en la factura origen:', e);
       toast('NC/ND guardada, pero no se pudo aplicar el crédito a la factura de origen automáticamente.', 'warn');
     }
   }
@@ -1096,11 +1162,11 @@ async function guardarFactura(){
   cerrarModal('modal-factura');
   _remitosSeleccionados=[];
   cargarFacturas();
-  if(esNcNd && fcOrigenId && !facturaEditId && resultadoNC){
+  if(esNcNd && fcOrigenId && resultadoNC){
     const sel = document.getElementById('nf-fc-origen');
     const numero = sel?.options[sel.selectedIndex]?.dataset?.numero || '';
     const msg = resultadoNC.nuevo_estado === 'anulada'
-      ? `NC guardada. Factura ${numero} anulada (saldo $0).`
+      ? `NC guardada. Factura ${numero} cancelada por NC (saldo $0).`
       : `NC guardada. Factura ${numero} queda con saldo a favor de ${fmt(Number(resultadoNC.monto_total) - Number(resultadoNC.nuevo_acumulado))}.`;
     setTimeout(()=>toast(msg, 'success'), 100);
   }
@@ -1254,6 +1320,8 @@ async function borrarRemito(id){
 
 async function convertirAFactura(remitoId,clienteId,empresaId,total){
   facturaEditId=null;
+  _facturaOrigenAlAbrir=null;
+  _montoNcAlAbrir=0;
   _remitosSeleccionados=[remitoId];
   document.getElementById('nf-empresa').value=empresaId;
   await cargarClientesPorEmpresa();
@@ -1677,6 +1745,264 @@ async function abrirDetalleFc(facturaId){
 }
 
 init();
+
+// ══════════════════════════════════════════════════════════════
+// CUENTA CORRIENTE POR CLIENTE
+// ══════════════════════════════════════════════════════════════
+let _ccClienteData=null; // último cliente cargado, para exportar
+
+async function cargarCuentaCorriente(){
+  const cont=document.getElementById('contenido');
+  const empId=document.getElementById('cc-empresa').value;
+  const cliId=document.getElementById('cc-cliente').value;
+
+  if(!empId){
+    cont.innerHTML='<div class="empty">Elegí una empresa para empezar.</div>';
+    return;
+  }
+  if(!cliId){
+    cont.innerHTML='<div class="empty">Elegí un cliente para ver su cuenta corriente.</div>';
+    return;
+  }
+
+  cont.innerHTML='<div class="spinner-wrap"><div class="spinner"></div>Cargando cuenta corriente...</div>';
+
+  const [facturas, remitosPend, cliente] = await Promise.all([
+    FacturasAPI.getFacturas({empresaId:empId, clienteId:cliId}),
+    RemitosAPI.getRemitos({empresaId:empId, clienteId:cliId, estados:['emitido','aceptado'], sinFactura:true}),
+    ClientesAPI.getClienteById(cliId),
+  ]);
+
+  const facturasReales=(facturas||[]).filter(f=>f.tipo!=='NC'&&f.tipo!=='ND');
+  const notasCredito=(facturas||[]).filter(f=>f.tipo==='NC');
+  const notasDebito=(facturas||[]).filter(f=>f.tipo==='ND');
+  const remitosPendFiltrados=(remitosPend||[]).filter(r=>r.tipo!=='interno');
+
+  // Cobros: uno por cada factura real (cruzamos por factura_id, la API no filtra cobros por cliente directamente)
+  const facturaIds=facturasReales.map(f=>f.id);
+  let cobros=[];
+  if(facturaIds.length){
+    const todosCobros=await FacturasAPI.getCobros({empresaId:empId});
+    cobros=(todosCobros||[]).filter(c=>facturaIds.includes(c.factura_id));
+  }
+
+  // Mapa numero_factura por id, para referenciar NC y cobros
+  const numeroPorId={};
+  facturasReales.forEach(f=>{ numeroPorId[f.id]=f.numero_factura; });
+
+  // ── Armar movimientos cronológicos ──────────────────────────
+  const movimientos=[];
+  facturasReales.forEach(f=>{
+    movimientos.push({
+      fecha:f.fecha_emision, tipo:'factura', numero:f.numero_factura,
+      detalle:`Factura ${f.tipo}`, debe:Number(f.monto_total||0), haber:0,
+      estado:f.estado,
+    });
+  });
+  notasCredito.forEach(nc=>{
+    movimientos.push({
+      fecha:nc.fecha_emision, tipo:'nc', numero:nc.numero_factura,
+      detalle:`NC — cancela ${numeroPorId[nc.factura_origen_id]||'factura'}`,
+      debe:0, haber:Number(nc.monto_total||0),
+    });
+  });
+  notasDebito.forEach(nd=>{
+    movimientos.push({
+      fecha:nd.fecha_emision, tipo:'nd', numero:nd.numero_factura,
+      detalle:`ND — sobre ${numeroPorId[nd.factura_origen_id]||'factura'}`,
+      debe:Number(nd.monto_total||0), haber:0,
+    });
+  });
+  cobros.forEach(c=>{
+    const medio=c.metodo_pago||'—';
+    movimientos.push({
+      fecha:c.fecha, tipo:'cobro', numero:numeroPorId[c.factura_id]||'—',
+      detalle:`Cobro (${medio}${c.numero_cheque?' N° '+c.numero_cheque:''})`,
+      debe:0, haber:Number(c.monto||0),
+    });
+  });
+
+  movimientos.sort((a,b)=>(a.fecha||'').localeCompare(b.fecha||''));
+  let saldo=0;
+  movimientos.forEach(m=>{ saldo += m.debe - m.haber; m.saldoAcum=saldo; });
+
+  const totalFacturado=facturasReales.reduce((s,f)=>s+Number(f.monto_total||0),0);
+  const totalNC=notasCredito.reduce((s,f)=>s+Number(f.monto_total||0),0);
+  const totalCobrado=cobros.reduce((s,c)=>s+Number(c.monto||0),0);
+  const totalRemitosPend=remitosPendFiltrados.reduce((s,r)=>s+Number(r.total_valorizado||0),0);
+  const saldoFinal=saldo;
+
+  _ccClienteData={cliente, empId, movimientos, remitosPendFiltrados, saldoFinal, totalFacturado, totalNC, totalCobrado, totalRemitosPend};
+
+  cont.innerHTML=`
+    <div style="padding:20px 24px;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:16px">
+      <div>
+        <div style="font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:0.6px;margin-bottom:4px">Saldo actual — ${cliente?.nombre||'—'}</div>
+        <div style="font-size:32px;font-weight:600;font-family:'DM Mono',monospace;color:${saldoFinal>0?'var(--orange)':saldoFinal<0?'var(--green)':'var(--text)'}">${fmt(Math.abs(saldoFinal))}</div>
+        <div style="font-size:12px;color:var(--muted);margin-top:2px">${saldoFinal>0?'A favor de la empresa (el cliente debe)':saldoFinal<0?'A favor del cliente':'Cuenta saldada'}</div>
+      </div>
+      <div style="display:flex;gap:10px;flex-wrap:wrap">
+        <div style="background:var(--bg3);border-radius:10px;padding:10px 16px;min-width:130px">
+          <div style="font-size:10px;color:var(--muted);text-transform:uppercase">Facturado</div>
+          <div style="font-family:'DM Mono',monospace;font-size:14px;font-weight:600">${fmt(totalFacturado)}</div>
+        </div>
+        <div style="background:var(--bg3);border-radius:10px;padding:10px 16px;min-width:130px">
+          <div style="font-size:10px;color:var(--muted);text-transform:uppercase">Cobrado</div>
+          <div style="font-family:'DM Mono',monospace;font-size:14px;font-weight:600;color:var(--green)">${fmt(totalCobrado)}</div>
+        </div>
+        <div style="background:var(--bg3);border-radius:10px;padding:10px 16px;min-width:130px">
+          <div style="font-size:10px;color:var(--muted);text-transform:uppercase">NC aplicadas</div>
+          <div style="font-family:'DM Mono',monospace;font-size:14px;font-weight:600;color:var(--red)">${fmt(totalNC)}</div>
+        </div>
+        <div style="background:rgba(20,184,166,0.1);border:1px solid rgba(20,184,166,0.25);border-radius:10px;padding:10px 16px;min-width:130px">
+          <div style="font-size:10px;color:var(--teal);text-transform:uppercase">Remitos pend. (a favor)</div>
+          <div style="font-family:'DM Mono',monospace;font-size:14px;font-weight:600;color:var(--teal)">${fmt(totalRemitosPend)}</div>
+        </div>
+        <button class="btn btn-primary" style="align-self:center" onclick="exportarCuentaCorrientePDF()">📄 Exportar PDF</button>
+      </div>
+    </div>
+
+    <table style="width:100%">
+      <thead><tr>
+        <th>Fecha</th><th>Tipo</th><th>Comprobante</th><th>Detalle</th>
+        <th style="text-align:right">Debe</th><th style="text-align:right">Haber</th><th style="text-align:right">Saldo</th>
+      </tr></thead>
+      <tbody>
+        ${movimientos.length?movimientos.map(m=>`
+          <tr>
+            <td class="mono">${fmtF(m.fecha)}</td>
+            <td><span class="estado ${m.tipo==='factura'?'pendiente':m.tipo==='cobro'?'cobrada':'anulada'}">${m.tipo}</span></td>
+            <td class="mono">${m.numero}</td>
+            <td style="font-size:12.5px;color:var(--muted)">${m.detalle}</td>
+            <td class="mono" style="text-align:right">${m.debe?fmt(m.debe):'—'}</td>
+            <td class="mono" style="text-align:right;color:var(--green)">${m.haber?fmt(m.haber):'—'}</td>
+            <td class="mono" style="text-align:right;font-weight:600">${fmt(m.saldoAcum)}</td>
+          </tr>`).join(''):'<tr><td colspan="7" style="text-align:center;color:var(--muted);padding:30px">Sin movimientos para este cliente.</td></tr>'}
+      </tbody>
+    </table>
+
+    ${remitosPendFiltrados.length?`
+    <div style="padding:16px 24px;border-top:1px solid var(--border)">
+      <div style="font-size:12px;color:var(--teal);text-transform:uppercase;letter-spacing:0.6px;margin-bottom:10px;font-weight:500">
+        Remitos pendientes de facturar — no forman parte del saldo (todavía no son deuda exigible)
+      </div>
+      <table style="width:100%">
+        <thead><tr><th>Fecha</th><th>N° Remito</th><th style="text-align:right">Valorizado</th></tr></thead>
+        <tbody>
+          ${remitosPendFiltrados.map(r=>`
+            <tr>
+              <td class="mono">${fmtF(r.fecha)}</td>
+              <td class="mono">${r.numero_formateado||'—'}</td>
+              <td class="mono" style="text-align:right">${r.total_valorizado?fmt(r.total_valorizado):'—'}</td>
+            </tr>`).join('')}
+        </tbody>
+      </table>
+    </div>`:''}
+  `;
+}
+
+async function cargarClientesCC(){
+  const empId=document.getElementById('cc-empresa').value;
+  const sel=document.getElementById('cc-cliente');
+  sel.innerHTML='<option value="">— Elegir cliente —</option>';
+  document.getElementById('contenido').innerHTML='<div class="empty">Elegí un cliente para ver su cuenta corriente.</div>';
+  if(!empId) return;
+  const clientes=await ClientesAPI.getClientesSelect(empId);
+  sel.innerHTML='<option value="">— Elegir cliente —</option>'+
+    (clientes||[]).map(c=>`<option value="${c.id}">${c.nombre}</option>`).join('');
+}
+
+async function exportarCuentaCorrientePDF(){
+  if(!_ccClienteData){ toast('Elegí un cliente primero.','warn'); return; }
+  if(!window.jspdf||!window.jspdf.jsPDF){ toast('Librería PDF no cargada. Recargá la página.','error'); return; }
+
+  const {cliente, movimientos, remitosPendFiltrados, saldoFinal, totalFacturado, totalCobrado, totalNC, totalRemitosPend} = _ccClienteData;
+
+  const { jsPDF } = window.jspdf;
+  const doc = new jsPDF({ format:'a4', unit:'mm' });
+  const L=12, R=198, W=186;
+  let y=15;
+  const chequearSalto=(alt)=>{ if(y+alt>282){ doc.addPage(); y=15; } };
+
+  doc.setFont('helvetica','bold'); doc.setFontSize(14);
+  doc.text('Cuenta corriente', L, y);
+  y+=6;
+  doc.setFont('helvetica','normal'); doc.setFontSize(9);
+  doc.text(`Cliente: ${cliente?.nombre||'—'}`, L, y);
+  y+=5;
+  doc.text(`Fecha de emisión: ${new Date().toLocaleDateString('es-AR')}`, L, y);
+  y+=8;
+  doc.setDrawColor(200,200,200); doc.line(L,y,R,y);
+  y+=8;
+
+  doc.setFillColor(saldoFinal>0?245:16, saldoFinal>0?158:185, saldoFinal>0?11:129);
+  doc.roundedRect(L,y,W,14,1.5,1.5,'F');
+  doc.setTextColor(255,255,255); doc.setFont('helvetica','bold'); doc.setFontSize(11);
+  doc.text(saldoFinal>0?'Saldo a favor de la empresa':saldoFinal<0?'Saldo a favor del cliente':'Cuenta saldada', L+4, y+6);
+  doc.setFontSize(13);
+  doc.text(fmt(Math.abs(saldoFinal)), R-4, y+9.5, {align:'right'});
+  doc.setTextColor(0,0,0);
+  y+=20;
+
+  doc.setFont('helvetica','normal'); doc.setFontSize(8.5); doc.setTextColor(90,90,90);
+  doc.text(`Facturado: ${fmt(totalFacturado)}   ·   Cobrado: ${fmt(totalCobrado)}   ·   NC aplicadas: ${fmt(totalNC)}   ·   Remitos pend. (a favor): ${fmt(totalRemitosPend)}`, L, y);
+  doc.setTextColor(0,0,0);
+  y+=9;
+
+  doc.setFont('helvetica','bold'); doc.setFontSize(8); doc.setFillColor(240,240,240);
+  doc.rect(L,y,W,6,'F');
+  doc.text('Fecha', L+2, y+4);
+  doc.text('Comprobante', L+28, y+4);
+  doc.text('Detalle', L+68, y+4);
+  doc.text('Debe', L+140, y+4, {align:'right'});
+  doc.text('Haber', L+164, y+4, {align:'right'});
+  doc.text('Saldo', R-2, y+4, {align:'right'});
+  y+=8;
+
+  doc.setFont('helvetica','normal'); doc.setFontSize(8);
+  movimientos.forEach(m=>{
+    chequearSalto(6);
+    doc.text(fmtF(m.fecha), L+2, y);
+    doc.text(String(m.numero||'—'), L+28, y);
+    const detLines=doc.splitTextToSize(m.detalle||'', 68);
+    doc.text(detLines[0]||'', L+68, y);
+    doc.text(m.debe?fmt(m.debe):'—', L+140, y, {align:'right'});
+    doc.setTextColor(16,150,100);
+    doc.text(m.haber?fmt(m.haber):'—', L+164, y, {align:'right'});
+    doc.setTextColor(0,0,0);
+    doc.setFont('helvetica','bold');
+    doc.text(fmt(m.saldoAcum), R-2, y, {align:'right'});
+    doc.setFont('helvetica','normal');
+    y+=5;
+  });
+
+  if(remitosPendFiltrados.length){
+    y+=4; chequearSalto(10);
+    doc.setFont('helvetica','bold'); doc.setFontSize(9); doc.setTextColor(20,150,140);
+    doc.text('Remitos pendientes de facturar (no incluidos en el saldo)', L, y);
+    doc.setTextColor(0,0,0);
+    y+=6;
+    doc.setFont('helvetica','normal'); doc.setFontSize(8);
+    remitosPendFiltrados.forEach(r=>{
+      chequearSalto(5);
+      doc.text(fmtF(r.fecha), L+2, y);
+      doc.text(r.numero_formateado||'—', L+28, y);
+      doc.text(r.total_valorizado?fmt(r.total_valorizado):'—', R-2, y, {align:'right'});
+      y+=5;
+    });
+  }
+
+  const totalPaginas=doc.internal.getNumberOfPages();
+  for(let p=1;p<=totalPaginas;p++){
+    doc.setPage(p);
+    doc.setFont('helvetica','normal'); doc.setFontSize(7.5); doc.setTextColor(140,140,140);
+    doc.text(`Página ${p} de ${totalPaginas}`, R, 290, {align:'right'});
+  }
+
+  const nombreArchivo=`cuenta-corriente-${(cliente?.nombre||'cliente').toLowerCase().replace(/[^a-z0-9]+/g,'-')}-${new Date().toISOString().slice(0,10)}.pdf`;
+  doc.save(nombreArchivo);
+}
+
 </script>
 <!-- MODAL DETALLE FACTURA -->
 <div class="modal-overlay" id="modal-detalle-fc">
