@@ -955,7 +955,7 @@ async function cargarFacturas(){
           <td>${r.clientes?.nombre||'—'}</td>
           <td class="mono" style="cursor:pointer;text-decoration:underline dotted;text-underline-offset:3px" onclick="abrirDetalleFc('${r.id}')" title="Ver detalle">${esNC(r)?'−':''}${fmt(r.monto_total)}${!esNC(r)&&acumNC>0?`<div style="font-size:10px;color:var(--purple)">saldo: ${fmt(saldoNeto)}</div>`:''}</td>
           <td style="text-align:center">${(r.remitos_ids&&r.remitos_ids.length)?'<span title="Tiene remitos vinculados" style="display:inline-block;width:10px;height:10px;border-radius:50%;background:#22d3a0"></span>':'<span title="Sin remitos vinculados" style="display:inline-block;width:10px;height:10px;border-radius:50%;background:transparent;border:2px solid #5a6278"></span>'}</td>
-          <td><span class="estado ${r.estado_visual}">${estadoLabel(r)}</span></td>
+          <td>${(r.tipo==='NC'||r.tipo==='ND')?'<span style="color:var(--muted);font-size:12px">— no aplica —</span>':`<span class="estado ${r.estado_visual}">${estadoLabel(r)}</span>`}</td>
           <td>${r.fecha_cobro_estimada?`<span style="font-size:12px${venc?';color:var(--red)':''}">${fmtF(r.fecha_cobro_estimada)}${venc?` <span class="dias-badge">${dias}d</span>`:''}</span>`:'—'}</td>
           <td>
             <div style="display:flex;gap:6px">
