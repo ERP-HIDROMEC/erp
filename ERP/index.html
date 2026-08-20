@@ -601,7 +601,20 @@ function recargar() {
 
 // ── Helper suma ────────────────────────────────────────────────
 function sumArr(arr, campo) {
-  return (arr||[]).reduce((s, r) => s + Number(r[campo] || 0), 0);
+  const getter = typeof campo === 'function' ? campo : (r) => r[campo];
+  return (arr||[]).reduce((s, r) => s + Number(getter(r) || 0), 0);
+}
+
+// Monto real que aporta una fila de facturas_emitidas a un total de ingresos:
+//  - Una NC nunca suma aparte: su efecto ya vive en monto_nc_acumulado de la
+//    factura que cancela (total o parcialmente). Sumarla de nuevo sería
+//    contar el mismo crédito dos veces.
+//  - Una factura normal/FCE aporta su monto_total MENOS lo que ya se le
+//    acreditó por NC (si una FCE de $100 tiene una NC de $100, aporta $0 —
+//    no $100 de ingreso más $100 de NC restados en otro lado).
+function montoNetoFactura(r) {
+  if (r.tipo === 'NC') return 0;
+  return Number(r.monto_total || 0) - Number(r.monto_nc_acumulado || 0);
 }
 
 function setText(id, val) {
@@ -757,7 +770,7 @@ async function cargarKPIsGeneral(fechas) {
       (r.fecha_cobro_estimada || '9999') >= hoyStr
     );
 
-    const totalFac   = sumArr(facMes,    'monto_total');
+    const totalFac   = sumArr(facMes,    montoNetoFactura);
     const totalCob   = sumArr(cobMes,    'monto');
     const totalEgr   = sumArr(egrMes,    'monto');
     const totalSue   = sumArr(sueldos,   'monto_bruto');
@@ -770,7 +783,7 @@ async function cargarKPIsGeneral(fechas) {
 
     // Renderizar KPIs fila 1
     setText('g-fac-mes', fmt(totalFac));
-    setText('g-fac-mes-sub', (facMes||[]).length + ' facturas');
+    setText('g-fac-mes-sub', (facMes||[]).filter(r=>r.tipo!=='NC').length + ' facturas');
     setText('g-cob-mes', fmt(totalCob));
     setText('g-egr-mes', fmt(totalGasto));
     const sub = [];
@@ -788,12 +801,12 @@ async function cargarKPIsGeneral(fechas) {
     }
 
     // Facturación año
-    setText('g-fac-anio', fmt(sumArr(facAnio, 'monto_total')));
+    setText('g-fac-anio', fmt(sumArr(facAnio, montoNetoFactura)));
     setText('g-anio-sub', 'Año ' + new Date().getFullYear());
 
     // Fila 2 — cuentas
-    setText('g-x-cob',      fmt(sumArr(facPend,  'monto_total')));
-    setText('g-venc-monto',  fmt(sumArr(vencFilt, 'monto_total')));
+    setText('g-x-cob',      fmt(sumArr(facPend,  montoNetoFactura)));
+    setText('g-venc-monto',  fmt(sumArr(vencFilt, montoNetoFactura)));
     setText('g-venc-count',  vencFilt.length + ' facturas vencidas');
     setText('g-x-pag',       fmt(sumArr(xPagFilt, 'monto')));
     setText('g-remitos',     remFilt.length + ' remitos');
@@ -820,7 +833,7 @@ async function cargarGraficoGeneral() {
       const emp = r.empresas?.nombre || '—';
       const k   = mes + '|' + emp;
       if (!agg[k]) agg[k] = { mes, empresa: emp, total: 0 };
-      agg[k].total += Number(r.monto_total || 0);
+      agg[k].total += montoNetoFactura(r);
     });
 
     const rows  = Object.values(agg);
@@ -877,7 +890,7 @@ async function cargarCobrarCliente(fechaDesde, fechaHasta, elId, totalElId) {
       const emp    = r.empresas?.nombre || '';
       const k      = nombre + '|' + (r.empresa_id||'');
       if (!por[k]) por[k] = { cliente:nombre, empresa:emp, total:0, vencidas:0, normales:0 };
-      por[k].total += Number(r.monto_total || 0);
+      por[k].total += montoNetoFactura(r);
       if ((r.fecha_cobro_estimada||'9999') < hoyStr) por[k].vencidas++;
       else                                            por[k].normales++;
     });
@@ -915,7 +928,7 @@ async function cargarTopClientes(desde, hasta, elId, labelId) {
     (data||[]).forEach(r => {
       const k = (r.clientes?.nombre||'—') + '|' + (r.empresa_id||'');
       if (!agg[k]) agg[k] = { cliente: r.clientes?.nombre||'—', empresa: r.empresas?.nombre||'—', total:0, cant:0 };
-      agg[k].total += Number(r.monto_total || 0);
+      agg[k].total += montoNetoFactura(r);
       agg[k].cant++;
     });
     const top  = Object.values(agg).sort((a, b) => b.total - a.total).slice(0, 7);
@@ -1015,7 +1028,7 @@ async function cargarKPIsPeriodo(ini, fin) {
       qRetenciones(empId, ini, fin),
     ]);
 
-    const totalFac  = sumArr(facData,      'monto_total');
+    const totalFac  = sumArr(facData,      montoNetoFactura);
     const totalCob  = sumArr(cobData,      'monto');
     const totalEgr  = sumArr(egrData,      'monto');
     const totalSue  = sumArr(sueldosData,  'monto_bruto');
@@ -1084,7 +1097,7 @@ async function cargarBalance(ini, fin) {
     ]);
 
     const totalCob = sumArr(cobros,  'monto');
-    const totalFac = sumArr(facPer,  'monto_total');
+    const totalFac = sumArr(facPer,  montoNetoFactura);
     // El ingreso del período = lo facturado (devengado)
     // Los cobros se muestran solo como referencia de lo que ya ingresó en caja
     setText('b-ing-total', fmt(totalFac));
@@ -1214,7 +1227,7 @@ async function cargarGraficoPeriodo(ini, fin) {
 
     (facData||[]).forEach(r => {
       const m = r.fecha_emision?.substring(0, 7);
-      if (porMes[m]) porMes[m].ing += Number(r.monto_total || 0);
+      if (porMes[m]) porMes[m].ing += montoNetoFactura(r);
     });
     (egrData||[]).forEach(r => {
       const m = r.fecha_egreso?.substring(0, 7);
@@ -1281,7 +1294,7 @@ async function cargarAlertas() {
     ]);
 
     if (facVenc?.length) {
-      const t = sumArr(facVenc, 'monto_total');
+      const t = sumArr(facVenc, montoNetoFactura);
       alertas.push({ nivel:'rojo', icono:'💰', titulo:`${facVenc.length} factura${facVenc.length>1?'s':''} vencidas sin cobrar`, detalle:`Total: ${fmt(t)}`, link:'facturas.html' });
     }
     if (egrVenc?.length) {

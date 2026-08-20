@@ -35,13 +35,13 @@ const FacturasAPI = (() => {
       { data: porCobrar },
       { data: vencidas },
     ] = await Promise.all([
-      db.from('facturas_emitidas').select('monto_total')
+      db.from('facturas_emitidas').select('monto_total,tipo,monto_nc_acumulado')
         .eq('empresa_id', empresaId).neq('estado', 'anulada')
         .gte('fecha_emision', fechaIni).lte('fecha_emision', fechaFin),
-      db.from('facturas_emitidas').select('monto_total')
+      db.from('facturas_emitidas').select('monto_total,tipo,monto_nc_acumulado')
         .eq('empresa_id', empresaId).neq('estado', 'anulada')
         .gte('fecha_emision', anioIni).lte('fecha_emision', anioFin),
-      db.from('facturas_emitidas').select('monto_total')
+      db.from('facturas_emitidas').select('monto_total,tipo,monto_nc_acumulado')
         .eq('empresa_id', empresaId).not('estado', 'in', '("cobrada","anulada")'),
       db.from('facturas_emitidas').select('id')
         .eq('empresa_id', empresaId).not('estado', 'in', '("cobrada","anulada")')
@@ -52,7 +52,7 @@ const FacturasAPI = (() => {
 
   async function getFacturasVencidasDetalle(limite) {
     let q = db.from('facturas_emitidas')
-      .select('numero_factura,monto_total,fecha_cobro_estimada,clientes(nombre),empresas(nombre)')
+      .select('numero_factura,monto_total,tipo,monto_nc_acumulado,fecha_cobro_estimada,clientes(nombre),empresas(nombre)')
       .not('estado', 'in', '("cobrada","anulada")')
       .lt('fecha_cobro_estimada', hoy())
       .order('fecha_cobro_estimada');
@@ -64,7 +64,7 @@ const FacturasAPI = (() => {
 
   async function getFacturaMensual(empresaId, fechaIni, fechaFin) {
     let q = db.from('facturas_emitidas')
-      .select('monto_total,fecha_emision,empresas(nombre)')
+      .select('monto_total,tipo,monto_nc_acumulado,fecha_emision,empresas(nombre)')
       .neq('estado', 'anulada')
       .gte('fecha_emision', fechaIni)
       .lte('fecha_emision', fechaFin)
@@ -77,7 +77,7 @@ const FacturasAPI = (() => {
 
   async function getFacturasPorCliente(empresaId, fechaIni, fechaFin) {
     let q = db.from('facturas_emitidas')
-      .select('monto_total,clientes(nombre),empresas(nombre),empresa_id')
+      .select('monto_total,tipo,monto_nc_acumulado,clientes(nombre),empresas(nombre),empresa_id')
       .neq('estado', 'anulada')
       .gte('fecha_emision', fechaIni)
       .lte('fecha_emision', fechaFin);
