@@ -1896,9 +1896,17 @@ async function cargarCuentaCorriente(){
   // el filtro solo achica la ventana de qué ves.
   const fDesde=document.getElementById('cc-fecha-desde')?.value||'';
   const fHasta=document.getElementById('cc-fecha-hasta')?.value||'';
-  const movimientosFiltrados=movimientos.filter(m=>
+  let movimientosFiltrados=movimientos.filter(m=>
     (!fDesde || (m.fecha||'')>=fDesde) && (!fHasta || (m.fecha||'')<=fHasta)
   );
+  // Único campo ordenable acá: cada fila ya trae su saldoAcum calculado
+  // sobre el historial completo en orden cronológico, así que invertir por
+  // fecha no rompe nada — reordenar por cualquier otro campo sí lo haría
+  // (el saldo dejaría de tener sentido), por eso no se habilita.
+  // Default: más nuevo arriba, más viejo abajo (si el usuario ya clickeó el
+  // header de Fecha, se respeta lo que haya elegido)
+  if(!_ordenTablas['cuenta-corriente']) _ordenTablas['cuenta-corriente']={campo:'fecha',dir:'desc'};
+  movimientosFiltrados=aplicarOrden('cuenta-corriente', movimientosFiltrados, { fecha: m=>m.fecha||'' });
 
   const totalFacturado=facturasReales.reduce((s,f)=>s+Number(f.monto_total||0),0);
   const totalNC=notasCredito.reduce((s,f)=>s+Number(f.monto_total||0),0);
@@ -1940,7 +1948,7 @@ async function cargarCuentaCorriente(){
 
     <table style="width:100%">
       <thead><tr>
-        <th>Fecha</th><th>Tipo</th><th>Comprobante</th><th>Detalle</th>
+        <th onclick="ordenarPor('cuenta-corriente','fecha',cargarCuentaCorriente)" style="cursor:pointer;user-select:none">Fecha ${flechaOrden('cuenta-corriente','fecha')}</th><th>Tipo</th><th>Comprobante</th><th>Detalle</th>
         <th style="text-align:right">Debe</th><th style="text-align:right">Haber</th><th style="text-align:right">Saldo</th>
       </tr></thead>
       <tbody>
