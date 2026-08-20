@@ -313,7 +313,7 @@
       <div class="kpi-card teal">
         <div class="kpi-label">Remitos sin facturar</div>
         <div class="kpi-value" id="g-remitos">—</div>
-        <div class="kpi-sub">Emitidos / aceptados</div>
+        <div class="kpi-sub" id="g-remitos-sub">Cuenta a favor — emitidos / aceptados</div>
       </div>
     </div>
 
@@ -751,7 +751,7 @@ async function cargarKPIsGeneral(fechas) {
       FacturasAPI.getFacturas({ empresaId: empId||undefined, excluirAnuladas:true, fechaDesde:anioIni, fechaHasta:anioFin }),
       FacturasAPI.getFacturasVencidasDetalle(200),
       EgresosAPI.getEgresos({ empresaId: empId||undefined, pagado:false }),
-      RemitosAPI.getRemitoPendienteDashboard(100),
+      RemitosAPI.getRemitoPendienteDashboard(),
       qSueldos(empId, mesIni, mesIni),
       qPagosImp(empId, ini, fin),
       qImpVarios(empId, ini, fin),
@@ -809,7 +809,9 @@ async function cargarKPIsGeneral(fechas) {
     setText('g-venc-monto',  fmt(sumArr(vencFilt, montoNetoFactura)));
     setText('g-venc-count',  vencFilt.length + ' facturas vencidas');
     setText('g-x-pag',       fmt(sumArr(xPagFilt, 'monto')));
-    setText('g-remitos',     remFilt.length + ' remitos');
+    const totalRemitos = sumArr(remFilt, 'total_valorizado');
+    setText('g-remitos', fmt(totalRemitos));
+    setText('g-remitos-sub', remFilt.length + ' remito' + (remFilt.length!==1?'s':'') + ' pendiente' + (remFilt.length!==1?'s':'') + ' de facturar');
 
   } catch(e) {
     console.error('cargarKPIsGeneral:', e);
