@@ -41,8 +41,9 @@ const RemitosAPI = (() => {
 
   async function getRemitoPendienteDashboard(limite) {
     let q = db.from('remitos_v2')
-      .select('numero_formateado,clientes(nombre),empresas(nombre),fecha')
+      .select('numero_formateado,empresa_id,total_valorizado,tipo,clientes(nombre),empresas(nombre),fecha')
       .in('estado', ['emitido', 'aceptado'])
+      .neq('tipo', 'interno')
       .is('factura_id', null)
       .order('fecha');
     if (limite) q = q.limit(limite);
