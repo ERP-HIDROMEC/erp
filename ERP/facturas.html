@@ -1324,9 +1324,18 @@ function procesarExcel(input){
 
 function getTipo(t){
   t=t.toUpperCase();
-  if(t.includes('CRÉDIT')||t.includes('CREDIT')||t.includes('CRÉDITO')) return 'NC';
-  if(t.includes('DÉBIT')||t.includes('DEBIT')||t.includes('DÉBITO')) return 'ND';
-  if(t.includes('FCE')||t.includes('ELECTR')) return 'FCE';
+  // Códigos AFIP reales:
+  //   1   Factura A                                    -> A
+  //   201 Factura de Crédito electrónica MiPyMEs (FCE)  -> FCE  (es FACTURA, cuenta como ingreso)
+  //   3   Nota de Crédito A                             -> NC
+  //   203 Nota de Crédito electrónica MiPyMEs (FCE)      -> NC   (aunque diga "FCE", es una NC)
+  //   2   Nota de Débito A                              -> ND
+  // "NOTA DE..." SIEMPRE va primero: el 203 contiene la palabra "FCE" en el
+  // nombre pero es una nota de crédito, no una factura — si chequeáramos
+  // FCE antes, el 203 quedaría mal clasificado como ingreso en vez de NC.
+  if(t.includes('NOTA DE CRÉDITO')||t.includes('NOTA DE CREDITO')) return 'NC';
+  if(t.includes('NOTA DE DÉBITO')||t.includes('NOTA DE DEBITO')) return 'ND';
+  if(t.includes('FCE')||t.includes('CRÉDITO ELECTRÓNICA')||t.includes('CREDITO ELECTRONICA')) return 'FCE';
   if(t.includes(' A')) return 'A';
   if(t.includes(' B')) return 'B';
   if(t.includes(' C')) return 'C';
