@@ -466,6 +466,7 @@ function cambiarTab(tab,btn){
 }
 
 let _remitosCache = [];
+let _remitosCacheFiltrado = [];
 
 async function filtrarRemitosLocal(){
   const buscar = document.getElementById('f-buscar').value.toLowerCase().trim();
@@ -497,6 +498,7 @@ async function filtrarRemitosLocal(){
   const idsYaEncontrados = new Set(porCabecera.map(r => r.id));
   const rows = [...porCabecera, ...porItems.filter(r => !idsYaEncontrados.has(r.id))];
 
+  _remitosCacheFiltrado = rows;
   renderRemitos(rows);
 }
 
@@ -544,10 +546,19 @@ async function cargarRemitos(){
         (r.clientes?.nombre||'').toLowerCase().includes(buscar2) ||
         (r.descripcion||'').toLowerCase().includes(buscar2))
     : rows;
+  _remitosCacheFiltrado = rowsFilt;
   renderRemitos(rowsFilt);
 }
 
 function renderRemitos(rows){
+  rows=aplicarOrden('remitos-lista', rows, {
+    numero: r=>Number(r.numero)||0,
+    fecha: r=>r.fecha||'',
+    tipo: r=>r.tipo||'',
+    cliente: r=>r.clientes?.nombre||'',
+    total_valorizado: r=>Number(r.total_valorizado||0),
+    estado: r=>r.estado||'',
+  });
   const pendFac=rows.filter(r=>['emitido','enviado','aceptado'].includes(r.estado)&&r.tipo!=='interno').length;
   const totalVal=rows.filter(r=>r.estado!=='anulado').reduce((s,r)=>s+Number(r.total_valorizado||0),0);
 
@@ -560,8 +571,14 @@ function renderRemitos(rows){
   document.getElementById('contenido').innerHTML=`
     <div style="overflow-x:auto"><table>
       <thead><tr>
-        <th style="cursor:pointer;user-select:none" onclick="ordenAsc=!ordenAsc;cargarRemitos()">N° Remito ${ordenAsc?'↑':'↓'}</th><th>Fecha</th><th>Tipo</th><th>Cliente</th>
-        <th>OC</th><th>Factura</th><th>Valorizado</th><th>Estado</th><th>Acciones</th>
+        <th onclick="ordenarPor('remitos-lista','numero',()=>renderRemitos(_remitosCacheFiltrado))" style="cursor:pointer;user-select:none">N° Remito ${flechaOrden('remitos-lista','numero')}</th>
+        <th onclick="ordenarPor('remitos-lista','fecha',()=>renderRemitos(_remitosCacheFiltrado))" style="cursor:pointer;user-select:none">Fecha ${flechaOrden('remitos-lista','fecha')}</th>
+        <th onclick="ordenarPor('remitos-lista','tipo',()=>renderRemitos(_remitosCacheFiltrado))" style="cursor:pointer;user-select:none">Tipo ${flechaOrden('remitos-lista','tipo')}</th>
+        <th onclick="ordenarPor('remitos-lista','cliente',()=>renderRemitos(_remitosCacheFiltrado))" style="cursor:pointer;user-select:none">Cliente ${flechaOrden('remitos-lista','cliente')}</th>
+        <th>OC</th><th>Factura</th>
+        <th onclick="ordenarPor('remitos-lista','total_valorizado',()=>renderRemitos(_remitosCacheFiltrado))" style="cursor:pointer;user-select:none">Valorizado ${flechaOrden('remitos-lista','total_valorizado')}</th>
+        <th onclick="ordenarPor('remitos-lista','estado',()=>renderRemitos(_remitosCacheFiltrado))" style="cursor:pointer;user-select:none">Estado ${flechaOrden('remitos-lista','estado')}</th>
+        <th>Acciones</th>
       </tr></thead>
       <tbody>${rows.length?rows.map(r=>`<tr>
         <td class="mono" style="font-weight:600">${r.numero_formateado||r.numero}</td>
@@ -654,9 +671,21 @@ function filtrarPendientesLocal(){
   if(tipo)       filtrados=filtrados.filter(r=>r.tipo===tipo);
   if(clienteId)  filtrados=filtrados.filter(r=>r.cliente_id===clienteId);
   if(estado)     filtrados=filtrados.filter(r=>r.estado===estado);
+  filtrados=filtrados.map(r=>({...r,_dias:Math.floor((new Date()-new Date(r.fecha+'T12:00:00'))/86400000)}));
 
-  const normales  =filtrados.filter(r=>!r.migrado);
-  const historicos=filtrados.filter(r=>r.migrado);
+  const gettersPend={
+    numero_formateado: r=>r.numero_formateado||r.numero||'',
+    fecha: r=>r.fecha||'',
+    cliente: r=>r.clientes?.nombre||'',
+    tipo: r=>r.tipo||'',
+    orden_compra: r=>r.orden_compra||'',
+    total_valorizado: r=>Number(r.total_valorizado||0),
+    _dias: r=>r._dias,
+    estado: r=>r.estado||'',
+  };
+
+  let normales  =aplicarOrden('pendientes-normales', filtrados.filter(r=>!r.migrado), gettersPend);
+  let historicos=aplicarOrden('pendientes-historicos', filtrados.filter(r=>r.migrado), gettersPend);
   const todos     =[...normales,...historicos];
 
   const totalNormal   =normales.reduce((s,r)=>s+Number(r.total_valorizado||0),0);
@@ -671,7 +700,7 @@ function filtrarPendientesLocal(){
     <div class="kpi-card red"><div class="kpi-label">Total remitos pendientes</div><div class="kpi-value">${todos.length}</div></div>`;
 
   const renderRow=r=>{
-    const dias=Math.floor((new Date()-new Date(r.fecha+'T12:00:00'))/86400000);
+    const dias=r._dias;
     const esFacturable=!r.migrado;
     return `<tr>
       <td style="width:32px;text-align:center">${esFacturable
@@ -713,7 +742,15 @@ function filtrarPendientesLocal(){
     <div style="overflow-x:auto"><table>
       <thead><tr>
         <th style="width:32px"><input type="checkbox" id="check-all-pend" style="width:15px;height:15px;cursor:pointer;accent-color:var(--blue)" onchange="toggleAllPendientes(this)"></th>
-        <th>N° Remito</th><th>Fecha</th><th>Cliente</th><th>Tipo</th><th>OC</th><th>Valorizado</th><th>Días pend.</th><th>Estado</th><th></th>
+        <th onclick="ordenarPor('pendientes-normales','numero_formateado',filtrarPendientesLocal)" style="cursor:pointer;user-select:none">N° Remito ${flechaOrden('pendientes-normales','numero_formateado')}</th>
+        <th onclick="ordenarPor('pendientes-normales','fecha',filtrarPendientesLocal)" style="cursor:pointer;user-select:none">Fecha ${flechaOrden('pendientes-normales','fecha')}</th>
+        <th onclick="ordenarPor('pendientes-normales','cliente',filtrarPendientesLocal)" style="cursor:pointer;user-select:none">Cliente ${flechaOrden('pendientes-normales','cliente')}</th>
+        <th onclick="ordenarPor('pendientes-normales','tipo',filtrarPendientesLocal)" style="cursor:pointer;user-select:none">Tipo ${flechaOrden('pendientes-normales','tipo')}</th>
+        <th onclick="ordenarPor('pendientes-normales','orden_compra',filtrarPendientesLocal)" style="cursor:pointer;user-select:none">OC ${flechaOrden('pendientes-normales','orden_compra')}</th>
+        <th onclick="ordenarPor('pendientes-normales','total_valorizado',filtrarPendientesLocal)" style="cursor:pointer;user-select:none">Valorizado ${flechaOrden('pendientes-normales','total_valorizado')}</th>
+        <th onclick="ordenarPor('pendientes-normales','_dias',filtrarPendientesLocal)" style="cursor:pointer;user-select:none">Días pend. ${flechaOrden('pendientes-normales','_dias')}</th>
+        <th onclick="ordenarPor('pendientes-normales','estado',filtrarPendientesLocal)" style="cursor:pointer;user-select:none">Estado ${flechaOrden('pendientes-normales','estado')}</th>
+        <th></th>
       </tr></thead>
       <tbody>${normales.map(renderRow).join('')}</tbody>
     </table></div>`:'';
@@ -723,7 +760,18 @@ function filtrarPendientesLocal(){
       Históricos pendientes (${historicos.length}) — ${fmt(totalHistorico)}
     </div>
     <div style="overflow-x:auto"><table>
-      <thead><tr><th style="width:32px"></th><th>N° Remito</th><th>Fecha</th><th>Cliente</th><th>Tipo</th><th>OC</th><th>Valorizado</th><th>Días pend.</th><th>Estado</th><th></th></tr></thead>
+      <thead><tr>
+        <th style="width:32px"></th>
+        <th onclick="ordenarPor('pendientes-historicos','numero_formateado',filtrarPendientesLocal)" style="cursor:pointer;user-select:none">N° Remito ${flechaOrden('pendientes-historicos','numero_formateado')}</th>
+        <th onclick="ordenarPor('pendientes-historicos','fecha',filtrarPendientesLocal)" style="cursor:pointer;user-select:none">Fecha ${flechaOrden('pendientes-historicos','fecha')}</th>
+        <th onclick="ordenarPor('pendientes-historicos','cliente',filtrarPendientesLocal)" style="cursor:pointer;user-select:none">Cliente ${flechaOrden('pendientes-historicos','cliente')}</th>
+        <th onclick="ordenarPor('pendientes-historicos','tipo',filtrarPendientesLocal)" style="cursor:pointer;user-select:none">Tipo ${flechaOrden('pendientes-historicos','tipo')}</th>
+        <th onclick="ordenarPor('pendientes-historicos','orden_compra',filtrarPendientesLocal)" style="cursor:pointer;user-select:none">OC ${flechaOrden('pendientes-historicos','orden_compra')}</th>
+        <th onclick="ordenarPor('pendientes-historicos','total_valorizado',filtrarPendientesLocal)" style="cursor:pointer;user-select:none">Valorizado ${flechaOrden('pendientes-historicos','total_valorizado')}</th>
+        <th onclick="ordenarPor('pendientes-historicos','_dias',filtrarPendientesLocal)" style="cursor:pointer;user-select:none">Días pend. ${flechaOrden('pendientes-historicos','_dias')}</th>
+        <th onclick="ordenarPor('pendientes-historicos','estado',filtrarPendientesLocal)" style="cursor:pointer;user-select:none">Estado ${flechaOrden('pendientes-historicos','estado')}</th>
+        <th></th>
+      </tr></thead>
       <tbody>${historicos.map(renderRow).join('')}</tbody>
     </table></div>`:'';
 

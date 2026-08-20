@@ -539,3 +539,53 @@ document.addEventListener('DOMContentLoaded', () => {
   initInactividad();
 });
 
+// ═══════════════════════════════════════════════════════════════
+// TABLAS ORDENABLES — click en el header para ordenar
+// ═══════════════════════════════════════════════════════════════
+// Uso en cualquier tabla del ERP:
+//
+// 1. En el <th>, agregar onclick y la flechita de estado:
+//      <th onclick="ordenarPor('facturas','fecha_emision',cargarFacturas)"
+//          style="cursor:pointer;user-select:none">
+//        Fecha ${flechaOrden('facturas','fecha_emision')}
+//      </th>
+//
+// 2. En la función que arma las filas, justo antes de mapear rows a HTML:
+//      rows = aplicarOrden('facturas', rows, {
+//        cliente: r => r.clientes?.nombre || '',   // getters opcionales
+//      });                                          // para campos anidados
+//
+// El primer argumento ('facturas') es un ID único por tabla — así cada
+// tabla de cada página mantiene su propio estado de orden, independiente.
+// Sin getter explícito, usa directamente r[campo].
+
+var _ordenTablas = {}; // { tablaId: { campo, dir: 'asc'|'desc' } }
+
+function ordenarPor(tablaId, campo, fnRecargar) {
+  const actual = _ordenTablas[tablaId];
+  let dir = 'asc';
+  if (actual && actual.campo === campo) dir = actual.dir === 'asc' ? 'desc' : 'asc';
+  _ordenTablas[tablaId] = { campo, dir };
+  if (typeof fnRecargar === 'function') fnRecargar();
+}
+
+function flechaOrden(tablaId, campo) {
+  const o = _ordenTablas[tablaId];
+  if (!o || o.campo !== campo) return '<span style="opacity:0.25;font-size:10px">↕</span>';
+  return '<span style="color:var(--blue);font-size:10px">' + (o.dir === 'asc' ? '↑' : '↓') + '</span>';
+}
+
+function aplicarOrden(tablaId, rows, getters) {
+  const o = _ordenTablas[tablaId];
+  if (!o || !rows || !rows.length) return rows || [];
+  const getter = (getters && getters[o.campo]) || (r => r[o.campo]);
+  const dir = o.dir === 'asc' ? 1 : -1;
+  return [...rows].sort((a, b) => {
+    let va = getter(a), vb = getter(b);
+    if (va == null || va === '') va = dir === 1 ? '\uffff' : ''; // vacíos siempre al final
+    if (vb == null || vb === '') vb = dir === 1 ? '\uffff' : '';
+    if (typeof va === 'number' && typeof vb === 'number') return (va - vb) * dir;
+    return String(va).localeCompare(String(vb), 'es', { numeric: true, sensitivity: 'base' }) * dir;
+  });
+}
+

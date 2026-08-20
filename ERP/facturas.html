@@ -121,6 +121,13 @@
     <select id="cc-cliente" onchange="cargarCuentaCorriente()">
       <option value="">— Elegir cliente —</option>
     </select>
+    <label style="font-size:12px;color:var(--muted);display:flex;align-items:center;gap:6px">Desde
+      <input type="date" id="cc-fecha-desde" onchange="cargarCuentaCorriente()">
+    </label>
+    <label style="font-size:12px;color:var(--muted);display:flex;align-items:center;gap:6px">Hasta
+      <input type="date" id="cc-fecha-hasta" onchange="cargarCuentaCorriente()">
+    </label>
+    <button class="btn btn-ghost btn-sm" onclick="document.getElementById('cc-fecha-desde').value='';document.getElementById('cc-fecha-hasta').value='';cargarCuentaCorriente()">Limpiar fechas</button>
   </div>
 
   <!-- CONTENIDO -->
@@ -155,7 +162,8 @@
     <!-- Factura de origen — solo visible para NC / ND -->
     <div class="form-row full" id="grupo-fc-origen" style="display:none">
       <div class="form-group">
-        <label>Factura de origen <span style="color:var(--red)">*</span> <span style="color:var(--muted);font-weight:400;text-transform:none;font-size:11px">(la FC/FCE que esta NC cancela)</span></label>
+        <label>Factura de origen <span style="color:var(--red)">*</span> <span style="color:var(--muted);font-weight:400;text-transform:none;font-size:11px">(la FC/FCE que esta NC cancela — buscá por N° o cliente si no la ves de una)</span></label>
+        <input type="text" id="nf-fc-origen-buscar" placeholder="Buscar por número o cliente..." oninput="filtrarFacturasOrigen()" style="margin-bottom:6px">
         <select id="nf-fc-origen">
           <option value="">— Seleccionar factura —</option>
         </select>
@@ -713,16 +721,20 @@ async function toggleFacturaOrigen(){
   if(esNcNd) await cargarFacturasOrigen();
 }
 
+let _fcOrigenTodas=[]; // lista completa sin filtrar, para el buscador
+
 async function cargarFacturasOrigen(){
   const empId   = document.getElementById('nf-empresa').value;
-  const cliId   = document.getElementById('nf-cliente').value;
   const sel     = document.getElementById('nf-fc-origen');
   sel.innerHTML = '<option value="">Cargando...</option>';
   try {
+    // OJO: buscamos en TODA la empresa, no filtrado por el cliente de la NC.
+    // La importación de AFIP matchea clientes por nombre de forma difusa y
+    // a veces la NC y su factura de origen terminan con cliente_id distinto
+    // (typos, razón social con variantes). Mejor mostrar todo y dejar
+    // buscar por número o nombre.
     const filtros = { empresaId: empId, excluirAnuladas: true };
-    if(cliId) filtros.clienteId = cliId;
     const data = await FacturasAPI.getFacturas(filtros);
-    // Solo FC, FCE, FA, FB — excluir otras NC/ND
     let elegibles = (data||[]).filter(r => !['NC','ND'].includes(r.tipo));
     // Si estamos editando una NC ya vinculada a una factura que quedó
     // anulada (justamente por esta NC), incluirla igual para poder
@@ -733,16 +745,33 @@ async function cargarFacturasOrigen(){
         if(yaVinculada) elegibles=[yaVinculada,...elegibles];
       }catch(e){/* si falla, sigue sin ella */}
     }
-    sel.innerHTML = '<option value="">— Seleccionar factura —</option>' +
-      elegibles.map(r =>
-        `<option value="${r.id}" data-monto="${r.monto_total}" data-acumulado="${r.monto_nc_acumulado||0}" data-numero="${r.numero_factura}" data-estado="${r.estado}">
-          ${r.numero_factura} — ${r.clientes?.nombre||'?'} — ${fmt(r.monto_total)}${r.monto_nc_acumulado>0?` (saldo: ${fmt(r.monto_total-r.monto_nc_acumulado)})`:''} — ${r.estado}
-        </option>`
-      ).join('');
+    _fcOrigenTodas=elegibles;
+    document.getElementById('nf-fc-origen-buscar').value='';
+    renderOpcionesFcOrigen(elegibles);
   } catch(e) {
     sel.innerHTML = '<option value="">Error al cargar facturas</option>';
   }
   sel.onchange = mostrarInfoFcOrigen;
+}
+
+function renderOpcionesFcOrigen(lista){
+  const sel=document.getElementById('nf-fc-origen');
+  sel.innerHTML = '<option value="">— Seleccionar factura —</option>' +
+    lista.map(r =>
+      `<option value="${r.id}" data-monto="${r.monto_total}" data-acumulado="${r.monto_nc_acumulado||0}" data-numero="${r.numero_factura}" data-estado="${r.estado}">
+        ${r.numero_factura} — ${r.clientes?.nombre||'?'} — ${fmt(r.monto_total)}${r.monto_nc_acumulado>0?` (saldo: ${fmt(r.monto_total-r.monto_nc_acumulado)})`:''} — ${r.estado}
+      </option>`
+    ).join('');
+}
+
+function filtrarFacturasOrigen(){
+  const q=document.getElementById('nf-fc-origen-buscar').value.trim().toLowerCase();
+  if(!q){ renderOpcionesFcOrigen(_fcOrigenTodas); return; }
+  const filtradas=_fcOrigenTodas.filter(r =>
+    (r.numero_factura||'').toLowerCase().includes(q) ||
+    (r.clientes?.nombre||'').toLowerCase().includes(q)
+  );
+  renderOpcionesFcOrigen(filtradas);
 }
 
 function mostrarInfoFcOrigen(){
@@ -863,6 +892,17 @@ async function cargarFacturas(){
     estado_visual: r.estado!=='cobrada'&&r.estado!=='anulada'&&r.fecha_cobro_estimada&&r.fecha_cobro_estimada<hoyStr?'vencida':r.estado
   }));
 
+  rows=aplicarOrden('facturas', rows, {
+    fecha_emision: r=>r.fecha_emision||'',
+    numero_factura: r=>r.numero_factura||'',
+    tipo: r=>r.tipo||'',
+    cliente: r=>r.clientes?.nombre||'',
+    empresa: r=>r.empresas?.nombre||'',
+    monto_total: r=>Number(r.monto_total||0),
+    fecha_cobro_estimada: r=>r.fecha_cobro_estimada||'',
+    estado_visual: r=>r.estado_visual||'',
+  });
+
   const esNC=r=>r.tipo==='NC';
   // Etiqueta visual del estado — no cambia lo que se guarda en la base
   // (sigue siendo 'anulada'/'anulada_parcial'), solo aclara en pantalla si
@@ -891,8 +931,16 @@ async function cargarFacturas(){
     <div style="overflow-x:auto">
     <table>
       <thead><tr>
-        <th>Empresa</th><th>Fecha</th><th>N° Factura</th><th>Tipo</th>
-        <th>Cliente</th><th>Total</th><th style="text-align:center">Rem.</th><th>Estado</th><th>Vence</th><th>Acciones</th>
+        <th onclick="ordenarPor('facturas','empresa',cargarFacturas)" style="cursor:pointer;user-select:none">Empresa ${flechaOrden('facturas','empresa')}</th>
+        <th onclick="ordenarPor('facturas','fecha_emision',cargarFacturas)" style="cursor:pointer;user-select:none">Fecha ${flechaOrden('facturas','fecha_emision')}</th>
+        <th onclick="ordenarPor('facturas','numero_factura',cargarFacturas)" style="cursor:pointer;user-select:none">N° Factura ${flechaOrden('facturas','numero_factura')}</th>
+        <th onclick="ordenarPor('facturas','tipo',cargarFacturas)" style="cursor:pointer;user-select:none">Tipo ${flechaOrden('facturas','tipo')}</th>
+        <th onclick="ordenarPor('facturas','cliente',cargarFacturas)" style="cursor:pointer;user-select:none">Cliente ${flechaOrden('facturas','cliente')}</th>
+        <th onclick="ordenarPor('facturas','monto_total',cargarFacturas)" style="cursor:pointer;user-select:none">Total ${flechaOrden('facturas','monto_total')}</th>
+        <th style="text-align:center">Rem.</th>
+        <th onclick="ordenarPor('facturas','estado_visual',cargarFacturas)" style="cursor:pointer;user-select:none">Estado ${flechaOrden('facturas','estado_visual')}</th>
+        <th onclick="ordenarPor('facturas','fecha_cobro_estimada',cargarFacturas)" style="cursor:pointer;user-select:none">Vence ${flechaOrden('facturas','fecha_cobro_estimada')}</th>
+        <th>Acciones</th>
       </tr></thead>
       <tbody>${rows.length?rows.map(r=>{
         const venc=r.estado_visual==='vencida';
@@ -961,14 +1009,30 @@ async function cargarCobros(){
   if(emp) cobData=cobData.filter(r=>r.empresa_id===emp);
   if(mes){const mI=mes+'-01';const mFin=finMesExclusivo(mes);cobData=cobData.filter(r=>r.fecha>=mI&&r.fecha<mFin);}
   const data=cobData;
-  const rows=data||[];
+  let rows=data||[];
+  rows=aplicarOrden('cobros', rows, {
+    empresa: r=>r.empresas?.nombre||'',
+    fecha: r=>r.fecha||'',
+    factura: r=>r.facturas_emitidas?.numero_factura||'',
+    cliente: r=>r.facturas_emitidas?.clientes?.nombre||'',
+    monto: r=>Number(r.monto||0),
+    metodo_pago: r=>r.metodo_pago||'',
+  });
   const total=rows.reduce((s,r)=>s+Number(r.monto||0),0);
   document.getElementById('contenido').innerHTML=`
     <div style="padding:12px 20px;border-bottom:1px solid var(--border)">
       <span style="font-size:12px;color:var(--muted)">Total cobrado: <strong style="color:var(--green)">${fmt(total)}</strong></span>
     </div>
     <div style="overflow-x:auto"><table>
-      <thead><tr><th>Empresa</th><th>Fecha</th><th>Factura</th><th>Cliente</th><th>Monto</th><th>Método</th><th>N° Cheque</th></tr></thead>
+      <thead><tr>
+        <th onclick="ordenarPor('cobros','empresa',cargarCobros)" style="cursor:pointer;user-select:none">Empresa ${flechaOrden('cobros','empresa')}</th>
+        <th onclick="ordenarPor('cobros','fecha',cargarCobros)" style="cursor:pointer;user-select:none">Fecha ${flechaOrden('cobros','fecha')}</th>
+        <th onclick="ordenarPor('cobros','factura',cargarCobros)" style="cursor:pointer;user-select:none">Factura ${flechaOrden('cobros','factura')}</th>
+        <th onclick="ordenarPor('cobros','cliente',cargarCobros)" style="cursor:pointer;user-select:none">Cliente ${flechaOrden('cobros','cliente')}</th>
+        <th onclick="ordenarPor('cobros','monto',cargarCobros)" style="cursor:pointer;user-select:none">Monto ${flechaOrden('cobros','monto')}</th>
+        <th onclick="ordenarPor('cobros','metodo_pago',cargarCobros)" style="cursor:pointer;user-select:none">Método ${flechaOrden('cobros','metodo_pago')}</th>
+        <th>N° Cheque</th>
+      </tr></thead>
       <tbody>${rows.length?rows.map(r=>`<tr>
         <td style="font-size:12px">${r.empresas?.nombre||'—'}</td>
         <td class="mono">${fmtF(r.fecha)}</td>
@@ -1826,13 +1890,24 @@ async function cargarCuentaCorriente(){
   let saldo=0;
   movimientos.forEach(m=>{ saldo += m.debe - m.haber; m.saldoAcum=saldo; });
 
+  // Filtro de fecha: acota qué filas se MUESTRAN, pero el saldo de cada fila
+  // ya viene calculado sobre el historial completo (no se recalcula acá) —
+  // así el saldo grande de arriba y la columna "Saldo" siempre son exactos,
+  // el filtro solo achica la ventana de qué ves.
+  const fDesde=document.getElementById('cc-fecha-desde')?.value||'';
+  const fHasta=document.getElementById('cc-fecha-hasta')?.value||'';
+  const movimientosFiltrados=movimientos.filter(m=>
+    (!fDesde || (m.fecha||'')>=fDesde) && (!fHasta || (m.fecha||'')<=fHasta)
+  );
+
   const totalFacturado=facturasReales.reduce((s,f)=>s+Number(f.monto_total||0),0);
   const totalNC=notasCredito.reduce((s,f)=>s+Number(f.monto_total||0),0);
   const totalCobrado=cobros.reduce((s,c)=>s+Number(c.monto||0),0);
   const totalRemitosPend=remitosPendFiltrados.reduce((s,r)=>s+Number(r.total_valorizado||0),0);
   const saldoFinal=saldo;
 
-  _ccClienteData={cliente, empId, movimientos, remitosPendFiltrados, saldoFinal, totalFacturado, totalNC, totalCobrado, totalRemitosPend};
+  const hayFiltroFecha=!!(fDesde||fHasta);
+  _ccClienteData={cliente, empId, movimientos:movimientosFiltrados, remitosPendFiltrados, saldoFinal, totalFacturado, totalNC, totalCobrado, totalRemitosPend, hayFiltroFecha};
 
   cont.innerHTML=`
     <div style="padding:20px 24px;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:16px">
@@ -1840,6 +1915,7 @@ async function cargarCuentaCorriente(){
         <div style="font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:0.6px;margin-bottom:4px">Saldo actual — ${cliente?.nombre||'—'}</div>
         <div style="font-size:32px;font-weight:600;font-family:'DM Mono',monospace;color:${saldoFinal>0?'var(--orange)':saldoFinal<0?'var(--green)':'var(--text)'}">${fmt(Math.abs(saldoFinal))}</div>
         <div style="font-size:12px;color:var(--muted);margin-top:2px">${saldoFinal>0?'A favor de la empresa (el cliente debe)':saldoFinal<0?'A favor del cliente':'Cuenta saldada'}</div>
+        ${hayFiltroFecha?'<div style="font-size:11px;color:var(--blue);margin-top:6px">📅 Lista filtrada por fecha — el saldo de arriba es igual el total real (toda la cuenta), no solo del rango</div>':''}
       </div>
       <div style="display:flex;gap:10px;flex-wrap:wrap">
         <div style="background:var(--bg3);border-radius:10px;padding:10px 16px;min-width:130px">
@@ -1868,7 +1944,7 @@ async function cargarCuentaCorriente(){
         <th style="text-align:right">Debe</th><th style="text-align:right">Haber</th><th style="text-align:right">Saldo</th>
       </tr></thead>
       <tbody>
-        ${movimientos.length?movimientos.map(m=>`
+        ${movimientosFiltrados.length?movimientosFiltrados.map(m=>`
           <tr>
             <td class="mono">${fmtF(m.fecha)}</td>
             <td><span class="estado ${m.tipo==='factura'?'pendiente':m.tipo==='cobro'?'cobrada':'anulada'}">${m.tipo}</span></td>
@@ -1877,7 +1953,7 @@ async function cargarCuentaCorriente(){
             <td class="mono" style="text-align:right">${m.debe?fmt(m.debe):'—'}</td>
             <td class="mono" style="text-align:right;color:var(--green)">${m.haber?fmt(m.haber):'—'}</td>
             <td class="mono" style="text-align:right;font-weight:600">${fmt(m.saldoAcum)}</td>
-          </tr>`).join(''):'<tr><td colspan="7" style="text-align:center;color:var(--muted);padding:30px">Sin movimientos para este cliente.</td></tr>'}
+          </tr>`).join(''):'<tr><td colspan="7" style="text-align:center;color:var(--muted);padding:30px">Sin movimientos en este rango de fechas.</td></tr>'}
       </tbody>
     </table>
 
@@ -1916,7 +1992,7 @@ async function exportarCuentaCorrientePDF(){
   if(!_ccClienteData){ toast('Elegí un cliente primero.','warn'); return; }
   if(!window.jspdf||!window.jspdf.jsPDF){ toast('Librería PDF no cargada. Recargá la página.','error'); return; }
 
-  const {cliente, movimientos, remitosPendFiltrados, saldoFinal, totalFacturado, totalCobrado, totalNC, totalRemitosPend} = _ccClienteData;
+  const {cliente, movimientos, remitosPendFiltrados, saldoFinal, totalFacturado, totalCobrado, totalNC, totalRemitosPend, hayFiltroFecha} = _ccClienteData;
 
   const { jsPDF } = window.jspdf;
   const doc = new jsPDF({ format:'a4', unit:'mm' });
@@ -1931,7 +2007,14 @@ async function exportarCuentaCorrientePDF(){
   doc.text(`Cliente: ${cliente?.nombre||'—'}`, L, y);
   y+=5;
   doc.text(`Fecha de emisión: ${new Date().toLocaleDateString('es-AR')}`, L, y);
-  y+=8;
+  y+=5;
+  if(hayFiltroFecha){
+    const fD=document.getElementById('cc-fecha-desde')?.value;
+    const fH=document.getElementById('cc-fecha-hasta')?.value;
+    doc.text(`Movimientos filtrados: ${fD?fmtF(fD):'inicio'} a ${fH?fmtF(fH):'hoy'} (el saldo es el total real de la cuenta)`, L, y);
+    y+=5;
+  }
+  y+=3;
   doc.setDrawColor(200,200,200); doc.line(L,y,R,y);
   y+=8;
 
