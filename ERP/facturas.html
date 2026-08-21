@@ -1854,7 +1854,19 @@ async function cargarCuentaCorriente(){
   const numeroPorId={};
   facturasReales.forEach(f=>{ numeroPorId[f.id]=f.numero_factura; });
 
-  // ── Armar movimientos cronológicos ──────────────────────────
+  // ── SALDO REAL — la fuente de verdad es el estado actual de cada factura,
+  // NO si existe un registro de cobro cargado. Para todo lo anterior a que
+  // empezamos a usar el sistema (marzo/abril 2026) no hay comprobante de
+  // cobro guardado aunque esté pagado — por eso NO podemos calcular el saldo
+  // sumando cobros; hay que confiar en el estado.
+  //   - estado='cobrada' o 'anulada' → ya está saldada, no suma
+  //   - estado='pendiente' o 'anulada_parcial' → suma el saldo neto (monto - NC)
+  const saldoReal = facturasReales
+    .filter(f=>f.estado!=='cobrada'&&f.estado!=='anulada')
+    .reduce((s,f)=>s+Number(f.monto_total||0)-Number(f.monto_nc_acumulado||0), 0);
+
+  // ── Movimientos cronológicos — quedan como historial/auditoría, no como
+  // fuente del saldo (ver saldoReal arriba).
   const movimientos=[];
   facturasReales.forEach(f=>{
     movimientos.push({
@@ -1887,22 +1899,15 @@ async function cargarCuentaCorriente(){
   });
 
   movimientos.sort((a,b)=>(a.fecha||'').localeCompare(b.fecha||''));
-  let saldo=0;
-  movimientos.forEach(m=>{ saldo += m.debe - m.haber; m.saldoAcum=saldo; });
 
-  // Filtro de fecha: acota qué filas se MUESTRAN, pero el saldo de cada fila
-  // ya viene calculado sobre el historial completo (no se recalcula acá) —
-  // así el saldo grande de arriba y la columna "Saldo" siempre son exactos,
-  // el filtro solo achica la ventana de qué ves.
+  // Filtro de fecha: acota qué filas del HISTORIAL se muestran. El saldo
+  // grande de arriba (saldoReal) NO depende de este filtro ni de esta
+  // lista — sale directo del estado actual de cada factura.
   const fDesde=document.getElementById('cc-fecha-desde')?.value||'';
   const fHasta=document.getElementById('cc-fecha-hasta')?.value||'';
   let movimientosFiltrados=movimientos.filter(m=>
     (!fDesde || (m.fecha||'')>=fDesde) && (!fHasta || (m.fecha||'')<=fHasta)
   );
-  // Único campo ordenable acá: cada fila ya trae su saldoAcum calculado
-  // sobre el historial completo en orden cronológico, así que invertir por
-  // fecha no rompe nada — reordenar por cualquier otro campo sí lo haría
-  // (el saldo dejaría de tener sentido), por eso no se habilita.
   // Default: más nuevo arriba, más viejo abajo (si el usuario ya clickeó el
   // header de Fecha, se respeta lo que haya elegido)
   if(!_ordenTablas['cuenta-corriente']) _ordenTablas['cuenta-corriente']={campo:'fecha',dir:'desc'};
@@ -1912,7 +1917,7 @@ async function cargarCuentaCorriente(){
   const totalNC=notasCredito.reduce((s,f)=>s+Number(f.monto_total||0),0);
   const totalCobrado=cobros.reduce((s,c)=>s+Number(c.monto||0),0);
   const totalRemitosPend=remitosPendFiltrados.reduce((s,r)=>s+Number(r.total_valorizado||0),0);
-  const saldoFinal=saldo;
+  const saldoFinal=saldoReal;
 
   const hayFiltroFecha=!!(fDesde||fHasta);
   _ccClienteData={cliente, empId, movimientos:movimientosFiltrados, remitosPendFiltrados, saldoFinal, totalFacturado, totalNC, totalCobrado, totalRemitosPend, hayFiltroFecha};
@@ -1920,10 +1925,11 @@ async function cargarCuentaCorriente(){
   cont.innerHTML=`
     <div style="padding:20px 24px;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:16px">
       <div>
-        <div style="font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:0.6px;margin-bottom:4px">Saldo actual — ${cliente?.nombre||'—'}</div>
+        <div style="font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:0.6px;margin-bottom:4px">Saldo real — ${cliente?.nombre||'—'}</div>
         <div style="font-size:32px;font-weight:600;font-family:'DM Mono',monospace;color:${saldoFinal>0?'var(--orange)':saldoFinal<0?'var(--green)':'var(--text)'}">${fmt(Math.abs(saldoFinal))}</div>
         <div style="font-size:12px;color:var(--muted);margin-top:2px">${saldoFinal>0?'A favor de la empresa (el cliente debe)':saldoFinal<0?'A favor del cliente':'Cuenta saldada'}</div>
-        ${hayFiltroFecha?'<div style="font-size:11px;color:var(--blue);margin-top:6px">📅 Lista filtrada por fecha — el saldo de arriba es igual el total real (toda la cuenta), no solo del rango</div>':''}
+        <div style="font-size:11px;color:var(--muted);margin-top:6px">Calculado sobre facturas con estado <strong>pendiente</strong> o <strong>anulada parcial (NC)</strong> hoy — no depende de si hay un cobro cargado, así que también es correcto para lo anterior a que empezaron a usar el sistema.</div>
+        ${hayFiltroFecha?'<div style="font-size:11px;color:var(--blue);margin-top:6px">📅 El historial de abajo está filtrado por fecha — el saldo de arriba no cambia con este filtro</div>':''}
       </div>
       <div style="display:flex;gap:10px;flex-wrap:wrap">
         <div style="background:var(--bg3);border-radius:10px;padding:10px 16px;min-width:130px">
@@ -1931,7 +1937,7 @@ async function cargarCuentaCorriente(){
           <div style="font-family:'DM Mono',monospace;font-size:14px;font-weight:600">${fmt(totalFacturado)}</div>
         </div>
         <div style="background:var(--bg3);border-radius:10px;padding:10px 16px;min-width:130px">
-          <div style="font-size:10px;color:var(--muted);text-transform:uppercase">Cobrado</div>
+          <div style="font-size:10px;color:var(--muted);text-transform:uppercase">Cobrado (con registro)</div>
           <div style="font-family:'DM Mono',monospace;font-size:14px;font-weight:600;color:var(--green)">${fmt(totalCobrado)}</div>
         </div>
         <div style="background:var(--bg3);border-radius:10px;padding:10px 16px;min-width:130px">
@@ -1946,10 +1952,13 @@ async function cargarCuentaCorriente(){
       </div>
     </div>
 
+    <div style="padding:10px 24px;font-size:11px;color:var(--muted);border-bottom:1px solid var(--border)">
+      Historial de movimientos (auditoría) — el saldo real es el de arriba, esta lista no acumula fila por fila porque los cobros previos a marzo/abril 2026 no tienen registro cargado.
+    </div>
     <table style="width:100%">
       <thead><tr>
-        <th onclick="ordenarPor('cuenta-corriente','fecha',cargarCuentaCorriente)" style="cursor:pointer;user-select:none">Fecha ${flechaOrden('cuenta-corriente','fecha')}</th><th>Tipo</th><th>Comprobante</th><th>Detalle</th>
-        <th style="text-align:right">Debe</th><th style="text-align:right">Haber</th><th style="text-align:right">Saldo</th>
+        <th onclick="ordenarPor('cuenta-corriente','fecha',cargarCuentaCorriente)" style="cursor:pointer;user-select:none">Fecha ${flechaOrden('cuenta-corriente','fecha')}</th><th>Tipo</th><th>Comprobante</th><th>Detalle</th><th>Estado</th>
+        <th style="text-align:right">Debe</th><th style="text-align:right">Haber</th>
       </tr></thead>
       <tbody>
         ${movimientosFiltrados.length?movimientosFiltrados.map(m=>`
@@ -1958,9 +1967,9 @@ async function cargarCuentaCorriente(){
             <td><span class="estado ${m.tipo==='factura'?'pendiente':m.tipo==='cobro'?'cobrada':'anulada'}">${m.tipo}</span></td>
             <td class="mono">${m.numero}</td>
             <td style="font-size:12.5px;color:var(--muted)">${m.detalle}</td>
+            <td style="font-size:12px;color:var(--muted)">${m.estado||'—'}</td>
             <td class="mono" style="text-align:right">${m.debe?fmt(m.debe):'—'}</td>
             <td class="mono" style="text-align:right;color:var(--green)">${m.haber?fmt(m.haber):'—'}</td>
-            <td class="mono" style="text-align:right;font-weight:600">${fmt(m.saldoAcum)}</td>
           </tr>`).join(''):'<tr><td colspan="7" style="text-align:center;color:var(--muted);padding:30px">Sin movimientos en este rango de fechas.</td></tr>'}
       </tbody>
     </table>
@@ -2029,41 +2038,50 @@ async function exportarCuentaCorrientePDF(){
   doc.setFillColor(saldoFinal>0?245:16, saldoFinal>0?158:185, saldoFinal>0?11:129);
   doc.roundedRect(L,y,W,14,1.5,1.5,'F');
   doc.setTextColor(255,255,255); doc.setFont('helvetica','bold'); doc.setFontSize(11);
-  doc.text(saldoFinal>0?'Saldo a favor de la empresa':saldoFinal<0?'Saldo a favor del cliente':'Cuenta saldada', L+4, y+6);
+  doc.text(saldoFinal>0?'Saldo real a favor de la empresa':saldoFinal<0?'Saldo a favor del cliente':'Cuenta saldada', L+4, y+6);
   doc.setFontSize(13);
   doc.text(fmt(Math.abs(saldoFinal)), R-4, y+9.5, {align:'right'});
   doc.setTextColor(0,0,0);
-  y+=20;
+  y+=17;
+  doc.setFont('helvetica','italic'); doc.setFontSize(7.5); doc.setTextColor(120,120,120);
+  doc.text('Calculado sobre facturas con estado pendiente/anulada parcial hoy — no depende de tener el cobro cargado.', L, y);
+  doc.setTextColor(0,0,0);
+  y+=7;
 
   doc.setFont('helvetica','normal'); doc.setFontSize(8.5); doc.setTextColor(90,90,90);
-  doc.text(`Facturado: ${fmt(totalFacturado)}   ·   Cobrado: ${fmt(totalCobrado)}   ·   NC aplicadas: ${fmt(totalNC)}   ·   Remitos pend. (a favor): ${fmt(totalRemitosPend)}`, L, y);
+  doc.text(`Facturado: ${fmt(totalFacturado)}   ·   Cobrado (con registro): ${fmt(totalCobrado)}   ·   NC aplicadas: ${fmt(totalNC)}   ·   Remitos pend. (a favor): ${fmt(totalRemitosPend)}`, L, y);
   doc.setTextColor(0,0,0);
   y+=9;
+
+  doc.setFont('helvetica','bold'); doc.setFontSize(9); doc.setTextColor(90,90,90);
+  doc.text('Historial de movimientos (auditoría) — el saldo real es el de arriba', L, y);
+  doc.setTextColor(0,0,0);
+  y+=6;
 
   doc.setFont('helvetica','bold'); doc.setFontSize(8); doc.setFillColor(240,240,240);
   doc.rect(L,y,W,6,'F');
   doc.text('Fecha', L+2, y+4);
-  doc.text('Comprobante', L+28, y+4);
-  doc.text('Detalle', L+68, y+4);
-  doc.text('Debe', L+140, y+4, {align:'right'});
-  doc.text('Haber', L+164, y+4, {align:'right'});
-  doc.text('Saldo', R-2, y+4, {align:'right'});
+  doc.text('Comprobante', L+26, y+4);
+  doc.text('Detalle', L+62, y+4);
+  doc.text('Estado', L+128, y+4);
+  doc.text('Debe', L+156, y+4, {align:'right'});
+  doc.text('Haber', R-2, y+4, {align:'right'});
   y+=8;
 
   doc.setFont('helvetica','normal'); doc.setFontSize(8);
   movimientos.forEach(m=>{
     chequearSalto(6);
     doc.text(fmtF(m.fecha), L+2, y);
-    doc.text(String(m.numero||'—'), L+28, y);
-    const detLines=doc.splitTextToSize(m.detalle||'', 68);
-    doc.text(detLines[0]||'', L+68, y);
-    doc.text(m.debe?fmt(m.debe):'—', L+140, y, {align:'right'});
+    doc.text(String(m.numero||'—'), L+26, y);
+    const detLines=doc.splitTextToSize(m.detalle||'', 62);
+    doc.text(detLines[0]||'', L+62, y);
+    doc.setFontSize(7); doc.setTextColor(110,110,110);
+    doc.text(m.estado||'—', L+128, y);
+    doc.setFontSize(8); doc.setTextColor(0,0,0);
+    doc.text(m.debe?fmt(m.debe):'—', L+156, y, {align:'right'});
     doc.setTextColor(16,150,100);
-    doc.text(m.haber?fmt(m.haber):'—', L+164, y, {align:'right'});
+    doc.text(m.haber?fmt(m.haber):'—', R-2, y, {align:'right'});
     doc.setTextColor(0,0,0);
-    doc.setFont('helvetica','bold');
-    doc.text(fmt(m.saldoAcum), R-2, y, {align:'right'});
-    doc.setFont('helvetica','normal');
     y+=5;
   });
 
