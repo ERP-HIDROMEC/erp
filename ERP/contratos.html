@@ -64,6 +64,23 @@
       <option value="vencido">Vencido</option>
       <option value="cancelado">Cancelado</option>
     </select>
+    <select id="contrato-filtro-saldo" onchange="recargar()">
+      <option value="abiertas">Abiertos (con saldo o excedidos)</option>
+      <option value="con_saldo">Con monto pendiente</option>
+      <option value="sin_ejecutar">Sin ejecutar todavía</option>
+      <option value="consumida">Consumido / agotado</option>
+      <option value="excedida">Excedido</option>
+      <option value="todas">Todos (incluye consumidos)</option>
+    </select>
+    <select id="oc-filtro-estado" onchange="recargar()" style="display:none">
+      <option value="abiertas">Abiertas (con saldo o excedidas)</option>
+      <option value="con_saldo">Con monto pendiente</option>
+      <option value="sin_ejecutar">Sin ejecutar todavía</option>
+      <option value="consumida">Consumida / agotada</option>
+      <option value="excedida">Excedida</option>
+      <option value="anulada">Anuladas</option>
+      <option value="todas">Todas</option>
+    </select>
     <input type="text" id="f-buscar" placeholder="Buscar contrato o cliente..." oninput="recargar()" style="min-width:220px">
   </div>
 
@@ -212,7 +229,8 @@
 <!-- MODAL DETALLE OC -->
 <div class="modal-overlay" id="modal-detalle-oc">
   <div class="modal">
-    <h3>Orden de Compra <span id="doc-numero" class="mono"></span></h3>
+    <h3>Orden de Compra <span id="doc-numero" class="mono"></span> <span id="doc-estado-badge"></span></h3>
+    <div id="doc-aviso-anulada" style="display:none;margin-bottom:16px;padding:10px 14px;background:rgba(122,128,153,0.1);border:1px solid rgba(122,128,153,0.2);border-radius:8px;font-size:12px;color:var(--muted)"></div>
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:18px">
       <div><label style="display:block;margin-bottom:4px">Cliente</label><div id="doc-cliente" style="font-size:14px"></div></div>
       <div><label style="display:block;margin-bottom:4px">Empresa</label><div id="doc-empresa" style="font-size:14px"></div></div>
@@ -224,11 +242,18 @@
       <div id="doc-descripcion" style="font-size:13px;color:var(--muted)">—</div>
     </div>
     <div style="font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:0.6px;margin-bottom:8px">Remitos asociados</div>
-    <div style="overflow-x:auto;max-height:280px;overflow-y:auto"><table>
+    <div style="overflow-x:auto;max-height:220px;overflow-y:auto;margin-bottom:16px"><table>
       <thead><tr><th>N° Remito</th><th>Fecha</th><th>Estado</th><th style="text-align:right">Valorizado</th></tr></thead>
       <tbody id="doc-remitos-body"></tbody>
     </table></div>
-    <div class="modal-footer">
+    <div style="font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:0.6px;margin-bottom:8px">Historial (creación / ediciones / anulación)</div>
+    <div id="doc-historial" style="font-size:12px;color:var(--muted);max-height:120px;overflow-y:auto;margin-bottom:8px">—</div>
+    <div class="modal-footer" style="justify-content:space-between">
+      <div>
+        <button class="btn btn-ghost btn-sm" id="doc-btn-editar" onclick="editarOCDesdeDetalle()">Editar</button>
+        <button class="btn btn-danger btn-sm" id="doc-btn-anular" onclick="anularOCDesdeDetalle()">Anular</button>
+        <button class="btn btn-success btn-sm" id="doc-btn-reactivar" style="display:none" onclick="reactivarOCDesdeDetalle()">Reactivar</button>
+      </div>
       <button class="btn btn-ghost" onclick="cerrarModal('modal-detalle-oc')">Cerrar</button>
     </div>
   </div>
@@ -306,6 +331,9 @@ function cambiarTab(tab,btn){
   } else {
     btnNuevo.style.display='none';
   }
+  document.getElementById('f-estado').style.display = tab==='contratos' ? '' : 'none';
+  document.getElementById('contrato-filtro-saldo').style.display = tab==='contratos' ? '' : 'none';
+  document.getElementById('oc-filtro-estado').style.display = tab==='oc' ? '' : 'none';
   recargar();
 }
 
@@ -317,6 +345,25 @@ function recargar(){
 }
 
 // ===== ÓRDENES DE COMPRA =====
+// Estado "de plata" calculado para OC/Contratos — no se guarda, se deriva
+// del monto autorizado vs. lo consumido cada vez que se muestra.
+function estadoSaldo(anulado, consumido, disponible){
+  if(anulado) return 'anulada';
+  if(disponible < -0.01) return 'excedida';
+  if(Math.abs(disponible) <= 0.01) return 'consumida';
+  if(consumido <= 0.01) return 'sin_ejecutar';
+  return 'con_saldo';
+}
+const ESTADO_SALDO_LABEL={
+  con_saldo:'Con saldo', sin_ejecutar:'Sin ejecutar', consumida:'Consumida',
+  excedida:'Excedida', anulada:'Anulada',
+};
+function pasaFiltroSaldo(filtro, estadoCalc){
+  if(filtro==='todas') return true;
+  if(filtro==='abiertas') return estadoCalc==='con_saldo'||estadoCalc==='sin_ejecutar'||estadoCalc==='excedida';
+  return filtro===estadoCalc;
+}
+
 async function cargarOrdenesCompra(){
   document.getElementById('kpis').innerHTML='';
   document.getElementById('contenido').innerHTML='<div class="spinner-wrap"><div class="spinner"></div>Cargando...</div>';
@@ -337,7 +384,15 @@ async function cargarOrdenesCompra(){
 
   // Consumido de cada OC (en paralelo)
   const consumidos=await Promise.all(ocData.map(oc=>OrdenesCompraAPI.getConsumidoOC(oc.id)));
-  let rows=ocData.map((oc,i)=>({...oc, consumido:consumidos[i], disponible:Number(oc.monto_autorizado||0)-consumidos[i]}));
+  let rows=ocData.map((oc,i)=>{
+    const consumido=consumidos[i];
+    const disponible=Number(oc.monto_autorizado||0)-consumido;
+    const estadoCalc=estadoSaldo(oc.estado==='anulada', consumido, disponible);
+    return {...oc, consumido, disponible, estadoCalc};
+  });
+
+  const filtroSaldo=document.getElementById('oc-filtro-estado').value||'abiertas';
+  rows=rows.filter(r=>pasaFiltroSaldo(filtroSaldo, r.estadoCalc));
 
   rows=aplicarOrden('ordenes-compra', rows, {
     numero_oc: r=>r.numero_oc||'',
@@ -367,6 +422,7 @@ async function cargarOrdenesCompra(){
         <th onclick="ordenarPor('ordenes-compra','monto_autorizado',cargarOrdenesCompra)" style="cursor:pointer;user-select:none">Autorizado ${flechaOrden('ordenes-compra','monto_autorizado')}</th>
         <th onclick="ordenarPor('ordenes-compra','consumido',cargarOrdenesCompra)" style="cursor:pointer;user-select:none">Consumido ${flechaOrden('ordenes-compra','consumido')}</th>
         <th onclick="ordenarPor('ordenes-compra','disponible',cargarOrdenesCompra)" style="cursor:pointer;user-select:none">Disponible ${flechaOrden('ordenes-compra','disponible')}</th>
+        <th>Estado</th>
         <th onclick="ordenarPor('ordenes-compra','created_at',cargarOrdenesCompra)" style="cursor:pointer;user-select:none">Creada ${flechaOrden('ordenes-compra','created_at')}</th>
         <th>Descripción</th>
         <th></th>
@@ -379,10 +435,11 @@ async function cargarOrdenesCompra(){
           <td class="mono">${fmt(r.monto_autorizado)}</td>
           <td class="mono">${fmt(r.consumido)}</td>
           <td class="mono" style="color:${r.disponible<0?'var(--red)':'var(--green)'};font-weight:600">${fmt(r.disponible)}</td>
+          <td><span class="estado ${r.estadoCalc==='con_saldo'?'activo':r.estadoCalc==='sin_ejecutar'?'pendiente':r.estadoCalc==='excedida'?'vencida':r.estadoCalc==='anulada'?'anulada':'finalizado'}">${ESTADO_SALDO_LABEL[r.estadoCalc]}</span></td>
           <td class="mono" style="font-size:12px">${fmtF(r.created_at)}</td>
           <td style="font-size:12px;color:var(--muted);max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${r.descripcion||'—'}</td>
           <td><button class="btn btn-sm btn-ghost" onclick="event.stopPropagation();abrirDetalleOC('${r.id}')">Ver detalle</button></td>
-        </tr>`).join(''):'<tr><td colspan="9" style="text-align:center;color:var(--muted);padding:30px">No hay órdenes de compra cargadas.</td></tr>'}</tbody>
+        </tr>`).join(''):'<tr><td colspan="10" style="text-align:center;color:var(--muted);padding:30px">No hay órdenes con este filtro.</td></tr>'}</tbody>
     </table></div>`;
 }
 
@@ -393,14 +450,29 @@ async function abrirDetalleOC(ocId){
   const { data: empresa } = await db.from('empresas').select('nombre').eq('id',oc.empresa_id).single();
   const consumido=await OrdenesCompraAPI.getConsumidoOC(ocId);
   const disponible=Number(oc.monto_autorizado||0)-consumido;
+  const estadoCalc=estadoSaldo(oc.estado==='anulada', consumido, disponible);
+
+  _ocDetalleActual=oc;
 
   document.getElementById('doc-numero').textContent=oc.numero_oc;
+  document.getElementById('doc-estado-badge').innerHTML=`<span class="estado ${estadoCalc==='con_saldo'?'activo':estadoCalc==='sin_ejecutar'?'pendiente':estadoCalc==='excedida'?'vencida':estadoCalc==='anulada'?'anulada':'finalizado'}" style="font-size:11px;margin-left:8px">${ESTADO_SALDO_LABEL[estadoCalc]}</span>`;
   document.getElementById('doc-cliente').textContent=cliente?.nombre||'—';
   document.getElementById('doc-empresa').textContent=empresa?.nombre||'—';
   document.getElementById('doc-autorizado').textContent=fmt(oc.monto_autorizado);
   document.getElementById('doc-disponible').textContent=fmt(disponible);
   document.getElementById('doc-disponible').style.color=disponible<0?'var(--red)':'var(--green)';
   document.getElementById('doc-descripcion').textContent=oc.descripcion||'Sin descripción cargada.';
+
+  const avisoAnulada=document.getElementById('doc-aviso-anulada');
+  if(oc.estado==='anulada'){
+    avisoAnulada.style.display='';
+    avisoAnulada.innerHTML=`⚠ Esta OC está <strong>anulada</strong>${oc.anulada_en?' desde el '+fmtF(oc.anulada_en):''}.${oc.anulada_motivo?' Motivo: '+oc.anulada_motivo:''}`;
+  } else {
+    avisoAnulada.style.display='none';
+  }
+  document.getElementById('doc-btn-editar').style.display = oc.estado==='anulada' ? 'none' : '';
+  document.getElementById('doc-btn-anular').style.display = oc.estado==='anulada' ? 'none' : '';
+  document.getElementById('doc-btn-reactivar').style.display = oc.estado==='anulada' ? '' : 'none';
 
   const { data: remitos } = await db.from('remitos_v2')
     .select('numero_formateado,fecha,estado,total_valorizado')
@@ -417,7 +489,57 @@ async function abrirDetalleOC(ocId){
         </tr>`).join('')
     : '<tr><td colspan="4" style="text-align:center;color:var(--muted);padding:20px">Todavía no hay remitos asociados a esta OC.</td></tr>';
 
+  // Historial: creación + ediciones + anulación, desde auditoría
+  const { data: auditoria } = await db.from('auditoria')
+    .select('accion,usuario_email,detalle,created_at')
+    .eq('tabla','ordenes_compra')
+    .eq('registro_id', ocId)
+    .order('created_at',{ascending:false});
+  const histEl=document.getElementById('doc-historial');
+  const eventos=[{accion:'creada',fecha:oc.created_at,detalle:null,usuario:null}, ...(auditoria||[]).map(a=>({accion:a.accion,fecha:a.created_at,detalle:a.detalle,usuario:a.usuario_email}))];
+  eventos.sort((a,b)=>(b.fecha||'').localeCompare(a.fecha||''));
+  histEl.innerHTML=eventos.map(e=>
+    `<div style="padding:4px 0;border-bottom:1px solid var(--border)">
+      <strong style="color:var(--text)">${e.accion}</strong> — ${fmtF(e.fecha)}${e.usuario?' · '+e.usuario:''}${e.detalle?'<br><span style="font-size:11px">'+e.detalle+'</span>':''}
+    </div>`).join('') || '—';
+
   document.getElementById('modal-detalle-oc').classList.add('show');
+}
+
+let _ocDetalleActual=null;
+
+function editarOCDesdeDetalle(){
+  if(!_ocDetalleActual) return;
+  cerrarModal('modal-detalle-oc');
+  abrirEditarOC(_ocDetalleActual);
+}
+
+async function anularOCDesdeDetalle(){
+  if(!_ocDetalleActual) return;
+  const motivo=prompt('¿Por qué se anula esta OC? (opcional, para el historial)')||'';
+  if(!(await confirmar(
+    `¿Anular la OC <strong>${_ocDetalleActual.numero_oc}</strong>? Va a dejar de aparecer en las OC abiertas, pero queda el historial completo.`,
+    {tipo:'danger', titulo:'Anular OC', labelOk:'Sí, anular', labelCancelar:'Cancelar'}
+  ))) return;
+  try{
+    await OrdenesCompraAPI.anularOC(_ocDetalleActual.id, motivo||null);
+    await registrarAuditoria('contratos','anular_oc','ordenes_compra',_ocDetalleActual.id, motivo||null);
+    toast('OC anulada','success');
+    cerrarModal('modal-detalle-oc');
+    cargarOrdenesCompra();
+  }catch(e){ toast('Error: '+(e?.message||String(e)),'error'); }
+}
+
+async function reactivarOCDesdeDetalle(){
+  if(!_ocDetalleActual) return;
+  if(!(await confirmar(`¿Reactivar la OC <strong>${_ocDetalleActual.numero_oc}</strong>?`, {tipo:'info', titulo:'Reactivar OC', labelOk:'Sí, reactivar'}))) return;
+  try{
+    await OrdenesCompraAPI.reactivarOC(_ocDetalleActual.id);
+    await registrarAuditoria('contratos','reactivar_oc','ordenes_compra',_ocDetalleActual.id, null);
+    toast('OC reactivada','success');
+    cerrarModal('modal-detalle-oc');
+    cargarOrdenesCompra();
+  }catch(e){ toast('Error: '+(e?.message||String(e)),'error'); }
 }
 
 async function cargarClientesModalOC(){
@@ -428,13 +550,36 @@ async function cargarClientesModalOC(){
   sel.innerHTML='<option value="">— Elegir —</option>'+(data||[]).map(c=>`<option value="${c.id}">${c.nombre}</option>`).join('');
 }
 
+let _ocEditId=null;
+
 function abrirNuevaOC(){
+  _ocEditId=null;
   document.getElementById('oc-titulo').textContent='Nueva Orden de Compra';
   document.getElementById('oc-empresa').value='';
+  document.getElementById('oc-empresa').disabled=false;
   document.getElementById('oc-cliente').innerHTML='<option value="">— Elegir empresa primero —</option>';
+  document.getElementById('oc-cliente').disabled=false;
   document.getElementById('oc-numero').value='';
   document.getElementById('oc-monto').value='';
   document.getElementById('oc-desc').value='';
+  document.getElementById('oc-numero-info').style.display='none';
+  document.getElementById('btn-guardar-oc').disabled=false;
+  document.getElementById('modal-oc').classList.add('show');
+}
+
+async function abrirEditarOC(oc){
+  _ocEditId=oc.id;
+  document.getElementById('oc-titulo').textContent='Editar Orden de Compra';
+  document.getElementById('oc-empresa').value=oc.empresa_id;
+  // Empresa y cliente quedan fijos al editar — cambiarlos rompería el
+  // vínculo con los remitos ya asociados a esta OC.
+  document.getElementById('oc-empresa').disabled=true;
+  await cargarClientesModalOC();
+  document.getElementById('oc-cliente').value=oc.cliente_id;
+  document.getElementById('oc-cliente').disabled=true;
+  document.getElementById('oc-numero').value=oc.numero_oc;
+  document.getElementById('oc-monto').value=oc.monto_autorizado;
+  document.getElementById('oc-desc').value=oc.descripcion||'';
   document.getElementById('oc-numero-info').style.display='none';
   document.getElementById('btn-guardar-oc').disabled=false;
   document.getElementById('modal-oc').classList.add('show');
@@ -454,7 +599,8 @@ function chequearOcExistente(){
     const cliId=document.getElementById('oc-cliente').value;
     if(!empId||!cliId) return;
     const existente=await OrdenesCompraAPI.buscarOC(empId,cliId,numero);
-    if(existente){
+    // Si estamos editando y el número no cambió, no es un duplicado — es la misma OC
+    if(existente && existente.id!==_ocEditId){
       info.style.display='';
       info.textContent=`⚠ Ya existe una OC "${existente.numero_oc}" para este cliente (autorizado: ${fmt(existente.monto_autorizado)}). No se puede repetir — cambiá el número, o cargá el remito directamente contra la OC existente desde Remitos.`;
       btn.disabled=true;
@@ -473,20 +619,37 @@ async function guardarOC(){
   if(!numero){ toast('Ingresá el número de OC.','warn'); return; }
   if(!monto){ toast('Ingresá el monto autorizado.','warn'); return; }
 
-  // Chequeo final de duplicado justo antes de guardar (por las dudas de que
-  // hayan tipeado rápido y no llegó a correr el chequeo en vivo)
+  // Chequeo final de duplicado justo antes de guardar (ignorando la propia
+  // OC si estamos editando)
   const existente=await OrdenesCompraAPI.buscarOC(empId,cliId,numero);
-  if(existente){
+  if(existente && existente.id!==_ocEditId){
     toast(`Ya existe la OC "${existente.numero_oc}" para este cliente — no se puede repetir.`,'error');
     return;
   }
 
   try{
-    await OrdenesCompraAPI.crearOC({
-      empresa_id:empId, cliente_id:cliId, numero_oc:numero,
-      monto_autorizado:monto, descripcion:desc,
-    });
-    toast('OC creada','success');
+    if(_ocEditId){
+      const anterior=await OrdenesCompraAPI.getOCById(_ocEditId);
+      await OrdenesCompraAPI.actualizarOC(_ocEditId, {
+        numero_oc:numero, monto_autorizado:monto, descripcion:desc,
+      });
+      // Si cambió el número, sincronizar el texto denormalizado en los remitos ya vinculados
+      if(anterior.numero_oc!==numero){
+        await db.from('remitos_v2').update({orden_compra:numero}).eq('orden_compra_id', _ocEditId);
+      }
+      const cambios=[];
+      if(anterior.numero_oc!==numero) cambios.push(`número ${anterior.numero_oc} → ${numero}`);
+      if(Number(anterior.monto_autorizado)!==monto) cambios.push(`monto ${fmt(anterior.monto_autorizado)} → ${fmt(monto)}`);
+      if((anterior.descripcion||'')!==(desc||'')) cambios.push('descripción modificada');
+      await registrarAuditoria('contratos','editar_oc','ordenes_compra',_ocEditId, cambios.join(' · ')||'Sin cambios detectados');
+      toast('OC actualizada','success');
+    } else {
+      await OrdenesCompraAPI.crearOC({
+        empresa_id:empId, cliente_id:cliId, numero_oc:numero,
+        monto_autorizado:monto, descripcion:desc,
+      });
+      toast('OC creada','success');
+    }
     cerrarModal('modal-oc');
     cargarOrdenesCompra();
   }catch(e){
@@ -529,10 +692,20 @@ async function cargarContratos(){
     });
   }
 
+  // ── Estado de saldo por contrato + filtro ──────────────────
+  rows=rows.map(r=>{
+    const montoTotal=Number(r.monto_total||0)+Number(r.monto_ampliacion||0);
+    const certificado=certificadoMap[r.id]||0;
+    const saldo=montoTotal-certificado;
+    return {...r, _certificado:certificado, _saldo:saldo, estadoCalc: estadoSaldo(r.estado==='cancelado', certificado, saldo)};
+  });
+  const filtroSaldoContrato=document.getElementById('contrato-filtro-saldo').value||'abiertas';
+  rows=rows.filter(r=>pasaFiltroSaldo(filtroSaldoContrato, r.estadoCalc));
+
   // ── KPIs globales ─────────────────────────────────────────
   const activos=rows.filter(r=>r.estado==='activo').length;
   const totalContratado=rows.reduce((s,r)=>s+Number(r.monto_total||0)+Number(r.monto_ampliacion||0),0);
-  const totalCertificado=Object.values(certificadoMap).reduce((s,v)=>s+v,0);
+  const totalCertificado=rows.reduce((s,r)=>s+r._certificado,0);
   const totalSaldo=totalContratado-totalCertificado;
 
   document.getElementById('kpis').innerHTML=`

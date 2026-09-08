@@ -66,6 +66,20 @@ const OrdenesCompraAPI = (() => {
     if (error) throw error;
   }
 
+  async function anularOC(id, motivo) {
+    const { error } = await db.from('ordenes_compra')
+      .update({ estado: 'anulada', anulada_motivo: motivo || null, anulada_en: new Date().toISOString() })
+      .eq('id', id);
+    if (error) throw error;
+  }
+
+  async function reactivarOC(id) {
+    const { error } = await db.from('ordenes_compra')
+      .update({ estado: 'activa', anulada_motivo: null, anulada_en: null })
+      .eq('id', id);
+    if (error) throw error;
+  }
+
   // ── API pública ─────────────────────────────────────────────
   return {
     buscarOC,
@@ -74,5 +88,7 @@ const OrdenesCompraAPI = (() => {
     getConsumidoOC,
     getOCsCliente,
     actualizarOC,
+    anularOC,
+    reactivarOC,
   };
 })();
