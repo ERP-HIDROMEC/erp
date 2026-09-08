@@ -164,6 +164,13 @@
       </div>
     </div>
 
+    <div class="form-row full">
+      <div class="form-group">
+        <label>Título <span style="color:var(--muted);font-weight:400;text-transform:none;font-size:11px">(qué es este trabajo — si generás una OC nueva acá, se usa como descripción)</span></label>
+        <input type="text" id="nr-titulo" placeholder="Ej: Mantenimiento correctivo cinta transportadora sector 4">
+      </div>
+    </div>
+
     <div class="form-row">
       <div class="form-group">
         <label>Orden de compra</label>
@@ -1139,9 +1146,11 @@ async function resolverOrdenCompra(empresaId, clienteId){
     toast('Ingresá el monto autorizado para la OC nueva.', 'warn');
     throw new Error('monto_oc_requerido');
   }
+  const titulo = document.getElementById('nr-titulo').value.trim();
   return await OrdenesCompraAPI.crearOC({
     empresa_id: empresaId, cliente_id: clienteId,
     numero_oc: numero, monto_autorizado: montoAut,
+    descripcion: titulo || null,
   });
 }
 
@@ -1240,6 +1249,7 @@ function abrirNuevo(){
   _itemsContratoCache=[];
   document.getElementById('rem-titulo').textContent='Nuevo remito';
   document.getElementById('nr-tipo').value='servicio';
+  document.getElementById('nr-titulo').value='';
   document.getElementById('nr-oc').value='';
   document.getElementById('nr-oc-monto').value='';
   document.getElementById('nr-oc-info').style.display='none';
@@ -1263,6 +1273,7 @@ async function editarRemito(id){
   document.getElementById('nr-empresa').value=r.empresa_id;
   document.getElementById('nr-tipo').value=r.tipo;
   document.getElementById('nr-fecha').value=r.fecha;
+  document.getElementById('nr-titulo').value=r.titulo||'';
   document.getElementById('nr-oc').value=r.orden_compra||'';
   document.getElementById('nr-sector').value=r.sector||'';
   await cargarDatosModal();
@@ -1399,6 +1410,7 @@ async function guardarRemito(estado){
     tipo:tipoRemito,
     contrato_id:tipoRemito==='contrato'?contratoIdSel:null,
     fecha:document.getElementById('nr-fecha').value,
+    titulo:document.getElementById('nr-titulo').value.trim()||null,
     orden_compra:document.getElementById('nr-oc').value||null,
     sector:document.getElementById('nr-sector').value||null,
     estado, migrado:false,

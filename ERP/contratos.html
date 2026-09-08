@@ -42,7 +42,7 @@
 <main class="main">
   <div class="page-header">
     <h2>Contratos</h2>
-    <button class="btn btn-primary" onclick="abrirNuevoContrato()">+ Nuevo contrato</button>
+    <button class="btn btn-primary" id="btn-nuevo" onclick="abrirNuevoContrato()">+ Nuevo contrato</button>
   </div>
 
   <div class="tabs">
@@ -167,6 +167,73 @@
   </div>
 </div>
 
+<!-- MODAL NUEVA OC -->
+<div class="modal-overlay" id="modal-oc">
+  <div class="modal">
+    <h3 id="oc-titulo">Nueva Orden de Compra</h3>
+    <div class="form-row">
+      <div class="form-group">
+        <label>Empresa</label>
+        <select id="oc-empresa" onchange="cargarClientesModalOC()">
+          <option value="">— Elegir —</option>
+          <option value="a1000000-0000-0000-0000-000000000001">Hidromec</option>
+          <option value="a2000000-0000-0000-0000-000000000002">Placemem</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label>Cliente</label>
+        <select id="oc-cliente"><option value="">— Elegir empresa primero —</option></select>
+      </div>
+    </div>
+    <div class="form-row">
+      <div class="form-group">
+        <label>N° de OC</label>
+        <input type="text" id="oc-numero" placeholder="N° de OC del cliente" oninput="chequearOcExistente()">
+        <div id="oc-numero-info" style="display:none;margin-top:6px;padding:8px 12px;border-radius:8px;font-size:12px;background:rgba(239,68,68,0.1);border:1px solid rgba(239,68,68,0.25);color:var(--red)"></div>
+      </div>
+      <div class="form-group">
+        <label>Monto autorizado</label>
+        <input type="number" id="oc-monto" placeholder="0.00">
+      </div>
+    </div>
+    <div class="form-row full">
+      <div class="form-group">
+        <label>Descripción</label>
+        <textarea id="oc-desc" placeholder="Para qué es esta OC (opcional)"></textarea>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" onclick="cerrarModal('modal-oc')">Cancelar</button>
+      <button class="btn btn-primary" id="btn-guardar-oc" onclick="guardarOC()">Guardar</button>
+    </div>
+  </div>
+</div>
+
+<!-- MODAL DETALLE OC -->
+<div class="modal-overlay" id="modal-detalle-oc">
+  <div class="modal">
+    <h3>Orden de Compra <span id="doc-numero" class="mono"></span></h3>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:18px">
+      <div><label style="display:block;margin-bottom:4px">Cliente</label><div id="doc-cliente" style="font-size:14px"></div></div>
+      <div><label style="display:block;margin-bottom:4px">Empresa</label><div id="doc-empresa" style="font-size:14px"></div></div>
+      <div><label style="display:block;margin-bottom:4px">Autorizado</label><div id="doc-autorizado" class="mono" style="font-size:15px;font-weight:600"></div></div>
+      <div><label style="display:block;margin-bottom:4px">Disponible</label><div id="doc-disponible" class="mono" style="font-size:15px;font-weight:600"></div></div>
+    </div>
+    <div style="margin-bottom:16px">
+      <label style="display:block;margin-bottom:4px">Descripción</label>
+      <div id="doc-descripcion" style="font-size:13px;color:var(--muted)">—</div>
+    </div>
+    <div style="font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:0.6px;margin-bottom:8px">Remitos asociados</div>
+    <div style="overflow-x:auto;max-height:280px;overflow-y:auto"><table>
+      <thead><tr><th>N° Remito</th><th>Fecha</th><th>Estado</th><th style="text-align:right">Valorizado</th></tr></thead>
+      <tbody id="doc-remitos-body"></tbody>
+    </table></div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" onclick="cerrarModal('modal-detalle-oc')">Cerrar</button>
+    </div>
+  </div>
+</div>
+
 <!-- MODAL ITEM PRECIO -->
 <div class="modal-overlay" id="modal-item">
   <div class="modal">
@@ -227,6 +294,18 @@ function cambiarTab(tab,btn){
   tabActual=tab;
   document.querySelectorAll('.tab').forEach(t=>t.classList.remove('active'));
   btn.classList.add('active');
+  const btnNuevo=document.getElementById('btn-nuevo');
+  if(tab==='oc'){
+    btnNuevo.style.display='';
+    btnNuevo.textContent='+ Nueva OC';
+    btnNuevo.onclick=abrirNuevaOC;
+  } else if(tab==='contratos'){
+    btnNuevo.style.display='';
+    btnNuevo.textContent='+ Nuevo contrato';
+    btnNuevo.onclick=abrirNuevoContrato;
+  } else {
+    btnNuevo.style.display='none';
+  }
   recargar();
 }
 
@@ -289,10 +368,11 @@ async function cargarOrdenesCompra(){
         <th onclick="ordenarPor('ordenes-compra','consumido',cargarOrdenesCompra)" style="cursor:pointer;user-select:none">Consumido ${flechaOrden('ordenes-compra','consumido')}</th>
         <th onclick="ordenarPor('ordenes-compra','disponible',cargarOrdenesCompra)" style="cursor:pointer;user-select:none">Disponible ${flechaOrden('ordenes-compra','disponible')}</th>
         <th onclick="ordenarPor('ordenes-compra','created_at',cargarOrdenesCompra)" style="cursor:pointer;user-select:none">Creada ${flechaOrden('ordenes-compra','created_at')}</th>
-        <th>Remitos</th>
+        <th>Descripción</th>
+        <th></th>
       </tr></thead>
       <tbody>${rows.length?rows.map(r=>`
-        <tr class="${r.disponible<0?'vencida-row':''}">
+        <tr class="${r.disponible<0?'vencida-row':''}" style="cursor:pointer" onclick="abrirDetalleOC('${r.id}')">
           <td class="mono">${r.numero_oc}</td>
           <td style="font-size:12px">${r.empresas?.nombre||'—'}</td>
           <td>${r.clientes?.nombre||'—'}</td>
@@ -300,24 +380,120 @@ async function cargarOrdenesCompra(){
           <td class="mono">${fmt(r.consumido)}</td>
           <td class="mono" style="color:${r.disponible<0?'var(--red)':'var(--green)'};font-weight:600">${fmt(r.disponible)}</td>
           <td class="mono" style="font-size:12px">${fmtF(r.created_at)}</td>
-          <td><button class="btn btn-sm btn-ghost" onclick="verRemitosDeOC('${r.id}','${r.numero_oc}')">Ver remitos</button></td>
-        </tr>`).join(''):'<tr><td colspan="8" style="text-align:center;color:var(--muted);padding:30px">No hay órdenes de compra cargadas.</td></tr>'}</tbody>
+          <td style="font-size:12px;color:var(--muted);max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${r.descripcion||'—'}</td>
+          <td><button class="btn btn-sm btn-ghost" onclick="event.stopPropagation();abrirDetalleOC('${r.id}')">Ver detalle</button></td>
+        </tr>`).join(''):'<tr><td colspan="9" style="text-align:center;color:var(--muted);padding:30px">No hay órdenes de compra cargadas.</td></tr>'}</tbody>
     </table></div>`;
 }
 
-async function verRemitosDeOC(ocId, numeroOc){
-  const { data, error } = await db.from('remitos_v2')
+async function abrirDetalleOC(ocId){
+  const oc=await OrdenesCompraAPI.getOCById(ocId);
+  if(!oc){ toast('No se pudo cargar la OC.','error'); return; }
+  const { data: cliente } = await db.from('clientes').select('nombre').eq('id',oc.cliente_id).single();
+  const { data: empresa } = await db.from('empresas').select('nombre').eq('id',oc.empresa_id).single();
+  const consumido=await OrdenesCompraAPI.getConsumidoOC(ocId);
+  const disponible=Number(oc.monto_autorizado||0)-consumido;
+
+  document.getElementById('doc-numero').textContent=oc.numero_oc;
+  document.getElementById('doc-cliente').textContent=cliente?.nombre||'—';
+  document.getElementById('doc-empresa').textContent=empresa?.nombre||'—';
+  document.getElementById('doc-autorizado').textContent=fmt(oc.monto_autorizado);
+  document.getElementById('doc-disponible').textContent=fmt(disponible);
+  document.getElementById('doc-disponible').style.color=disponible<0?'var(--red)':'var(--green)';
+  document.getElementById('doc-descripcion').textContent=oc.descripcion||'Sin descripción cargada.';
+
+  const { data: remitos } = await db.from('remitos_v2')
     .select('numero_formateado,fecha,estado,total_valorizado')
     .eq('orden_compra_id', ocId)
     .order('fecha',{ascending:false});
-  if(error){ toast('Error: '+error.message,'error'); return; }
-  const rows=data||[];
-  const total=rows.reduce((s,r)=>s+Number(r.total_valorizado||0),0);
-  const lista=rows.length
-    ? rows.map(r=>`• ${r.numero_formateado} — ${fmtF(r.fecha)} — ${fmt(r.total_valorizado||0)} — ${r.estado}`).join('\n')
-    : 'Sin remitos vinculados todavía.';
-  alert(`Remitos de la OC ${numeroOc}\n\n${lista}\n\nTotal: ${fmt(total)}`);
+  const tbody=document.getElementById('doc-remitos-body');
+  tbody.innerHTML=(remitos&&remitos.length)
+    ? remitos.map(r=>`
+        <tr>
+          <td class="mono">${r.numero_formateado||'—'}</td>
+          <td class="mono">${fmtF(r.fecha)}</td>
+          <td><span class="estado ${r.estado}">${r.estado}</span></td>
+          <td class="mono" style="text-align:right">${r.total_valorizado?fmt(r.total_valorizado):'—'}</td>
+        </tr>`).join('')
+    : '<tr><td colspan="4" style="text-align:center;color:var(--muted);padding:20px">Todavía no hay remitos asociados a esta OC.</td></tr>';
+
+  document.getElementById('modal-detalle-oc').classList.add('show');
 }
+
+async function cargarClientesModalOC(){
+  const empId=document.getElementById('oc-empresa').value;
+  const sel=document.getElementById('oc-cliente');
+  if(!empId){ sel.innerHTML='<option value="">— Elegir empresa primero —</option>'; return; }
+  const data=await ClientesAPI.getClientesSelect(empId);
+  sel.innerHTML='<option value="">— Elegir —</option>'+(data||[]).map(c=>`<option value="${c.id}">${c.nombre}</option>`).join('');
+}
+
+function abrirNuevaOC(){
+  document.getElementById('oc-titulo').textContent='Nueva Orden de Compra';
+  document.getElementById('oc-empresa').value='';
+  document.getElementById('oc-cliente').innerHTML='<option value="">— Elegir empresa primero —</option>';
+  document.getElementById('oc-numero').value='';
+  document.getElementById('oc-monto').value='';
+  document.getElementById('oc-desc').value='';
+  document.getElementById('oc-numero-info').style.display='none';
+  document.getElementById('btn-guardar-oc').disabled=false;
+  document.getElementById('modal-oc').classList.add('show');
+}
+
+let _ocChequeoTimer=null;
+function chequearOcExistente(){
+  clearTimeout(_ocChequeoTimer);
+  const info=document.getElementById('oc-numero-info');
+  const btn=document.getElementById('btn-guardar-oc');
+  info.style.display='none';
+  btn.disabled=false;
+  const numero=document.getElementById('oc-numero').value.trim();
+  if(!numero) return;
+  _ocChequeoTimer=setTimeout(async()=>{
+    const empId=document.getElementById('oc-empresa').value;
+    const cliId=document.getElementById('oc-cliente').value;
+    if(!empId||!cliId) return;
+    const existente=await OrdenesCompraAPI.buscarOC(empId,cliId,numero);
+    if(existente){
+      info.style.display='';
+      info.textContent=`⚠ Ya existe una OC "${existente.numero_oc}" para este cliente (autorizado: ${fmt(existente.monto_autorizado)}). No se puede repetir — cambiá el número, o cargá el remito directamente contra la OC existente desde Remitos.`;
+      btn.disabled=true;
+    }
+  },400);
+}
+
+async function guardarOC(){
+  const empId=document.getElementById('oc-empresa').value;
+  const cliId=document.getElementById('oc-cliente').value;
+  const numero=document.getElementById('oc-numero').value.trim();
+  const monto=parseFloat(document.getElementById('oc-monto').value)||0;
+  const desc=document.getElementById('oc-desc').value.trim()||null;
+
+  if(!empId||!cliId){ toast('Elegí empresa y cliente.','warn'); return; }
+  if(!numero){ toast('Ingresá el número de OC.','warn'); return; }
+  if(!monto){ toast('Ingresá el monto autorizado.','warn'); return; }
+
+  // Chequeo final de duplicado justo antes de guardar (por las dudas de que
+  // hayan tipeado rápido y no llegó a correr el chequeo en vivo)
+  const existente=await OrdenesCompraAPI.buscarOC(empId,cliId,numero);
+  if(existente){
+    toast(`Ya existe la OC "${existente.numero_oc}" para este cliente — no se puede repetir.`,'error');
+    return;
+  }
+
+  try{
+    await OrdenesCompraAPI.crearOC({
+      empresa_id:empId, cliente_id:cliId, numero_oc:numero,
+      monto_autorizado:monto, descripcion:desc,
+    });
+    toast('OC creada','success');
+    cerrarModal('modal-oc');
+    cargarOrdenesCompra();
+  }catch(e){
+    toast('Error: '+(e?.message||String(e)),'error');
+  }
+}
+
 
 // ===== CONTRATOS =====
 async function cargarContratos(){
