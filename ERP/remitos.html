@@ -13,6 +13,7 @@
 <script src="clientes.api.js"></script>
 <script src="remitos.api.js"></script>
 <script src="contratos.api.js"></script>
+<script src="ordenes_compra.api.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js"></script>
 <style>
   .kpi-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:14px;margin-bottom:20px;}
@@ -153,7 +154,7 @@
     <div class="form-row full">
       <div class="form-group">
         <label>Cliente</label>
-        <select id="nr-cliente" onchange="cargarContratos()"></select>
+        <select id="nr-cliente" onchange="cargarContratos();buscarOcEnVivo()"></select>
       </div>
     </div>
     <div class="form-row full" id="grupo-contrato" style="display:none">
@@ -166,9 +167,14 @@
     <div class="form-row">
       <div class="form-group">
         <label>Orden de compra</label>
-        <input type="text" id="nr-oc" placeholder="N° OC del cliente">
+        <input type="text" id="nr-oc" placeholder="N° OC del cliente" oninput="buscarOcEnVivo()">
+        <div id="nr-oc-info" style="display:none;margin-top:6px;padding:8px 12px;border-radius:8px;font-size:12px"></div>
       </div>
-      <div class="form-group">
+      <div class="form-group" id="grupo-oc-monto" style="display:none">
+        <label>Monto autorizado de esta OC <span style="color:var(--red)">*</span> <span style="color:var(--muted);font-weight:400;text-transform:none;font-size:11px">(OC nueva — se pide una sola vez)</span></label>
+        <input type="number" id="nr-oc-monto" placeholder="0.00">
+      </div>
+      <div class="form-group" id="grupo-sector-alt">
         <label>Orden de trabajo / Sector</label>
         <input type="text" id="nr-sector" placeholder="Sector o referencia interna">
       </div>
@@ -1065,7 +1071,95 @@ function toggleContrato(){
   if(tipo==='contrato') cargarContratos();
 }
 
+// ══════════════════════════════════════════════════════════════
+// ÓRDENES DE COMPRA — búsqueda/creación en vivo desde el remito
+// ══════════════════════════════════════════════════════════════
+let _ocEncontrada = null; // OC existente que matchea lo tipeado, o null
+let _ocBuscarTimer = null;
+
+function buscarOcEnVivo(){
+  clearTimeout(_ocBuscarTimer);
+  const info = document.getElementById('nr-oc-info');
+  const grupoMonto = document.getElementById('grupo-oc-monto');
+  const numero = document.getElementById('nr-oc').value.trim();
+  _ocEncontrada = null;
+  if(!numero){ info.style.display='none'; grupoMonto.style.display='none'; return; }
+
+  _ocBuscarTimer = setTimeout(async () => {
+    const empId = document.getElementById('nr-empresa').value;
+    const cliId = document.getElementById('nr-cliente').value;
+    if(!empId || !cliId){
+      info.style.display='';
+      info.style.cssText += 'background:rgba(122,128,153,0.1);border:1px solid rgba(122,128,153,0.2);color:var(--muted)';
+      info.textContent='Elegí empresa y cliente primero para poder buscar/crear la OC.';
+      grupoMonto.style.display='none';
+      return;
+    }
+    try{
+      const oc = await OrdenesCompraAPI.buscarOC(empId, cliId, numero);
+      if(oc){
+        _ocEncontrada = oc;
+        const consumido = await OrdenesCompraAPI.getConsumidoOC(oc.id, editId||null);
+        const disponible = Number(oc.monto_autorizado||0) - consumido;
+        info.style.display='';
+        info.style.cssText += `background:rgba(16,185,129,0.1);border:1px solid rgba(16,185,129,0.25);color:var(--green)`;
+        info.innerHTML = `✓ OC existente — autorizado: ${fmt(oc.monto_autorizado)} · consumido: ${fmt(consumido)} · disponible: <strong>${fmt(disponible)}</strong>`;
+        grupoMonto.style.display='none';
+      } else {
+        _ocEncontrada = null;
+        info.style.display='';
+        info.style.cssText += 'background:rgba(59,130,246,0.1);border:1px solid rgba(59,130,246,0.25);color:var(--blue)';
+        info.textContent='OC nueva — se va a crear al guardar. Completá el monto autorizado →';
+        grupoMonto.style.display='';
+      }
+    }catch(e){
+      console.warn('Error buscando OC:', e);
+    }
+  }, 400);
+}
+
+// Resuelve la OC a usar para este remito: si ya existe la reusa, si no la
+// crea con el monto autorizado cargado. Devuelve { id, monto_autorizado } o
+// null si no se cargó ningún número de OC (campo vacío, sigue siendo válido).
+async function resolverOrdenCompra(empresaId, clienteId){
+  const numero = document.getElementById('nr-oc').value.trim();
+  if(!numero) return null;
+
+  if(_ocEncontrada && _ocEncontrada.numero_oc.toLowerCase()===numero.toLowerCase()){
+    return _ocEncontrada;
+  }
+
+  // No se encontró antes (o cambió el texto sin re-buscar todavía) — buscar
+  // una última vez por las dudas antes de decidir crear.
+  const existente = await OrdenesCompraAPI.buscarOC(empresaId, clienteId, numero);
+  if(existente) return existente;
+
+  const montoAut = parseFloat(document.getElementById('nr-oc-monto').value)||0;
+  if(!montoAut){
+    toast('Ingresá el monto autorizado para la OC nueva.', 'warn');
+    throw new Error('monto_oc_requerido');
+  }
+  return await OrdenesCompraAPI.crearOC({
+    empresa_id: empresaId, cliente_id: clienteId,
+    numero_oc: numero, monto_autorizado: montoAut,
+  });
+}
+
+// Alerta (no bloqueante) si este remito hace que se supere el disponible.
+async function avisarSiExcedeOC(oc, montoRemito, remitoIdActual){
+  if(!oc) return;
+  try{
+    const consumidoPrevio = await OrdenesCompraAPI.getConsumidoOC(oc.id, remitoIdActual||null);
+    const disponibleAntes = Number(oc.monto_autorizado||0) - consumidoPrevio;
+    if(montoRemito > disponibleAntes){
+      const excedido = montoRemito - disponibleAntes;
+      toast(`⚠ Este remito supera el saldo disponible de la OC ${oc.numero_oc} por ${fmt(excedido)} (disponible antes: ${fmt(disponibleAntes)}).`, 'warn');
+    }
+  }catch(e){ console.warn('No se pudo chequear el excedido de OC:', e); }
+}
+
 async function cargarContratos(){
+
   const tipo=document.getElementById('nr-tipo').value;
   if(tipo!=='contrato') return;
   const empId=document.getElementById('nr-empresa').value;
@@ -1147,6 +1241,10 @@ function abrirNuevo(){
   document.getElementById('rem-titulo').textContent='Nuevo remito';
   document.getElementById('nr-tipo').value='servicio';
   document.getElementById('nr-oc').value='';
+  document.getElementById('nr-oc-monto').value='';
+  document.getElementById('nr-oc-info').style.display='none';
+  document.getElementById('grupo-oc-monto').style.display='none';
+  _ocEncontrada=null;
   document.getElementById('nr-sector').value='';
   const msgEl=document.getElementById('msg-items-contrato');
   if(msgEl) msgEl.style.display='none';
@@ -1170,6 +1268,7 @@ async function editarRemito(id){
   await cargarDatosModal();
   document.getElementById('nr-cliente').value=r.cliente_id||'';
   toggleContrato();
+  buscarOcEnVivo();
   // Cargar items guardados
   const items=await RemitosAPI.getItemsRemito(id);
   const tbody=document.getElementById('items-body');
@@ -1304,6 +1403,20 @@ async function guardarRemito(estado){
     sector:document.getElementById('nr-sector').value||null,
     estado, migrado:false,
   };
+
+  // Resolver la OC (buscar existente o crear nueva) ANTES de guardar el
+  // remito, para poder vincular orden_compra_id desde el alta.
+  let ocResuelta=null;
+  if(payload.orden_compra){
+    try{
+      ocResuelta = await resolverOrdenCompra(empId, clienteId);
+      if(ocResuelta) payload.orden_compra_id = ocResuelta.id;
+    }catch(e){
+      if(e.message==='monto_oc_requerido') return; // el toast ya se mostró
+      console.warn('Error resolviendo OC:', e);
+      toast('No se pudo procesar la OC — el remito se guarda igual, pero sin vincular.', 'warn');
+    }
+  }
   if(!editId && _rehaciendoDesdeId){
     payload.reemplaza_a_remito_id = _rehaciendoDesdeId;
     payload.reemplaza_a_numero    = _rehaciendoDesdeNumero;
@@ -1379,6 +1492,9 @@ async function guardarRemito(estado){
   payload.total_valorizado=totalValorizado||null;
   // Actualizar total en la tabla (siempre, para nuevo y edición)
   try{ await RemitosAPI.actualizarRemito(remitoId,{total_valorizado:totalValorizado||null}); }catch(e){ console.warn('total_valorizado no actualizado:',e); }
+
+  // Avisar (sin bloquear) si este remito hace que se supere el disponible de la OC
+  if(ocResuelta && totalValorizado>0) await avisarSiExcedeOC(ocResuelta, totalValorizado, remitoId);
   if(itemsData.length){
     // Usar siempre insert directo (la RPC guardar_remito_con_items falla)
     try{ await RemitosAPI.insertarItemsDirecto(remitoId, itemsData); }catch(e){
