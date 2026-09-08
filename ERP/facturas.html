@@ -192,6 +192,19 @@
     </div>
     <div class="form-row">
       <div class="form-group">
+        <label>Moneda</label>
+        <select id="nf-moneda" onchange="toggleTipoCambio()">
+          <option value="ARS">Pesos (ARS)</option>
+          <option value="USD">Dólares (USD)</option>
+        </select>
+      </div>
+      <div class="form-group" id="grupo-tipo-cambio" style="display:none">
+        <label>Tipo de cambio <span style="color:var(--red)">*</span> <span style="color:var(--muted);font-weight:400;text-transform:none;font-size:11px">($ por USD 1, al momento de la factura)</span></label>
+        <input type="number" id="nf-tipo-cambio" step="any" placeholder="ej: 1250.50" oninput="calcularTotal()">
+      </div>
+    </div>
+    <div class="form-row">
+      <div class="form-group">
         <label>Monto neto</label>
         <input type="number" id="nf-neto" placeholder="0.00" oninput="calcularTotal()">
       </div>
@@ -204,6 +217,7 @@
       <div class="form-group">
         <label>Total</label>
         <input type="number" id="nf-total" placeholder="0.00" style="font-weight:600;color:var(--green)">
+        <span id="nf-total-ars-info" style="display:none;font-size:11px;color:var(--muted);margin-top:4px"></span>
       </div>
       <div class="form-group">
         <label>Estado</label>
@@ -898,7 +912,7 @@ async function cargarFacturas(){
     tipo: r=>r.tipo||'',
     cliente: r=>r.clientes?.nombre||'',
     empresa: r=>r.empresas?.nombre||'',
-    monto_total: r=>Number(r.monto_total||0),
+    monto_total: r=>Number(r.monto_total_ars||r.monto_total||0),
     fecha_cobro_estimada: r=>r.fecha_cobro_estimada||'',
     estado_visual: r=>r.estado_visual||'',
   });
@@ -914,11 +928,20 @@ async function cargarFacturas(){
     return r.estado_visual;
   }
   // Bruto: solo facturas activas (no NC, no anuladas totalmente)
-  const totalFac=rows.filter(r=>!esNC(r)&&r.estado!=='anulada').reduce((s,r)=>s+Number(r.monto_total||0),0);
+  // Función auxiliar: el crédito acumulado (monto_nc_acumulado) se guarda en
+  // la MISMA moneda que la factura — para sumarlo en pesos hay que aplicar
+  // la misma proporción sobre el equivalente en pesos.
+  const acreditadoArs=r=>{
+    const bruto=Number(r.monto_total||0);
+    const brutoArs=Number(r.monto_total_ars||r.monto_total||0);
+    const acum=Number(r.monto_nc_acumulado||0);
+    return bruto ? brutoArs*(acum/bruto) : 0;
+  };
+  const totalFac=rows.filter(r=>!esNC(r)&&r.estado!=='anulada').reduce((s,r)=>s+Number(r.monto_total_ars||r.monto_total||0),0);
   // Crédito ya aplicado a esas mismas facturas (vive en monto_nc_acumulado, no se vuelve a sumar por NC aparte)
-  const totalAcreditado=rows.filter(r=>!esNC(r)&&r.estado!=='anulada').reduce((s,r)=>s+Number(r.monto_nc_acumulado||0),0);
+  const totalAcreditado=rows.filter(r=>!esNC(r)&&r.estado!=='anulada').reduce((s,r)=>s+acreditadoArs(r),0);
   // Informativo: total de NC emitidas en el período (para mostrar aparte, no participa del cálculo del neto)
-  const totalNC=rows.filter(r=>esNC(r)).reduce((s,r)=>s+Number(r.monto_total||0),0);
+  const totalNC=rows.filter(r=>esNC(r)).reduce((s,r)=>s+Number(r.monto_total_ars||r.monto_total||0),0);
   const neto=totalFac-totalAcreditado;
 
   document.getElementById('contenido').innerHTML=`
@@ -937,6 +960,7 @@ async function cargarFacturas(){
         <th onclick="ordenarPor('facturas','tipo',cargarFacturas)" style="cursor:pointer;user-select:none">Tipo ${flechaOrden('facturas','tipo')}</th>
         <th onclick="ordenarPor('facturas','cliente',cargarFacturas)" style="cursor:pointer;user-select:none">Cliente ${flechaOrden('facturas','cliente')}</th>
         <th onclick="ordenarPor('facturas','monto_total',cargarFacturas)" style="cursor:pointer;user-select:none">Total ${flechaOrden('facturas','monto_total')}</th>
+        <th style="text-align:center">Moneda</th>
         <th style="text-align:center">Rem.</th>
         <th onclick="ordenarPor('facturas','estado_visual',cargarFacturas)" style="cursor:pointer;user-select:none">Estado ${flechaOrden('facturas','estado_visual')}</th>
         <th onclick="ordenarPor('facturas','fecha_cobro_estimada',cargarFacturas)" style="cursor:pointer;user-select:none">Vence ${flechaOrden('facturas','fecha_cobro_estimada')}</th>
@@ -953,7 +977,8 @@ async function cargarFacturas(){
           <td class="mono">${r.numero_factura||'—'}</td>
           <td><span class="estado ${r.tipo==='NC'?'anulada':'pendiente'}" style="${r.tipo==='NC'?'background:rgba(239,68,68,0.1);color:var(--red)':'background:var(--bg3);color:var(--muted)'}">${r.tipo}</span></td>
           <td>${r.clientes?.nombre||'—'}</td>
-          <td class="mono" style="cursor:pointer;text-decoration:underline dotted;text-underline-offset:3px" onclick="abrirDetalleFc('${r.id}')" title="Ver detalle">${esNC(r)?'−':''}${fmt(r.monto_total)}${!esNC(r)&&acumNC>0?`<div style="font-size:10px;color:var(--purple)">saldo: ${fmt(saldoNeto)}</div>`:''}</td>
+          <td class="mono" style="cursor:pointer;text-decoration:underline dotted;text-underline-offset:3px" onclick="abrirDetalleFc('${r.id}')" title="Ver detalle">${esNC(r)?'−':''}${r.moneda==='USD'?'US$ '+fmt(r.monto_total).replace('$',''):fmt(r.monto_total)}${r.moneda==='USD'?`<div style="font-size:10px;color:var(--blue)">≈ ${fmt(r.monto_total_ars||0)} (TC ${r.tipo_cambio})</div>`:''}${!esNC(r)&&acumNC>0?`<div style="font-size:10px;color:var(--purple)">saldo: ${fmt(saldoNeto)}</div>`:''}</td>
+          <td style="text-align:center">${r.moneda==='USD'?'<span style="font-size:10px;color:var(--blue);border:1px solid var(--blue);border-radius:4px;padding:1px 5px">USD</span>':'<span style="font-size:10px;color:var(--muted)">ARS</span>'}</td>
           <td style="text-align:center">${(r.remitos_ids&&r.remitos_ids.length)?'<span title="Tiene remitos vinculados" style="display:inline-block;width:10px;height:10px;border-radius:50%;background:#22d3a0"></span>':'<span title="Sin remitos vinculados" style="display:inline-block;width:10px;height:10px;border-radius:50%;background:transparent;border:2px solid #5a6278"></span>'}</td>
           <td>${(r.tipo==='NC'||r.tipo==='ND')?'<span style="color:var(--muted);font-size:12px">— no aplica —</span>':`<span class="estado ${r.estado_visual}">${estadoLabel(r)}</span>`}</td>
           <td>${r.fecha_cobro_estimada?`<span style="font-size:12px${venc?';color:var(--red)':''}">${fmtF(r.fecha_cobro_estimada)}${venc?` <span class="dias-badge">${dias}d</span>`:''}</span>`:'—'}</td>
@@ -1062,10 +1087,29 @@ async function cargarClientesRemito(){
   sel.innerHTML=(data||[]).map(c=>`<option value="${c.id}">${c.nombre}</option>`).join('');
 }
 
+function toggleTipoCambio(){
+  const esUsd = document.getElementById('nf-moneda').value === 'USD';
+  document.getElementById('grupo-tipo-cambio').style.display = esUsd ? '' : 'none';
+  calcularTotal();
+}
+
 function calcularTotal(){
   const neto=parseFloat(document.getElementById('nf-neto').value)||0;
   const iva=parseFloat(document.getElementById('nf-iva').value)||0;
-  document.getElementById('nf-total').value=(neto+iva).toFixed(2);
+  const total=neto+iva;
+  document.getElementById('nf-total').value=total.toFixed(2);
+
+  const esUsd = document.getElementById('nf-moneda').value === 'USD';
+  const infoEl = document.getElementById('nf-total-ars-info');
+  if(esUsd){
+    const tc=parseFloat(document.getElementById('nf-tipo-cambio').value)||0;
+    infoEl.style.display='';
+    infoEl.textContent = tc>0
+      ? `≈ ${fmt(total*tc)} al tipo de cambio cargado`
+      : '⚠ Ingresá el tipo de cambio para ver el equivalente en pesos';
+  } else {
+    infoEl.style.display='none';
+  }
 }
 
 function abrirNuevaFactura(){
@@ -1075,6 +1119,9 @@ function abrirNuevaFactura(){
   _remitosSeleccionados=[];
   document.getElementById('modal-titulo').textContent='Nueva factura';
   document.getElementById('nf-numero').value='';
+  document.getElementById('nf-moneda').value='ARS';
+  document.getElementById('nf-tipo-cambio').value='';
+  toggleTipoCambio();
   document.getElementById('nf-neto').value='';
   document.getElementById('nf-iva').value='';
   document.getElementById('nf-total').value='';
@@ -1108,6 +1155,9 @@ async function editarFactura(id){
   document.getElementById('nf-neto').value=data.monto_neto;
   document.getElementById('nf-iva').value=data.monto_iva;
   document.getElementById('nf-total').value=data.monto_total;
+  document.getElementById('nf-moneda').value=data.moneda||'ARS';
+  document.getElementById('nf-tipo-cambio').value=data.tipo_cambio||'';
+  toggleTipoCambio();
   document.getElementById('nf-estado').value=data.estado;
   document.getElementById('nf-obs').value=data.observaciones||'';
   _remitosSeleccionados=data.remitos_ids||[];
@@ -1155,6 +1205,13 @@ async function guardarFactura(){
     return;
   }
 
+  const moneda = document.getElementById('nf-moneda').value;
+  const tipoCambio = parseFloat(document.getElementById('nf-tipo-cambio').value)||null;
+  if(moneda==='USD' && !tipoCambio){
+    toast('Ingresá el tipo de cambio para una factura en dólares.', 'warn');
+    return;
+  }
+
   const payload={
     empresa_id:document.getElementById('nf-empresa').value,
     cliente_id:document.getElementById('nf-cliente').value,
@@ -1165,6 +1222,8 @@ async function guardarFactura(){
     monto_neto:parseFloat(document.getElementById('nf-neto').value)||0,
     monto_iva:parseFloat(document.getElementById('nf-iva').value)||0,
     monto_total:parseFloat(document.getElementById('nf-total').value)||0,
+    moneda,
+    tipo_cambio: moneda==='USD' ? tipoCambio : null,
     estado:document.getElementById('nf-estado').value,
     observaciones:document.getElementById('nf-obs').value||null,
     remitos_ids:_remitosSeleccionados,
@@ -1390,6 +1449,9 @@ async function convertirAFactura(remitoId,clienteId,empresaId,total){
   document.getElementById('nf-empresa').value=empresaId;
   await cargarClientesPorEmpresa();
   document.getElementById('nf-cliente').value=clienteId;
+  document.getElementById('nf-moneda').value='ARS';
+  document.getElementById('nf-tipo-cambio').value='';
+  toggleTipoCambio();
   document.getElementById('nf-total').value=total;
   document.getElementById('nf-neto').value=total;
   document.getElementById('nf-iva').value='';
@@ -1717,7 +1779,7 @@ async function abrirDetalleFc(facturaId){
     document.getElementById('dfc-estado').innerHTML    = `<span class="estado ${fc.estado}">${fc.estado}</span>`;
     document.getElementById('dfc-neto').textContent    = fmt(fc.monto_neto||0);
     document.getElementById('dfc-iva').textContent     = fmt(fc.monto_iva||0);
-    document.getElementById('dfc-total').textContent   = fmt(fc.monto_total||0)
+    document.getElementById('dfc-total').textContent   = (fc.moneda==='USD'?`US$ ${fmt(fc.monto_total||0).replace('$','')} (≈ ${fmt(fc.monto_total_ars||0)} @ TC ${fc.tipo_cambio})`:fmt(fc.monto_total||0))
       + (Number(fc.monto_nc_acumulado||0)>0 ? `  ·  NC aplicada: -${fmt(fc.monto_nc_acumulado)}  ·  saldo: ${fmt(Math.max(Number(fc.monto_total||0)-Number(fc.monto_nc_acumulado||0),0))}` : '');
     document.getElementById('dfc-btn-editar').onclick  = ()=>{ cerrarModal('modal-detalle-fc'); editarFactura(facturaId); };
 
@@ -1858,12 +1920,19 @@ async function cargarCuentaCorriente(){
   // NO si existe un registro de cobro cargado. Para todo lo anterior a que
   // empezamos a usar el sistema (marzo/abril 2026) no hay comprobante de
   // cobro guardado aunque esté pagado — por eso NO podemos calcular el saldo
-  // sumando cobros; hay que confiar en el estado.
+  // sumando cobros; hay que confiar en el estado. Siempre en pesos reales,
+  // aunque la factura esté cargada en USD (monto_total_ars ya lo convierte).
   //   - estado='cobrada' o 'anulada' → ya está saldada, no suma
-  //   - estado='pendiente' o 'anulada_parcial' → suma el saldo neto (monto - NC)
+  //   - estado='pendiente' o 'anulada_parcial' → suma el saldo neto (monto - NC), en $
   const saldoReal = facturasReales
     .filter(f=>f.estado!=='cobrada'&&f.estado!=='anulada')
-    .reduce((s,f)=>s+Number(f.monto_total||0)-Number(f.monto_nc_acumulado||0), 0);
+    .reduce((s,f)=>{
+      const bruto=Number(f.monto_total||0);
+      const brutoArs=Number(f.monto_total_ars||f.monto_total||0);
+      const acum=Number(f.monto_nc_acumulado||0);
+      const acumArs=bruto?brutoArs*(acum/bruto):0;
+      return s+(brutoArs-acumArs);
+    }, 0);
 
   // ── Movimientos cronológicos — quedan como historial/auditoría, no como
   // fuente del saldo (ver saldoReal arriba).
@@ -1913,8 +1982,8 @@ async function cargarCuentaCorriente(){
   if(!_ordenTablas['cuenta-corriente']) _ordenTablas['cuenta-corriente']={campo:'fecha',dir:'desc'};
   movimientosFiltrados=aplicarOrden('cuenta-corriente', movimientosFiltrados, { fecha: m=>m.fecha||'' });
 
-  const totalFacturado=facturasReales.reduce((s,f)=>s+Number(f.monto_total||0),0);
-  const totalNC=notasCredito.reduce((s,f)=>s+Number(f.monto_total||0),0);
+  const totalFacturado=facturasReales.reduce((s,f)=>s+Number(f.monto_total_ars||f.monto_total||0),0);
+  const totalNC=notasCredito.reduce((s,f)=>s+Number(f.monto_total_ars||f.monto_total||0),0);
   const totalCobrado=cobros.reduce((s,c)=>s+Number(c.monto||0),0);
   const totalRemitosPend=remitosPendFiltrados.reduce((s,r)=>s+Number(r.total_valorizado||0),0);
   const saldoFinal=saldoReal;

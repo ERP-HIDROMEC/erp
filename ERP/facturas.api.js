@@ -35,13 +35,13 @@ const FacturasAPI = (() => {
       { data: porCobrar },
       { data: vencidas },
     ] = await Promise.all([
-      db.from('facturas_emitidas').select('monto_total,tipo,monto_nc_acumulado')
+      db.from('facturas_emitidas').select('monto_total,tipo,monto_nc_acumulado,moneda,tipo_cambio,monto_total_ars')
         .eq('empresa_id', empresaId).neq('estado', 'anulada')
         .gte('fecha_emision', fechaIni).lte('fecha_emision', fechaFin),
-      db.from('facturas_emitidas').select('monto_total,tipo,monto_nc_acumulado')
+      db.from('facturas_emitidas').select('monto_total,tipo,monto_nc_acumulado,moneda,tipo_cambio,monto_total_ars')
         .eq('empresa_id', empresaId).neq('estado', 'anulada')
         .gte('fecha_emision', anioIni).lte('fecha_emision', anioFin),
-      db.from('facturas_emitidas').select('monto_total,tipo,monto_nc_acumulado')
+      db.from('facturas_emitidas').select('monto_total,tipo,monto_nc_acumulado,moneda,tipo_cambio,monto_total_ars')
         .eq('empresa_id', empresaId).not('estado', 'in', '("cobrada","anulada")'),
       db.from('facturas_emitidas').select('id')
         .eq('empresa_id', empresaId).not('estado', 'in', '("cobrada","anulada")')
@@ -52,7 +52,7 @@ const FacturasAPI = (() => {
 
   async function getFacturasVencidasDetalle(limite) {
     let q = db.from('facturas_emitidas')
-      .select('numero_factura,monto_total,tipo,monto_nc_acumulado,fecha_cobro_estimada,clientes(nombre),empresas(nombre)')
+      .select('numero_factura,monto_total,tipo,monto_nc_acumulado,moneda,tipo_cambio,monto_total_ars,fecha_cobro_estimada,clientes(nombre),empresas(nombre)')
       .not('estado', 'in', '("cobrada","anulada")')
       .lt('fecha_cobro_estimada', hoy())
       .order('fecha_cobro_estimada');
@@ -64,7 +64,7 @@ const FacturasAPI = (() => {
 
   async function getFacturaMensual(empresaId, fechaIni, fechaFin) {
     let q = db.from('facturas_emitidas')
-      .select('monto_total,tipo,monto_nc_acumulado,fecha_emision,empresas(nombre)')
+      .select('monto_total,tipo,monto_nc_acumulado,moneda,tipo_cambio,monto_total_ars,fecha_emision,empresas(nombre)')
       .neq('estado', 'anulada')
       .gte('fecha_emision', fechaIni)
       .lte('fecha_emision', fechaFin)
@@ -77,7 +77,7 @@ const FacturasAPI = (() => {
 
   async function getFacturasPorCliente(empresaId, fechaIni, fechaFin) {
     let q = db.from('facturas_emitidas')
-      .select('monto_total,tipo,monto_nc_acumulado,clientes(nombre),empresas(nombre),empresa_id')
+      .select('monto_total,tipo,monto_nc_acumulado,moneda,tipo_cambio,monto_total_ars,clientes(nombre),empresas(nombre),empresa_id')
       .neq('estado', 'anulada')
       .gte('fecha_emision', fechaIni)
       .lte('fecha_emision', fechaFin);
@@ -176,6 +176,17 @@ const FacturasAPI = (() => {
     return (data && data[0]) || null; // { nuevo_estado, nuevo_acumulado, monto_total }
   }
 
+  // Reversa: para cuando se edita una NC ya vinculada y cambia de factura
+  // origen, cambia de monto, o se desvincula.
+  async function revertirNotaCredito(facturaOrigenId, montoNC) {
+    const { data, error } = await db.rpc('revertir_nc_a_factura', {
+      p_factura_id: facturaOrigenId,
+      p_monto_nc: montoNC,
+    });
+    if (error) throw error;
+    return (data && data[0]) || null;
+  }
+
   async function marcarFacturaCobrada(id) {
     const { error } = await db.from('facturas_emitidas')
       .update({ estado: 'cobrada' })
@@ -267,6 +278,7 @@ const FacturasAPI = (() => {
     actualizarFactura,
     anularFactura,
     aplicarNotaCredito,
+    revertirNotaCredito,
     marcarFacturaCobrada,
     importarFacturas,
     getCobros,

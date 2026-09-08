@@ -603,7 +603,11 @@ function sumArr(arr, campo) {
 //    no $100 de ingreso más $100 de NC restados en otro lado).
 function montoNetoFactura(r) {
   if (r.tipo === 'NC') return 0;
-  return Number(r.monto_total || 0) - Number(r.monto_nc_acumulado || 0);
+  const bruto = Number(r.monto_total || 0);
+  const brutoArs = Number(r.monto_total_ars || r.monto_total || 0); // ARS real, aunque esté en USD
+  const acum = Number(r.monto_nc_acumulado || 0); // guardado en la MISMA moneda que la factura
+  const acumArs = bruto ? brutoArs * (acum / bruto) : 0;
+  return brutoArs - acumArs;
 }
 
 function setText(id, val) {
