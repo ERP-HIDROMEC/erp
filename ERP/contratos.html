@@ -13,6 +13,7 @@
 <script src="clientes.api.js"></script>
 <script src="contratos.api.js"></script>
 <script src="remitos.api.js"></script>
+<script src="ordenes_compra.api.js"></script>
 <style>
   .layout{display:grid;grid-template-columns:1fr 1fr;gap:20px;}
   tr:hover tr.selected .estado.activo{background:rgba(16,185,129,0.15);color:var(--green);}
@@ -48,6 +49,7 @@
     <button class="tab active" onclick="cambiarTab('contratos',this)">Contratos</button>
     <button class="tab" onclick="cambiarTab('precios',this)">Lista de precios</button>
     <button class="tab" onclick="cambiarTab('historial',this)">Historial de precios</button>
+    <button class="tab" onclick="cambiarTab('oc',this)">Órdenes de Compra</button>
   </div>
 
   <div class="filtros">
@@ -231,7 +233,90 @@ function cambiarTab(tab,btn){
 function recargar(){
   if(tabActual==='contratos') cargarContratos();
   else if(tabActual==='precios') cargarPrecios();
+  else if(tabActual==='oc') cargarOrdenesCompra();
   else cargarHistorial();
+}
+
+// ===== ÓRDENES DE COMPRA =====
+async function cargarOrdenesCompra(){
+  document.getElementById('kpis').innerHTML='';
+  document.getElementById('contenido').innerHTML='<div class="spinner-wrap"><div class="spinner"></div>Cargando...</div>';
+  const emp=document.getElementById('f-empresa').value;
+  const buscar=document.getElementById('f-buscar').value.toLowerCase();
+
+  let ocData;
+  const { data, error } = await db.from('ordenes_compra')
+    .select('*,clientes(nombre),empresas(nombre)')
+    .order('created_at',{ascending:false});
+  if(error){ toast('Error al cargar órdenes de compra: '+error.message,'error'); return; }
+  ocData=data||[];
+
+  if(emp) ocData=ocData.filter(r=>r.empresa_id===emp);
+  if(buscar) ocData=ocData.filter(r=>
+    (r.numero_oc||'').toLowerCase().includes(buscar) ||
+    (r.clientes?.nombre||'').toLowerCase().includes(buscar));
+
+  // Consumido de cada OC (en paralelo)
+  const consumidos=await Promise.all(ocData.map(oc=>OrdenesCompraAPI.getConsumidoOC(oc.id)));
+  let rows=ocData.map((oc,i)=>({...oc, consumido:consumidos[i], disponible:Number(oc.monto_autorizado||0)-consumidos[i]}));
+
+  rows=aplicarOrden('ordenes-compra', rows, {
+    numero_oc: r=>r.numero_oc||'',
+    cliente: r=>r.clientes?.nombre||'',
+    monto_autorizado: r=>Number(r.monto_autorizado||0),
+    consumido: r=>Number(r.consumido||0),
+    disponible: r=>Number(r.disponible||0),
+    created_at: r=>r.created_at||'',
+  });
+
+  const totalAutorizado=rows.reduce((s,r)=>s+Number(r.monto_autorizado||0),0);
+  const totalConsumido=rows.reduce((s,r)=>s+Number(r.consumido||0),0);
+  const excedidas=rows.filter(r=>r.disponible<0).length;
+
+  document.getElementById('kpis').innerHTML=`
+    <div class="kpi-card blue"><div class="kpi-label">Órdenes de Compra</div><div class="kpi-value">${rows.length}</div></div>
+    <div class="kpi-card green"><div class="kpi-label">Total autorizado</div><div class="kpi-value" style="font-size:16px">${fmt(totalAutorizado)}</div></div>
+    <div class="kpi-card orange"><div class="kpi-label">Total consumido</div><div class="kpi-value" style="font-size:16px">${fmt(totalConsumido)}</div></div>
+    <div class="kpi-card red"><div class="kpi-label">Excedidas</div><div class="kpi-value">${excedidas}</div></div>`;
+
+  document.getElementById('contenido').innerHTML=`
+    <div style="overflow-x:auto"><table>
+      <thead><tr>
+        <th onclick="ordenarPor('ordenes-compra','numero_oc',cargarOrdenesCompra)" style="cursor:pointer;user-select:none">N° OC ${flechaOrden('ordenes-compra','numero_oc')}</th>
+        <th>Empresa</th>
+        <th onclick="ordenarPor('ordenes-compra','cliente',cargarOrdenesCompra)" style="cursor:pointer;user-select:none">Cliente ${flechaOrden('ordenes-compra','cliente')}</th>
+        <th onclick="ordenarPor('ordenes-compra','monto_autorizado',cargarOrdenesCompra)" style="cursor:pointer;user-select:none">Autorizado ${flechaOrden('ordenes-compra','monto_autorizado')}</th>
+        <th onclick="ordenarPor('ordenes-compra','consumido',cargarOrdenesCompra)" style="cursor:pointer;user-select:none">Consumido ${flechaOrden('ordenes-compra','consumido')}</th>
+        <th onclick="ordenarPor('ordenes-compra','disponible',cargarOrdenesCompra)" style="cursor:pointer;user-select:none">Disponible ${flechaOrden('ordenes-compra','disponible')}</th>
+        <th onclick="ordenarPor('ordenes-compra','created_at',cargarOrdenesCompra)" style="cursor:pointer;user-select:none">Creada ${flechaOrden('ordenes-compra','created_at')}</th>
+        <th>Remitos</th>
+      </tr></thead>
+      <tbody>${rows.length?rows.map(r=>`
+        <tr class="${r.disponible<0?'vencida-row':''}">
+          <td class="mono">${r.numero_oc}</td>
+          <td style="font-size:12px">${r.empresas?.nombre||'—'}</td>
+          <td>${r.clientes?.nombre||'—'}</td>
+          <td class="mono">${fmt(r.monto_autorizado)}</td>
+          <td class="mono">${fmt(r.consumido)}</td>
+          <td class="mono" style="color:${r.disponible<0?'var(--red)':'var(--green)'};font-weight:600">${fmt(r.disponible)}</td>
+          <td class="mono" style="font-size:12px">${fmtF(r.created_at)}</td>
+          <td><button class="btn btn-sm btn-ghost" onclick="verRemitosDeOC('${r.id}','${r.numero_oc}')">Ver remitos</button></td>
+        </tr>`).join(''):'<tr><td colspan="8" style="text-align:center;color:var(--muted);padding:30px">No hay órdenes de compra cargadas.</td></tr>'}</tbody>
+    </table></div>`;
+}
+
+async function verRemitosDeOC(ocId, numeroOc){
+  const { data, error } = await db.from('remitos_v2')
+    .select('numero_formateado,fecha,estado,total_valorizado')
+    .eq('orden_compra_id', ocId)
+    .order('fecha',{ascending:false});
+  if(error){ toast('Error: '+error.message,'error'); return; }
+  const rows=data||[];
+  const total=rows.reduce((s,r)=>s+Number(r.total_valorizado||0),0);
+  const lista=rows.length
+    ? rows.map(r=>`• ${r.numero_formateado} — ${fmtF(r.fecha)} — ${fmt(r.total_valorizado||0)} — ${r.estado}`).join('\n')
+    : 'Sin remitos vinculados todavía.';
+  alert(`Remitos de la OC ${numeroOc}\n\n${lista}\n\nTotal: ${fmt(total)}`);
 }
 
 // ===== CONTRATOS =====
