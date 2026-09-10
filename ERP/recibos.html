@@ -30,7 +30,9 @@
     <button class="tab active" onclick="cambiarTabRecibos('empleados',this)">Accesos de empleados</button>
     <button class="tab" onclick="cambiarTabRecibos('cargar',this)">Cargar recibos</button>
     <button class="tab" onclick="cambiarTabRecibos('estado',this)">Estado de firmas</button>
-    <button class="tab" onclick="cambiarTabRecibos('notif',this)">⚠ Disconformidades <span id="badge-tab-noconforme" style="display:none;background:var(--red);color:#fff;border-radius:20px;padding:1px 7px;font-size:11px;margin-left:4px"></span></button>
+    <button class="tab" onclick="cambiarTabRecibos('disconf',this)">⚠ Disconformidades <span id="badge-tab-noconforme" style="display:none;background:var(--red);color:#fff;border-radius:20px;padding:1px 7px;font-size:11px;margin-left:4px"></span></button>
+    <button class="tab" onclick="cambiarTabRecibos('legajo',this)">🪪 Legajo digital <span id="badge-tab-legajo" style="display:none;background:var(--orange);color:#fff;border-radius:20px;padding:1px 7px;font-size:11px;margin-left:4px"></span></button>
+    <button class="tab" onclick="cambiarTabRecibos('avisos',this)">📢 Avisos y formularios</button>
   </div>
 
   <div class="panel">
@@ -99,7 +101,9 @@ async function cargarTabRecibos(){
   if(_tabRecibos==='empleados') renderPortalEmpleados();
   else if(_tabRecibos==='cargar') renderPortalCargar();
   else if(_tabRecibos==='estado') renderPortalEstado();
-  else renderNotificaciones();
+  else if(_tabRecibos==='disconf') renderNotificaciones();
+  else if(_tabRecibos==='legajo') renderLegajos();
+  else renderAvisos();
 }
 
 async function cargarBadgeNoConforme(){
@@ -111,6 +115,13 @@ async function cargarBadgeNoConforme(){
     document.getElementById('badge-noconforme').style.display='';
     document.getElementById('badge-tab-noconforme').textContent = count;
     document.getElementById('badge-tab-noconforme').style.display='';
+  }
+  const { count: countLegajo } = await db.from('portal_empleados')
+    .select('*', { count:'exact', head:true })
+    .eq('docs_estado','en_revision');
+  if(countLegajo>0){
+    document.getElementById('badge-tab-legajo').textContent = countLegajo;
+    document.getElementById('badge-tab-legajo').style.display='';
   }
 }
 
@@ -364,6 +375,252 @@ async function renderNotificaciones(){
           </tr>`).join('')}</tbody>
       </table>`}
     </div>`;
+}
+
+// ══════════════════════════════════════════════════════════════
+// LEGAJO DIGITAL — revisión de DNI + selfie
+// ══════════════════════════════════════════════════════════════
+async function renderLegajos(){
+  const cont=document.getElementById('contenido');
+  const enRevision=_portalEmpleadosCache.filter(pe=>pe.docs_estado==='en_revision');
+  const resto=_portalEmpleadosCache.filter(pe=>pe.docs_estado!=='en_revision');
+
+  const filaHtml=(pe)=>`
+    <tr>
+      <td>${pe.nombre}</td>
+      <td class="mono">${pe.dni}</td>
+      <td>${estadoDocsBadge(pe.docs_estado)}</td>
+      <td style="font-size:12px;color:var(--muted)">${pe.docs_revisado_en?fmtFH(pe.docs_revisado_en)+(pe.docs_revisado_por?' · '+pe.docs_revisado_por:''):'—'}</td>
+      <td>${pe.dni_frente_path?`<button class="btn btn-sm btn-primary" onclick="abrirRevisionLegajo('${pe.id}')">Revisar</button>`:'<span style="color:var(--muted);font-size:12px">Sin enviar</span>'}</td>
+    </tr>`;
+
+  cont.innerHTML=`
+    <div class="panel-header"><h3>Legajo digital — DNI y selfie</h3></div>
+    <div style="padding:20px">
+      ${enRevision.length?`
+      <div style="font-size:11px;color:var(--orange);text-transform:uppercase;letter-spacing:0.6px;margin-bottom:8px;font-weight:600">Pendientes de revisión (${enRevision.length})</div>
+      <table style="margin-bottom:24px">
+        <thead><tr><th>Empleado</th><th>DNI</th><th>Estado</th><th>Revisado</th><th></th></tr></thead>
+        <tbody>${enRevision.map(filaHtml).join('')}</tbody>
+      </table>`:''}
+      <div style="font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:0.6px;margin-bottom:8px">Resto</div>
+      <table>
+        <thead><tr><th>Empleado</th><th>DNI</th><th>Estado</th><th>Revisado</th><th></th></tr></thead>
+        <tbody>${resto.map(filaHtml).join('')}</tbody>
+      </table>
+    </div>`;
+}
+
+function estadoDocsBadge(estado){
+  const map={pendiente:['anulada','Sin enviar'],en_revision:['pendiente','En revisión'],aprobado:['activo','Aprobado'],rechazado:['vencida','Rechazado']};
+  const [cls,label]=map[estado]||['anulada',estado];
+  return `<span class="estado ${cls}">${label}</span>`;
+}
+
+let _legajoActualId=null;
+async function abrirRevisionLegajo(peId){
+  const pe=_portalEmpleadosCache.find(p=>p.id===peId);
+  if(!pe) return;
+  _legajoActualId=peId;
+
+  const urls={};
+  for(const [campo,path] of [['frente',pe.dni_frente_path],['dorso',pe.dni_dorso_path],['selfie',pe.selfie_path]]){
+    if(!path){ urls[campo]=null; continue; }
+    const { data, error } = await db.storage.from('legajo-docs').download(path);
+    urls[campo] = error ? null : URL.createObjectURL(data);
+  }
+
+  const html=`
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:16px">
+      <div><div style="font-size:11px;color:var(--muted);margin-bottom:6px">DNI Frente</div>${urls.frente?`<img src="${urls.frente}" style="width:100%;border-radius:8px">`:'<div style="color:var(--muted);font-size:12px">No disponible</div>'}</div>
+      <div><div style="font-size:11px;color:var(--muted);margin-bottom:6px">DNI Dorso</div>${urls.dorso?`<img src="${urls.dorso}" style="width:100%;border-radius:8px">`:'<div style="color:var(--muted);font-size:12px">No disponible</div>'}</div>
+      <div style="grid-column:1/-1;max-width:240px"><div style="font-size:11px;color:var(--muted);margin-bottom:6px">Selfie</div>${urls.selfie?`<img src="${urls.selfie}" style="width:100%;border-radius:8px">`:'<div style="color:var(--muted);font-size:12px">No disponible</div>'}</div>
+    </div>
+    <div class="form-group" id="grupo-motivo-rechazo" style="display:none;margin-bottom:14px">
+      <label>Motivo del rechazo</label>
+      <input type="text" id="motivo-rechazo-legajo" placeholder="Ej: foto borrosa, no coincide con la selfie...">
+    </div>`;
+
+  const modalHtml=`
+    <div class="modal-overlay show" id="modal-legajo" onclick="if(event.target===this)cerrarModal('modal-legajo')">
+      <div class="modal" style="max-width:560px">
+        <h3>Revisar legajo — ${pe.nombre} (${pe.dni})</h3>
+        ${html}
+        <div class="modal-footer">
+          <button class="btn btn-ghost" onclick="cerrarModal('modal-legajo')">Cerrar</button>
+          <button class="btn btn-danger" onclick="rechazarLegajo()">Rechazar</button>
+          <button class="btn btn-success" onclick="aprobarLegajo()">✓ Aprobar</button>
+        </div>
+      </div>
+    </div>`;
+  document.getElementById('modal-legajo-root')?.remove();
+  const div=document.createElement('div');
+  div.id='modal-legajo-root';
+  div.innerHTML=modalHtml;
+  document.body.appendChild(div);
+}
+
+async function aprobarLegajo(){
+  const { data:{ user } } = await db.auth.getUser();
+  await db.from('portal_empleados').update({
+    docs_estado:'aprobado', docs_revisado_por:user?.email||'admin', docs_revisado_en:new Date().toISOString(), docs_motivo_rechazo:null,
+  }).eq('id', _legajoActualId);
+  toast('Legajo aprobado','success');
+  document.getElementById('modal-legajo-root')?.remove();
+  cargarTabRecibos();
+  cargarBadgeNoConforme();
+}
+
+async function rechazarLegajo(){
+  const grupoMotivo=document.getElementById('grupo-motivo-rechazo');
+  if(grupoMotivo.style.display==='none'){ grupoMotivo.style.display=''; return; }
+  const motivo=document.getElementById('motivo-rechazo-legajo').value.trim();
+  if(!motivo){ toast('Ingresá el motivo del rechazo.','warn'); return; }
+  const { data:{ user } } = await db.auth.getUser();
+  await db.from('portal_empleados').update({
+    docs_estado:'rechazado', docs_revisado_por:user?.email||'admin', docs_revisado_en:new Date().toISOString(), docs_motivo_rechazo:motivo,
+  }).eq('id', _legajoActualId);
+  toast('Legajo rechazado — el empleado va a tener que volver a subir las fotos','warn');
+  document.getElementById('modal-legajo-root')?.remove();
+  cargarTabRecibos();
+  cargarBadgeNoConforme();
+}
+
+// ══════════════════════════════════════════════════════════════
+// AVISOS Y FORMULARIOS
+// ══════════════════════════════════════════════════════════════
+let _preguntasNuevoAviso=[];
+
+async function renderAvisos(){
+  const cont=document.getElementById('contenido');
+  const { data: avisos } = await db.from('portal_notificaciones').select('*').order('created_at',{ascending:false});
+
+  cont.innerHTML=`
+    <div class="panel-header">
+      <h3>Avisos y formularios</h3>
+      <button class="btn btn-primary btn-sm" onclick="abrirNuevoAviso()">+ Nuevo aviso</button>
+    </div>
+    <div style="padding:20px">
+      ${!avisos||!avisos.length?'<div class="empty">Todavía no mandaste ningún aviso.</div>':`
+      <table>
+        <thead><tr><th>Título</th><th>Preguntas</th><th>Creado</th><th>Activo</th><th></th></tr></thead>
+        <tbody>${avisos.map(a=>`
+          <tr>
+            <td>${a.titulo}</td>
+            <td class="mono">${(a.preguntas||[]).length}</td>
+            <td class="mono" style="font-size:12px">${fmtFH(a.created_at)}</td>
+            <td><span class="estado ${a.activa?'activo':'anulada'}">${a.activa?'Sí':'No'}</span></td>
+            <td style="display:flex;gap:6px">
+              <button class="btn btn-sm btn-ghost" onclick="verRespuestasAviso('${a.id}','${a.titulo.replace(/'/g,"&apos;")}')">Ver respuestas</button>
+              <button class="btn btn-sm btn-ghost" onclick="toggleActivoAviso('${a.id}',${a.activa})">${a.activa?'Desactivar':'Activar'}</button>
+            </td>
+          </tr>`).join('')}</tbody>
+      </table>`}
+    </div>`;
+}
+
+function abrirNuevoAviso(){
+  _preguntasNuevoAviso=[];
+  const modalHtml=`
+    <div class="modal-overlay show" id="modal-aviso" onclick="if(event.target===this)cerrarModal('modal-aviso')">
+      <div class="modal" style="max-width:520px">
+        <h3>Nuevo aviso / formulario</h3>
+        <div class="form-group" style="margin-bottom:14px">
+          <label>Título</label>
+          <input type="text" id="av-titulo" placeholder="Ej: Actualización de datos de contacto">
+        </div>
+        <div class="form-group" style="margin-bottom:14px">
+          <label>Mensaje</label>
+          <textarea id="av-cuerpo" rows="3" placeholder="Texto del aviso (opcional si es solo un formulario)"></textarea>
+        </div>
+        <div style="margin-bottom:10px;font-size:12px;color:var(--muted);text-transform:uppercase;letter-spacing:0.6px">Preguntas (opcional — respuesta de texto libre)</div>
+        <div id="av-preguntas-list"></div>
+        <button class="btn btn-ghost btn-sm" onclick="agregarPreguntaAviso()">+ Agregar pregunta</button>
+        <div class="modal-footer">
+          <button class="btn btn-ghost" onclick="cerrarModal('modal-aviso')">Cancelar</button>
+          <button class="btn btn-primary" onclick="guardarAviso()">Enviar aviso</button>
+        </div>
+      </div>
+    </div>`;
+  document.getElementById('modal-aviso-root')?.remove();
+  const div=document.createElement('div');
+  div.id='modal-aviso-root';
+  div.innerHTML=modalHtml;
+  document.body.appendChild(div);
+}
+
+function agregarPreguntaAviso(){
+  const id='p'+Date.now();
+  _preguntasNuevoAviso.push({id, texto:''});
+  renderPreguntasAviso();
+}
+function renderPreguntasAviso(){
+  const cont=document.getElementById('av-preguntas-list');
+  cont.innerHTML=_preguntasNuevoAviso.map((p,i)=>`
+    <div style="display:flex;gap:8px;margin-bottom:8px">
+      <input type="text" value="${p.texto}" placeholder="Texto de la pregunta" oninput="_preguntasNuevoAviso[${i}].texto=this.value" style="flex:1">
+      <button class="btn btn-sm btn-danger" onclick="_preguntasNuevoAviso.splice(${i},1);renderPreguntasAviso()">✕</button>
+    </div>`).join('');
+}
+
+async function guardarAviso(){
+  const titulo=document.getElementById('av-titulo').value.trim();
+  const cuerpo=document.getElementById('av-cuerpo').value.trim();
+  const preguntas=_preguntasNuevoAviso.filter(p=>p.texto.trim()).map(p=>({id:p.id,texto:p.texto.trim()}));
+  if(!titulo){ toast('Ingresá un título.','warn'); return; }
+
+  try{
+    const { error } = await db.from('portal_notificaciones').insert({ titulo, cuerpo:cuerpo||null, preguntas, activa:true });
+    if(error) throw error;
+    toast('Aviso enviado a todos los empleados del portal','success');
+    document.getElementById('modal-aviso-root')?.remove();
+    cargarTabRecibos();
+  }catch(e){ toast('Error: '+(e?.message||String(e)),'error'); }
+}
+
+async function toggleActivoAviso(id, activaActual){
+  await db.from('portal_notificaciones').update({ activa: !activaActual }).eq('id', id);
+  cargarTabRecibos();
+}
+
+async function verRespuestasAviso(avisoId, titulo){
+  const { data: aviso } = await db.from('portal_notificaciones').select('*').eq('id',avisoId).single();
+  const { data: resp } = await db.from('portal_notificacion_respuestas')
+    .select('*,portal_empleados(nombre,dni)').eq('notificacion_id',avisoId);
+
+  const preguntas=aviso?.preguntas||[];
+  const filas=(resp||[]).map(r=>{
+    const respTxt = preguntas.length
+      ? preguntas.map(p=>`<div style="font-size:12px"><strong>${p.texto}:</strong> ${r.respuestas?.[p.id]||'—'}</div>`).join('')
+      : (r.respondido_en?'<span style="color:var(--green);font-size:12px">✓ Leído/confirmado</span>':'');
+    return `<tr>
+      <td>${r.portal_empleados?.nombre||'—'} <span style="color:var(--muted);font-size:11px">(${r.portal_empleados?.dni||'—'})</span></td>
+      <td style="font-size:12px">${r.leido_en?fmtFH(r.leido_en):'Sin leer'}</td>
+      <td style="font-size:12px">${r.respondido_en?fmtFH(r.respondido_en):'—'}</td>
+      <td>${respTxt}</td>
+    </tr>`;
+  }).join('');
+
+  const modalHtml=`
+    <div class="modal-overlay show" id="modal-resp-aviso" onclick="if(event.target===this)cerrarModal('modal-resp-aviso')">
+      <div class="modal" style="max-width:680px">
+        <h3>Respuestas — ${titulo}</h3>
+        <div style="overflow-x:auto;max-height:400px;overflow-y:auto">
+          <table>
+            <thead><tr><th>Empleado</th><th>Leído</th><th>Respondido</th><th>Respuesta</th></tr></thead>
+            <tbody>${filas||'<tr><td colspan="4" style="text-align:center;color:var(--muted);padding:20px">Todavía nadie lo vio.</td></tr>'}</tbody>
+          </table>
+        </div>
+        <div class="modal-footer">
+          <button class="btn btn-ghost" onclick="cerrarModal('modal-resp-aviso')">Cerrar</button>
+        </div>
+      </div>
+    </div>`;
+  document.getElementById('modal-resp-aviso-root')?.remove();
+  const div=document.createElement('div');
+  div.id='modal-resp-aviso-root';
+  div.innerHTML=modalHtml;
+  document.body.appendChild(div);
 }
 
 // ══════════════════════════════════════════════════════════════
