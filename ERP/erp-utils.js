@@ -69,7 +69,7 @@ var PERMISOS = {
   operaciones:         ['proyectos','remitos','contratos','presupuestos','informes'],
   gestion_operaciones: ['facturas','compras','contratos','remitos','impuestos','proyectos','presupuestos','informes'],
   gestion_full:        ['facturas','compras','contratos','remitos','impuestos','clientes','syh','historial-op'],
-  rrhh:                ['empleados','syh','clientes'],
+  rrhh:                ['empleados','syh','clientes','recibos'],
   syh:                 ['syh'],
 };
 

@@ -1,0 +1,435 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Hidromec ERP — Recibos de Sueldo</title>
+<link rel="stylesheet" href="erp-layout.css">
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js"></script>
+<script src="erp-utils.js"></script>
+<script src="erp-sidebar.js"></script>
+<script src="empresas.api.js"></script>
+<style>
+  .kpi-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:14px;margin-bottom:20px;}
+  @media(max-width:768px){.main{margin-left:0;padding:16px;}.kpi-grid{grid-template-columns:repeat(2,1fr);}}
+</style>
+</head>
+<body>
+<div id="overlay" class="overlay" onclick="ERP.closeSidebar()"></div>
+<div id="sidebar-root"></div>
+
+<main class="main">
+  <div class="page-header">
+    <h2>Recibos de Sueldo <span id="badge-noconforme" style="display:none;background:var(--red);color:#fff;border-radius:20px;padding:2px 9px;font-size:12px;margin-left:8px;vertical-align:middle"></span></h2>
+    <span style="font-size:12px;color:var(--muted)">Portal separado del ERP — ver <a href="#" style="color:var(--blue)" onclick="alert('portal-login.html — sistema aparte, dominio propio, empleados no tienen acceso a nada de este ERP.');return false">detalle</a></span>
+  </div>
+
+  <div class="tabs">
+    <button class="tab active" onclick="cambiarTabRecibos('empleados',this)">Accesos de empleados</button>
+    <button class="tab" onclick="cambiarTabRecibos('cargar',this)">Cargar recibos</button>
+    <button class="tab" onclick="cambiarTabRecibos('estado',this)">Estado de firmas</button>
+    <button class="tab" onclick="cambiarTabRecibos('notif',this)">⚠ Disconformidades <span id="badge-tab-noconforme" style="display:none;background:var(--red);color:#fff;border-radius:20px;padding:1px 7px;font-size:11px;margin-left:4px"></span></button>
+  </div>
+
+  <div class="panel">
+    <div id="contenido"><div class="spinner-wrap"><div class="spinner"></div>Cargando...</div></div>
+  </div>
+</main>
+
+<!-- MODAL EMPLEADO DEL PORTAL -->
+<div class="modal-overlay" id="modal-portal-empleado">
+  <div class="modal" style="max-width:420px">
+    <h3 id="pe-titulo">Nuevo acceso al portal</h3>
+    <p style="font-size:12px;color:var(--muted);margin-bottom:18px">Esto NO crea un empleado en el ERP — es solo su acceso al portal de recibos, un sistema aparte por seguridad.</p>
+    <div class="form-group" style="margin-bottom:14px">
+      <label>Documento (DNI)</label>
+      <input type="text" id="pe-dni" placeholder="Sin puntos">
+    </div>
+    <div class="form-group" style="margin-bottom:14px">
+      <label>Nombre completo</label>
+      <input type="text" id="pe-nombre" placeholder="Nombre y apellido">
+    </div>
+    <div class="form-group" style="margin-bottom:14px">
+      <label>Email real <span style="color:var(--muted);font-weight:400;text-transform:none;font-size:11px">(ahí le va a llegar el código para activar su cuenta)</span></label>
+      <input type="email" id="pe-email" placeholder="empleado@email.com">
+    </div>
+    <div class="form-group" style="margin-bottom:14px">
+      <label>Activo</label>
+      <select id="pe-activo"><option value="true">Sí</option><option value="false">No</option></select>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" onclick="cerrarModal('modal-portal-empleado')">Cancelar</button>
+      <button class="btn btn-primary" onclick="guardarPortalEmpleado()">Guardar</button>
+    </div>
+  </div>
+</div>
+
+<script>
+const SUPA_URL = 'https://avgkhbqtanvfsqxncmzm.supabase.co';
+const SUPA_KEY = 'sb_publishable_Q5W5JwdhUOWnOZv_QaGWQg_xHVhSEls';
+const db = supabase.createClient(SUPA_URL, SUPA_KEY);
+
+async function init(){
+  const usuario = await ERP.initLayout('recibos');
+  if(!usuario) return;
+  await cargarBadgeNoConforme();
+  cargarTabRecibos();
+}
+
+// ══════════════════════════════════════════════════════════════
+// NAVEGACIÓN
+// ══════════════════════════════════════════════════════════════
+let _tabRecibos='empleados';
+let _portalEmpleadosCache=[];
+
+function cambiarTabRecibos(tab, btn){
+  _tabRecibos=tab;
+  document.querySelectorAll('.tab').forEach(t=>t.classList.remove('active'));
+  if(btn) btn.classList.add('active');
+  cargarTabRecibos();
+}
+
+async function cargarTabRecibos(){
+  document.getElementById('contenido').innerHTML='<div class="spinner-wrap"><div class="spinner"></div></div>';
+  const { data } = await db.from('portal_empleados').select('*').order('nombre');
+  _portalEmpleadosCache = data||[];
+
+  if(_tabRecibos==='empleados') renderPortalEmpleados();
+  else if(_tabRecibos==='cargar') renderPortalCargar();
+  else if(_tabRecibos==='estado') renderPortalEstado();
+  else renderNotificaciones();
+}
+
+async function cargarBadgeNoConforme(){
+  const { count } = await db.from('portal_recibos')
+    .select('*', { count:'exact', head:true })
+    .eq('conformidad','no_conforme');
+  if(count>0){
+    document.getElementById('badge-noconforme').textContent = count+' sin revisar';
+    document.getElementById('badge-noconforme').style.display='';
+    document.getElementById('badge-tab-noconforme').textContent = count;
+    document.getElementById('badge-tab-noconforme').style.display='';
+  }
+}
+
+function fmtFH(f){
+  if(!f) return '—';
+  return new Date(f).toLocaleString('es-AR',{day:'2-digit',month:'2-digit',year:'numeric',hour:'2-digit',minute:'2-digit'});
+}
+function fmtPeriodoLabel(p){
+  const meses=['enero','febrero','marzo','abril','mayo','junio','julio','agosto','septiembre','octubre','noviembre','diciembre'];
+  const m=p.match(/^(\d{4})-(\d{2})$/);
+  if(!m) return p;
+  return meses[parseInt(m[2],10)-1] + ' ' + m[1];
+}
+
+// ══════════════════════════════════════════════════════════════
+// ACCESOS DE EMPLEADOS
+// ══════════════════════════════════════════════════════════════
+function renderPortalEmpleados(){
+  const cont=document.getElementById('contenido');
+  cont.innerHTML=`
+    <div class="panel-header">
+      <h3>Accesos de empleados</h3>
+      <button class="btn btn-primary btn-sm" onclick="abrirModalPortalEmpleado()">+ Nuevo acceso</button>
+    </div>
+    <div style="overflow-x:auto"><table>
+      <thead><tr><th>DNI</th><th>Nombre</th><th>Email</th><th>Estado cuenta</th><th>Activo</th><th></th></tr></thead>
+      <tbody>${_portalEmpleadosCache.length?_portalEmpleadosCache.map(pe=>`
+        <tr>
+          <td class="mono">${pe.dni}</td>
+          <td>${pe.nombre}</td>
+          <td style="font-size:12px;color:var(--muted)">${pe.email}</td>
+          <td><span class="estado ${pe.auth_user_id?'activo':'pendiente'}">${pe.auth_user_id?'Activada':'Sin activar'}</span></td>
+          <td><span class="estado ${pe.activo?'activo':'anulada'}">${pe.activo?'Sí':'No'}</span></td>
+          <td><button class="btn btn-sm btn-ghost" onclick='abrirModalPortalEmpleado(${JSON.stringify(pe).replace(/'/g,"&apos;")})'>Editar</button></td>
+        </tr>`).join(''):'<tr><td colspan="6" style="text-align:center;color:var(--muted);padding:30px">Sin accesos cargados todavía.</td></tr>'}</tbody>
+    </table></div>`;
+}
+
+let _peEditId=null;
+function abrirModalPortalEmpleado(pe){
+  _peEditId = pe ? pe.id : null;
+  document.getElementById('pe-titulo').textContent = pe ? 'Editar acceso' : 'Nuevo acceso al portal';
+  document.getElementById('pe-dni').value = pe ? pe.dni : '';
+  document.getElementById('pe-nombre').value = pe ? pe.nombre : '';
+  document.getElementById('pe-email').value = pe ? pe.email : '';
+  document.getElementById('pe-activo').value = pe ? String(pe.activo) : 'true';
+  document.getElementById('modal-portal-empleado').classList.add('show');
+}
+
+async function guardarPortalEmpleado(){
+  const dni=document.getElementById('pe-dni').value.trim().replace(/\./g,'');
+  const nombre=document.getElementById('pe-nombre').value.trim();
+  const email=document.getElementById('pe-email').value.trim().toLowerCase();
+  const activo=document.getElementById('pe-activo').value==='true';
+
+  if(!dni||!nombre||!email){ toast('Completá DNI, nombre y email.','warn'); return; }
+
+  try{
+    if(_peEditId){
+      const { error } = await db.from('portal_empleados').update({dni,nombre,email,activo}).eq('id',_peEditId);
+      if(error) throw error;
+      toast('Acceso actualizado','success');
+    } else {
+      const { error } = await db.from('portal_empleados').insert({dni,nombre,email,activo});
+      if(error) throw error;
+      toast('Acceso creado — avisale que puede activarlo desde "¿Primera vez?" en el portal','success');
+    }
+    cerrarModal('modal-portal-empleado');
+    cargarTabRecibos();
+  }catch(e){
+    if(String(e.message||'').includes('duplicate')||String(e.code)==='23505'){
+      toast('Ya existe un acceso con ese DNI.','error');
+    } else {
+      toast('Error: '+(e?.message||String(e)),'error');
+    }
+  }
+}
+
+// ══════════════════════════════════════════════════════════════
+// CARGAR RECIBOS
+// ══════════════════════════════════════════════════════════════
+let _archivosACargar=[];
+
+function renderPortalCargar(){
+  const cont=document.getElementById('contenido');
+  const hoy=new Date();
+  const periodoDefault=`${hoy.getFullYear()}-${String(hoy.getMonth()+1).padStart(2,'0')}`;
+  cont.innerHTML=`
+    <div class="panel-header"><h3>Cargar recibos</h3></div>
+    <div style="padding:20px;max-width:600px">
+      <div class="form-group" style="margin-bottom:14px">
+        <label>Período</label>
+        <input type="month" id="pc-periodo" value="${periodoDefault}">
+      </div>
+      <div class="form-group" style="margin-bottom:14px">
+        <label>Archivos PDF <span style="color:var(--muted);font-weight:400;text-transform:none;font-size:11px">(nombrá cada archivo con el DNI del empleado, ej: "30123456.pdf")</span></label>
+        <input type="file" id="pc-archivos" accept="application/pdf" multiple onchange="previsualizarCarga()">
+      </div>
+      <div id="pc-preview"></div>
+      <button class="btn btn-primary" id="pc-btn-subir" style="display:none;margin-top:14px" onclick="subirRecibos()">Subir recibos</button>
+    </div>`;
+}
+
+function previsualizarCarga(){
+  const input=document.getElementById('pc-archivos');
+  _archivosACargar = [...input.files].map(f=>{
+    const dniArchivo = f.name.replace(/\.pdf$/i,'').trim().replace(/\./g,'');
+    const match = _portalEmpleadosCache.find(pe=>pe.dni===dniArchivo);
+    return { file:f, dni:dniArchivo, empleado:match||null };
+  });
+
+  const preview=document.getElementById('pc-preview');
+  const encontrados=_archivosACargar.filter(a=>a.empleado).length;
+  preview.innerHTML=`
+    <div style="font-size:12px;color:var(--muted);margin-bottom:8px">${encontrados} de ${_archivosACargar.length} archivos matcheados con un empleado</div>
+    <table>
+      <thead><tr><th>Archivo</th><th>DNI detectado</th><th>Empleado</th><th>Estado</th></tr></thead>
+      <tbody>${_archivosACargar.map(a=>`
+        <tr>
+          <td style="font-size:12px">${a.file.name}</td>
+          <td class="mono">${a.dni}</td>
+          <td>${a.empleado?a.empleado.nombre:'<span style="color:var(--red)">Sin coincidencia</span>'}</td>
+          <td>${a.empleado?'<span class="estado activo">Listo</span>':'<span class="estado anulada">No se va a subir</span>'}</td>
+        </tr>`).join('')}</tbody>
+    </table>`;
+  document.getElementById('pc-btn-subir').style.display = encontrados>0 ? '' : 'none';
+}
+
+async function subirRecibos(){
+  const periodo=document.getElementById('pc-periodo').value;
+  if(!periodo){ toast('Elegí el período.','warn'); return; }
+  const validos=_archivosACargar.filter(a=>a.empleado);
+  if(!validos.length){ toast('No hay archivos con empleado matcheado.','warn'); return; }
+
+  const btn=document.getElementById('pc-btn-subir');
+  btn.disabled=true; btn.textContent='Subiendo...';
+
+  let ok=0, errores=0;
+  for(const a of validos){
+    try{
+      const path = `${a.empleado.id}/${periodo}.pdf`;
+      const { error: upErr } = await db.storage.from('recibos-sueldo').upload(path, a.file, { upsert:true, contentType:'application/pdf' });
+      if(upErr) throw upErr;
+
+      const { error: insErr } = await db.from('portal_recibos')
+        .upsert({ portal_empleado_id:a.empleado.id, periodo, archivo_path:path }, { onConflict:'portal_empleado_id,periodo' });
+      if(insErr) throw insErr;
+      ok++;
+    }catch(e){
+      console.error('Error subiendo recibo de', a.dni, e);
+      errores++;
+    }
+  }
+
+  toast(`${ok} recibos cargados${errores?`, ${errores} con error`:''}.`, errores?'warn':'success');
+  btn.disabled=false; btn.textContent='Subir recibos';
+  document.getElementById('pc-archivos').value='';
+  _archivosACargar=[];
+  document.getElementById('pc-preview').innerHTML='';
+  document.getElementById('pc-btn-subir').style.display='none';
+}
+
+// ══════════════════════════════════════════════════════════════
+// ESTADO DE FIRMAS
+// ══════════════════════════════════════════════════════════════
+async function renderPortalEstado(){
+  const cont=document.getElementById('contenido');
+  const hoy=new Date();
+  const periodoDefault=`${hoy.getFullYear()}-${String(hoy.getMonth()+1).padStart(2,'0')}`;
+  cont.innerHTML=`
+    <div class="panel-header"><h3>Estado de firmas</h3></div>
+    <div style="padding:20px">
+      <div class="form-group" style="max-width:220px;margin-bottom:16px">
+        <label>Período</label>
+        <input type="month" id="pe-estado-periodo" value="${periodoDefault}" onchange="cargarEstadoPeriodo()">
+      </div>
+      <div id="pe-estado-tabla"><div class="spinner-wrap"><div class="spinner"></div></div></div>
+    </div>`;
+  await cargarEstadoPeriodo();
+}
+
+let _reciboIdsPorEmpleado={};
+async function cargarEstadoPeriodo(){
+  const periodo=document.getElementById('pe-estado-periodo').value;
+  const tabla=document.getElementById('pe-estado-tabla');
+  if(!periodo){ tabla.innerHTML=''; return; }
+
+  const { data: recibos } = await db.from('portal_recibos').select('*').eq('periodo',periodo);
+  const recibosPorEmpleado={};
+  (recibos||[]).forEach(r=>{ recibosPorEmpleado[r.portal_empleado_id]=r; _reciboIdsPorEmpleado[r.id]=r; });
+
+  const activos=_portalEmpleadosCache.filter(pe=>pe.activo);
+  const cargados=activos.filter(pe=>recibosPorEmpleado[pe.id]).length;
+  const leidos=activos.filter(pe=>recibosPorEmpleado[pe.id]?.leido_en).length;
+  const conformes=activos.filter(pe=>recibosPorEmpleado[pe.id]?.conformidad==='conforme').length;
+  const noConformes=activos.filter(pe=>recibosPorEmpleado[pe.id]?.conformidad==='no_conforme').length;
+
+  tabla.innerHTML=`
+    <div style="display:flex;gap:16px;margin-bottom:14px;font-size:13px;color:var(--muted);flex-wrap:wrap">
+      <span>${cargados} / ${activos.length} con recibo cargado</span>
+      <span>${leidos} / ${cargados||0} leídos</span>
+      <span style="color:var(--green)">${conformes} conformes</span>
+      ${noConformes?`<span style="color:var(--red)">${noConformes} no conformes</span>`:''}
+    </div>
+    <table>
+      <thead><tr><th>Empleado</th><th>DNI</th><th>Recibo</th><th>Leído</th><th>Respuesta</th><th></th></tr></thead>
+      <tbody>${activos.map(pe=>{
+        const r=recibosPorEmpleado[pe.id];
+        let respuesta='—';
+        if(r?.conformidad==='conforme') respuesta='<span class="estado activo">✓ Conforme</span>';
+        else if(r?.conformidad==='no_conforme') respuesta='<span class="estado anulada" style="color:var(--red)">⚠ No conforme</span>';
+        else if(r) respuesta='<span class="estado pendiente">Sin responder</span>';
+        return `<tr>
+          <td>${pe.nombre}</td>
+          <td class="mono">${pe.dni}</td>
+          <td>${r?'<span class="estado activo">Cargado</span>':'<span class="estado anulada">Sin cargar</span>'}</td>
+          <td>${r?.leido_en?'✓ '+fmtFH(r.leido_en):(r?'—':'')}</td>
+          <td>${respuesta}</td>
+          <td>${r?`<button class="btn btn-sm btn-ghost" onclick="descargarConstancia('${r.id}')">📄 Constancia</button>`:''}</td>
+        </tr>`;
+      }).join('')}</tbody>
+    </table>`;
+}
+
+// ══════════════════════════════════════════════════════════════
+// NOTIFICACIONES — disconformidades
+// ══════════════════════════════════════════════════════════════
+async function renderNotificaciones(){
+  const cont=document.getElementById('contenido');
+  cont.innerHTML=`<div class="panel-header"><h3>Disconformidades reportadas</h3></div><div style="padding:20px"><div class="spinner-wrap"><div class="spinner"></div></div></div>`;
+
+  const { data } = await db.from('portal_recibos')
+    .select('*,portal_empleados(nombre,dni)')
+    .eq('conformidad','no_conforme')
+    .order('firmado_en',{ascending:false});
+
+  const rows=data||[];
+  document.getElementById('contenido').innerHTML=`
+    <div class="panel-header"><h3>Disconformidades reportadas</h3></div>
+    <div style="padding:20px">
+      ${!rows.length?'<div class="empty">No hay disconformidades reportadas.</div>':`
+      <table>
+        <thead><tr><th>Empleado</th><th>Período</th><th>Fecha</th><th>Motivo</th><th></th></tr></thead>
+        <tbody>${rows.map(r=>`
+          <tr>
+            <td>${r.portal_empleados?.nombre||'—'} <span style="color:var(--muted);font-size:11px">(${r.portal_empleados?.dni||'—'})</span></td>
+            <td class="mono">${fmtPeriodoLabel(r.periodo)}</td>
+            <td class="mono" style="font-size:12px">${fmtFH(r.firmado_en)}</td>
+            <td style="max-width:320px;font-size:13px">${r.motivo_no_conformidad||'—'}</td>
+            <td><button class="btn btn-sm btn-ghost" onclick="descargarConstancia('${r.id}')">📄 Constancia</button></td>
+          </tr>`).join('')}</tbody>
+      </table>`}
+    </div>`;
+}
+
+// ══════════════════════════════════════════════════════════════
+// CONSTANCIA DESCARGABLE (para presentar a clientes)
+// ══════════════════════════════════════════════════════════════
+async function descargarConstancia(reciboId){
+  const { data: r, error } = await db.from('portal_recibos')
+    .select('*,portal_empleados(nombre,dni,email)')
+    .eq('id', reciboId).single();
+  if(error || !r){ toast('No se pudo cargar el recibo.','error'); return; }
+
+  const { jsPDF } = window.jspdf;
+  const doc = new jsPDF({ format:'a4', unit:'mm' });
+  const L=15, R=195, W=180;
+  let y=20;
+
+  doc.setFont('helvetica','bold'); doc.setFontSize(15);
+  doc.text('Constancia de Recepción de Recibo de Sueldo', L, y);
+  y+=10;
+  doc.setDrawColor(200,200,200); doc.line(L,y,R,y);
+  y+=10;
+
+  doc.setFont('helvetica','normal'); doc.setFontSize(11);
+  const filas=[
+    ['Empleado', r.portal_empleados?.nombre||'—'],
+    ['Documento (DNI)', r.portal_empleados?.dni||'—'],
+    ['Período', fmtPeriodoLabel(r.periodo)],
+    ['Fecha de carga', fmtFH(r.fecha_carga)],
+    ['Fecha de lectura', fmtFH(r.leido_en)],
+    ['IP de lectura', r.leido_ip||'—'],
+    ['Fecha de respuesta', fmtFH(r.firmado_en)],
+    ['IP de respuesta', r.firmado_ip||'—'],
+    ['Conformidad', r.conformidad==='conforme'?'CONFORME':(r.conformidad==='no_conforme'?'NO CONFORME':'Sin responder')],
+  ];
+  filas.forEach(([label,val])=>{
+    doc.setFont('helvetica','bold'); doc.text(label+':', L, y);
+    doc.setFont('helvetica','normal'); doc.text(String(val), L+55, y);
+    y+=8;
+  });
+
+  if(r.conformidad==='no_conforme'){
+    y+=4;
+    doc.setFont('helvetica','bold'); doc.setFontSize(10); doc.setTextColor(180,40,40);
+    doc.text('Motivo de la disconformidad:', L, y);
+    y+=6;
+    doc.setFont('helvetica','normal'); doc.setTextColor(0,0,0);
+    const lineas=doc.splitTextToSize(r.motivo_no_conformidad||'—', W);
+    doc.text(lineas, L, y);
+    y+=lineas.length*5;
+  }
+
+  y+=10;
+  doc.setDrawColor(200,200,200); doc.line(L,y,R,y);
+  y+=8;
+  doc.setFont('helvetica','italic'); doc.setFontSize(8); doc.setTextColor(120,120,120);
+  const nota=doc.splitTextToSize(
+    'Este documento es una constancia generada automáticamente por el sistema del Portal de Recibos, en base a la trazabilidad de acceso registrada (usuario único, fecha, hora e IP). No reemplaza asesoramiento legal.',
+    W
+  );
+  doc.text(nota, L, y);
+  y+=nota.length*4+10;
+  doc.setFont('helvetica','normal'); doc.setFontSize(8); doc.setTextColor(150,150,150);
+  doc.text('Generado el '+new Date().toLocaleString('es-AR'), L, y);
+
+  doc.save(`constancia-${(r.portal_empleados?.dni||'recibo')}-${r.periodo}.pdf`);
+}
+</script>
+</body>
+</html>

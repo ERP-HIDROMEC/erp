@@ -58,7 +58,6 @@
     <button class="tab" onclick="cambiarTab('ausencias',this)">Licencias y ausencias</button>
     <button class="tab" onclick="cambiarTab('ausentismo',this)">Analisis ausentismo</button>
     <button class="tab" onclick="cambiarTab('francos',this)">🗓 Francos compensatorios</button>
-    <button class="tab" onclick="cambiarTab('portal',this)">📄 Portal de Recibos</button>
   </div>
 
   <div class="filtros">
@@ -499,7 +498,7 @@ function cambiarTab(tab,btn){
   if(tab!=='ausencias')       _filtroAusEmp='';
   if(tab!=='docs-vehiculos') { _filtroVehiculoId=''; }
   const btnNuevo=document.getElementById('btn-nuevo');
-  const noDoc=['ausentismo','costos','portal'];
+  const noDoc=['ausentismo','costos'];
   document.getElementById('btn-importar-xls').style.display=tab==='sueldos'?'':'none';
   const mesSueldo=document.getElementById('f-mes-sueldo');
   if(mesSueldo){
@@ -515,7 +514,7 @@ function cambiarTab(tab,btn){
   else if(tab==='francos') { btnNuevo.textContent='+ Cargar franco'; btnNuevo.style.display=''; }
   else if(noDoc.includes(tab)) { btnNuevo.textContent=''; btnNuevo.style.display='none'; }
   else { btnNuevo.textContent='+ Nuevo empleado'; btnNuevo.style.display=''; }
-  const hideFiltro=['sueldos','costos','vehiculos','docs-empresa','docs-vehiculos','docs-personal','ausencias','ausentismo','francos','portal'];
+  const hideFiltro=['sueldos','costos','vehiculos','docs-empresa','docs-vehiculos','docs-personal','ausencias','ausentismo','francos'];
   document.getElementById('f-estado').style.display=hideFiltro.includes(tab)?'none':'';
   recargar();
 }
@@ -531,7 +530,6 @@ function recargar(){
   else if(tabActual==='ausencias') cargarAusencias();
   else if(tabActual==='ausentismo') cargarAnalisisAusentismo();
   else if(tabActual==='francos') cargarFrancos();
-  else if(tabActual==='portal') cargarPortal();
 }
 
 function abrirNuevo(){
@@ -2430,217 +2428,6 @@ async function eliminarFranco(id) {
   } catch(e) { manejarError(e, 'eliminar franco'); }
 }
 
-// ══════════════════════════════════════════════════════════════
-// PORTAL DE RECIBOS — administración (sistema separado del ERP)
-// ══════════════════════════════════════════════════════════════
-let _portalSubTab='empleados';
-let _portalEmpleadosCache=[];
-
-async function cargarPortal(){
-  document.getElementById('kpis').innerHTML='';
-  document.getElementById('contenido').innerHTML=`
-    <div style="padding:14px 20px;border-bottom:1px solid var(--border);display:flex;gap:8px">
-      <button class="btn ${_portalSubTab==='empleados'?'btn-primary':'btn-ghost'} btn-sm" onclick="_portalSubTab='empleados';cargarPortal()">Accesos de empleados</button>
-      <button class="btn ${_portalSubTab==='cargar'?'btn-primary':'btn-ghost'} btn-sm" onclick="_portalSubTab='cargar';cargarPortal()">Cargar recibos</button>
-      <button class="btn ${_portalSubTab==='estado'?'btn-primary':'btn-ghost'} btn-sm" onclick="_portalSubTab='estado';cargarPortal()">Estado de firmas</button>
-    </div>
-    <div id="portal-sub-contenido" style="padding:20px"><div class="spinner-wrap"><div class="spinner"></div></div></div>`;
-
-  const { data } = await db.from('portal_empleados').select('*').order('nombre');
-  _portalEmpleadosCache = data||[];
-
-  if(_portalSubTab==='empleados') renderPortalEmpleados();
-  else if(_portalSubTab==='cargar') renderPortalCargar();
-  else renderPortalEstado();
-}
-
-// ── Sub-tab: accesos de empleados ────────────────────────────
-function renderPortalEmpleados(){
-  const cont=document.getElementById('portal-sub-contenido');
-  cont.innerHTML=`
-    <div style="display:flex;justify-content:flex-end;margin-bottom:14px">
-      <button class="btn btn-primary btn-sm" onclick="abrirModalPortalEmpleado()">+ Nuevo acceso</button>
-    </div>
-    <div style="overflow-x:auto"><table>
-      <thead><tr><th>DNI</th><th>Nombre</th><th>Email</th><th>Estado cuenta</th><th>Activo</th><th></th></tr></thead>
-      <tbody>${_portalEmpleadosCache.length?_portalEmpleadosCache.map(pe=>`
-        <tr>
-          <td class="mono">${pe.dni}</td>
-          <td>${pe.nombre}</td>
-          <td style="font-size:12px;color:var(--muted)">${pe.email}</td>
-          <td><span class="estado ${pe.auth_user_id?'activo':'pendiente'}">${pe.auth_user_id?'Activada':'Sin activar'}</span></td>
-          <td><span class="estado ${pe.activo?'activo':'anulada'}">${pe.activo?'Sí':'No'}</span></td>
-          <td><button class="btn btn-sm btn-ghost" onclick='abrirModalPortalEmpleado(${JSON.stringify(pe).replace(/'/g,"&apos;")})'>Editar</button></td>
-        </tr>`).join(''):'<tr><td colspan="6" style="text-align:center;color:var(--muted);padding:30px">Sin accesos cargados todavía.</td></tr>'}</tbody>
-    </table></div>`;
-}
-
-let _peEditId=null;
-function abrirModalPortalEmpleado(pe){
-  _peEditId = pe ? pe.id : null;
-  document.getElementById('pe-titulo').textContent = pe ? 'Editar acceso' : 'Nuevo acceso al portal';
-  document.getElementById('pe-dni').value = pe ? pe.dni : '';
-  document.getElementById('pe-nombre').value = pe ? pe.nombre : '';
-  document.getElementById('pe-email').value = pe ? pe.email : '';
-  document.getElementById('pe-activo').value = pe ? String(pe.activo) : 'true';
-  document.getElementById('modal-portal-empleado').classList.add('show');
-}
-
-async function guardarPortalEmpleado(){
-  const dni=document.getElementById('pe-dni').value.trim().replace(/\./g,'');
-  const nombre=document.getElementById('pe-nombre').value.trim();
-  const email=document.getElementById('pe-email').value.trim().toLowerCase();
-  const activo=document.getElementById('pe-activo').value==='true';
-
-  if(!dni||!nombre||!email){ toast('Completá DNI, nombre y email.','warn'); return; }
-
-  try{
-    if(_peEditId){
-      const { error } = await db.from('portal_empleados').update({dni,nombre,email,activo}).eq('id',_peEditId);
-      if(error) throw error;
-      toast('Acceso actualizado','success');
-    } else {
-      const { error } = await db.from('portal_empleados').insert({dni,nombre,email,activo});
-      if(error) throw error;
-      toast('Acceso creado — avisale que puede activarlo desde "¿Primera vez?" en el portal','success');
-    }
-    cerrarModal('modal-portal-empleado');
-    cargarPortal();
-  }catch(e){
-    if(String(e.message||'').includes('duplicate')||String(e.code)==='23505'){
-      toast('Ya existe un acceso con ese DNI.','error');
-    } else {
-      toast('Error: '+(e?.message||String(e)),'error');
-    }
-  }
-}
-
-// ── Sub-tab: cargar recibos ──────────────────────────────────
-let _archivosACargar=[];
-
-function renderPortalCargar(){
-  const cont=document.getElementById('portal-sub-contenido');
-  const hoy=new Date();
-  const periodoDefault=`${hoy.getFullYear()}-${String(hoy.getMonth()+1).padStart(2,'0')}`;
-  cont.innerHTML=`
-    <div style="max-width:600px">
-      <div class="form-group" style="margin-bottom:14px">
-        <label>Período</label>
-        <input type="month" id="pc-periodo" value="${periodoDefault}">
-      </div>
-      <div class="form-group" style="margin-bottom:14px">
-        <label>Archivos PDF <span style="color:var(--muted);font-weight:400;text-transform:none;font-size:11px">(nombrá cada archivo con el DNI del empleado, ej: "30123456.pdf")</span></label>
-        <input type="file" id="pc-archivos" accept="application/pdf" multiple onchange="previsualizarCarga()">
-      </div>
-      <div id="pc-preview"></div>
-      <button class="btn btn-primary" id="pc-btn-subir" style="display:none;margin-top:14px" onclick="subirRecibos()">Subir recibos</button>
-    </div>`;
-}
-
-function previsualizarCarga(){
-  const input=document.getElementById('pc-archivos');
-  _archivosACargar = [...input.files].map(f=>{
-    const dniArchivo = f.name.replace(/\.pdf$/i,'').trim().replace(/\./g,'');
-    const match = _portalEmpleadosCache.find(pe=>pe.dni===dniArchivo);
-    return { file:f, dni:dniArchivo, empleado:match||null };
-  });
-
-  const preview=document.getElementById('pc-preview');
-  const encontrados=_archivosACargar.filter(a=>a.empleado).length;
-  preview.innerHTML=`
-    <div style="font-size:12px;color:var(--muted);margin-bottom:8px">${encontrados} de ${_archivosACargar.length} archivos matcheados con un empleado</div>
-    <table>
-      <thead><tr><th>Archivo</th><th>DNI detectado</th><th>Empleado</th><th>Estado</th></tr></thead>
-      <tbody>${_archivosACargar.map(a=>`
-        <tr>
-          <td style="font-size:12px">${a.file.name}</td>
-          <td class="mono">${a.dni}</td>
-          <td>${a.empleado?a.empleado.nombre:'<span style="color:var(--red)">Sin coincidencia</span>'}</td>
-          <td>${a.empleado?'<span class="estado activo">Listo</span>':'<span class="estado anulada">No se va a subir</span>'}</td>
-        </tr>`).join('')}</tbody>
-    </table>`;
-  document.getElementById('pc-btn-subir').style.display = encontrados>0 ? '' : 'none';
-}
-
-async function subirRecibos(){
-  const periodo=document.getElementById('pc-periodo').value;
-  if(!periodo){ toast('Elegí el período.','warn'); return; }
-  const validos=_archivosACargar.filter(a=>a.empleado);
-  if(!validos.length){ toast('No hay archivos con empleado matcheado.','warn'); return; }
-
-  const btn=document.getElementById('pc-btn-subir');
-  btn.disabled=true; btn.textContent='Subiendo...';
-
-  let ok=0, yaExistian=0, errores=0;
-  for(const a of validos){
-    try{
-      const path = `${a.empleado.id}/${periodo}.pdf`;
-      const { error: upErr } = await db.storage.from('recibos-sueldo').upload(path, a.file, { upsert:true, contentType:'application/pdf' });
-      if(upErr) throw upErr;
-
-      const { error: insErr } = await db.from('portal_recibos')
-        .upsert({ portal_empleado_id:a.empleado.id, periodo, archivo_path:path }, { onConflict:'portal_empleado_id,periodo' });
-      if(insErr) throw insErr;
-      ok++;
-    }catch(e){
-      console.error('Error subiendo recibo de', a.dni, e);
-      errores++;
-    }
-  }
-
-  toast(`${ok} recibos cargados${errores?`, ${errores} con error`:''}.`, errores?'warn':'success');
-  btn.disabled=false; btn.textContent='Subir recibos';
-  document.getElementById('pc-archivos').value='';
-  _archivosACargar=[];
-  document.getElementById('pc-preview').innerHTML='';
-  document.getElementById('pc-btn-subir').style.display='none';
-}
-
-// ── Sub-tab: estado de firmas ─────────────────────────────────
-async function renderPortalEstado(){
-  const cont=document.getElementById('portal-sub-contenido');
-  const hoy=new Date();
-  const periodoDefault=`${hoy.getFullYear()}-${String(hoy.getMonth()+1).padStart(2,'0')}`;
-  cont.innerHTML=`
-    <div class="form-group" style="max-width:220px;margin-bottom:16px">
-      <label>Período</label>
-      <input type="month" id="pe-estado-periodo" value="${periodoDefault}" onchange="cargarEstadoPeriodo()">
-    </div>
-    <div id="pe-estado-tabla"><div class="spinner-wrap"><div class="spinner"></div></div></div>`;
-  await cargarEstadoPeriodo();
-}
-
-async function cargarEstadoPeriodo(){
-  const periodo=document.getElementById('pe-estado-periodo').value;
-  const tabla=document.getElementById('pe-estado-tabla');
-  if(!periodo){ tabla.innerHTML=''; return; }
-
-  const { data: recibos } = await db.from('portal_recibos').select('*').eq('periodo',periodo);
-  const recibosPorEmpleado={};
-  (recibos||[]).forEach(r=>{ recibosPorEmpleado[r.portal_empleado_id]=r; });
-
-  const activos=_portalEmpleadosCache.filter(pe=>pe.activo);
-  const firmados=activos.filter(pe=>recibosPorEmpleado[pe.id]?.firmado_en).length;
-  const cargados=activos.filter(pe=>recibosPorEmpleado[pe.id]).length;
-
-  tabla.innerHTML=`
-    <div style="display:flex;gap:16px;margin-bottom:14px;font-size:13px;color:var(--muted)">
-      <span>${cargados} / ${activos.length} con recibo cargado</span>
-      <span>${firmados} / ${cargados||0} firmados</span>
-    </div>
-    <table>
-      <thead><tr><th>Empleado</th><th>DNI</th><th>Recibo</th><th>Firma</th></tr></thead>
-      <tbody>${activos.map(pe=>{
-        const r=recibosPorEmpleado[pe.id];
-        return `<tr>
-          <td>${pe.nombre}</td>
-          <td class="mono">${pe.dni}</td>
-          <td>${r?'<span class="estado activo">Cargado</span>':'<span class="estado anulada">Sin cargar</span>'}</td>
-          <td>${r?.firmado_en?'<span class="estado activo">✓ '+new Date(r.firmado_en).toLocaleDateString('es-AR')+'</span>':(r?'<span class="estado pendiente">Pendiente</span>':'—')}</td>
-        </tr>`;
-      }).join('')}</tbody>
-    </table>`;
-}
 
 </script>
 
@@ -2745,34 +2532,6 @@ async function cargarEstadoPeriodo(){
     <div class="modal-footer">
       <button class="btn btn-ghost" onclick="cerrarModal('modal-tomar-franco')">Cancelar</button>
       <button class="btn btn-success" onclick="confirmarTomarFranco()">✓ Confirmar</button>
-    </div>
-  </div>
-</div>
-
-<!-- MODAL EMPLEADO DEL PORTAL -->
-<div class="modal-overlay" id="modal-portal-empleado">
-  <div class="modal" style="max-width:420px">
-    <h3 id="pe-titulo">Nuevo acceso al portal</h3>
-    <p style="font-size:12px;color:var(--muted);margin-bottom:18px">Esto NO crea un empleado en el ERP — es solo su acceso al portal de recibos, un sistema aparte por seguridad.</p>
-    <div class="form-group" style="margin-bottom:14px">
-      <label>Documento (DNI)</label>
-      <input type="text" id="pe-dni" placeholder="Sin puntos">
-    </div>
-    <div class="form-group" style="margin-bottom:14px">
-      <label>Nombre completo</label>
-      <input type="text" id="pe-nombre" placeholder="Nombre y apellido">
-    </div>
-    <div class="form-group" style="margin-bottom:14px">
-      <label>Email real <span style="color:var(--muted);font-weight:400;text-transform:none;font-size:11px">(ahí le va a llegar el código para activar su cuenta)</span></label>
-      <input type="email" id="pe-email" placeholder="empleado@email.com">
-    </div>
-    <div class="form-group" style="margin-bottom:14px">
-      <label>Activo</label>
-      <select id="pe-activo"><option value="true">Sí</option><option value="false">No</option></select>
-    </div>
-    <div class="modal-footer">
-      <button class="btn btn-ghost" onclick="cerrarModal('modal-portal-empleado')">Cancelar</button>
-      <button class="btn btn-primary" onclick="guardarPortalEmpleado()">Guardar</button>
     </div>
   </div>
 </div>
