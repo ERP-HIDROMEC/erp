@@ -69,9 +69,7 @@
 </div>
 
 <script>
-const SUPA_URL = 'https://avgkhbqtanvfsqxncmzm.supabase.co';
-const SUPA_KEY = 'sb_publishable_Q5W5JwdhUOWnOZv_QaGWQg_xHVhSEls';
-const db = supabase.createClient(SUPA_URL, SUPA_KEY);
+// SUPA_URL, SUPA_KEY y db ya vienen declarados globalmente por erp-utils.js
 
 async function init(){
   const usuario = await ERP.initLayout('recibos');
