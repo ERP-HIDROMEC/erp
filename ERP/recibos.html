@@ -8,6 +8,7 @@
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/pdf-lib@1.17.1/dist/pdf-lib.min.js"></script>
 <script src="erp-utils.js"></script>
 <script src="erp-sidebar.js"></script>
 <script src="empresas.api.js"></script>
@@ -338,7 +339,7 @@ async function cargarEstadoPeriodo(){
           <td>${r?'<span class="estado activo">Cargado</span>':'<span class="estado anulada">Sin cargar</span>'}</td>
           <td>${r?.leido_en?'✓ '+fmtFH(r.leido_en):(r?'—':'')}</td>
           <td>${respuesta}</td>
-          <td>${r?`<button class="btn btn-sm btn-ghost" onclick="descargarConstancia('${r.id}')">📄 Constancia</button>`:''}</td>
+          <td>${r?`<button class="btn btn-sm btn-ghost" onclick="descargarConstancia('${r.id}')">📄 Constancia</button>${r.firmado_en?` <button class="btn btn-sm btn-ghost" onclick="descargarReciboFirmado('${r.id}')">📎 Recibo firmado</button>`:''}`:''}</td>
         </tr>`;
       }).join('')}</tbody>
     </table>`;
@@ -369,7 +370,7 @@ async function renderNotificaciones(){
             <td class="mono">${fmtPeriodoLabel(r.periodo)}</td>
             <td class="mono" style="font-size:12px">${fmtFH(r.firmado_en)}</td>
             <td style="max-width:320px;font-size:13px">${r.motivo_no_conformidad||'—'}</td>
-            <td><button class="btn btn-sm btn-ghost" onclick="descargarConstancia('${r.id}')">📄 Constancia</button></td>
+            <td><button class="btn btn-sm btn-ghost" onclick="descargarConstancia('${r.id}')">📄 Constancia</button> <button class="btn btn-sm btn-ghost" onclick="descargarReciboFirmado('${r.id}')">📎 Recibo firmado</button></td>
           </tr>`).join('')}</tbody>
       </table>`}
     </div>`;
@@ -624,6 +625,73 @@ async function verRespuestasAviso(avisoId, titulo){
 // ══════════════════════════════════════════════════════════════
 // CONSTANCIA DESCARGABLE (para presentar a clientes)
 // ══════════════════════════════════════════════════════════════
+// ══════════════════════════════════════════════════════════════
+// RECIBO FIRMADO — el PDF original + una página con el sello de firma
+// digital del empleado, para descargar y presentar a terceros
+// ══════════════════════════════════════════════════════════════
+async function descargarReciboFirmado(reciboId){
+  const { data: r, error } = await db.from('portal_recibos')
+    .select('*,portal_empleados(nombre,dni)').eq('id', reciboId).single();
+  if(error || !r){ toast('No se pudo cargar el recibo.','error'); return; }
+  if(!r.firmado_en){ toast('Este recibo todavía no fue confirmado por el empleado.','warn'); return; }
+
+  try{
+    const { data: pdfBlob, error: dlErr } = await db.storage.from('recibos-sueldo').download(r.archivo_path);
+    if(dlErr) throw dlErr;
+    const bytes = await pdfBlob.arrayBuffer();
+
+    const { PDFDocument, rgb, StandardFonts } = PDFLib;
+    const pdfDoc = await PDFDocument.load(bytes);
+    const font = await pdfDoc.embedFont(StandardFonts.HelveticaBold);
+    const fontN = await pdfDoc.embedFont(StandardFonts.Helvetica);
+
+    const pagina = pdfDoc.addPage([420, 300]); // página nueva chica, tipo "sello", al final
+    const fecha = new Date(r.firmado_en);
+    const fechaStr = fecha.toLocaleDateString('es-AR');
+    const horaStr = fecha.toLocaleTimeString('es-AR');
+    const esConforme = r.conformidad === 'conforme';
+
+    let y = 260;
+    pagina.drawText('Constancia de firma digital', { x:30, y, size:14, font, color: rgb(0.1,0.1,0.1) });
+    y -= 30;
+    const lineas = [
+      [`Firmado digitalmente por:`, r.portal_empleados?.nombre||'—'],
+      [`Documento (DNI):`, r.portal_empleados?.dni||'—'],
+      [`Fecha:`, fechaStr],
+      [`Hora:`, horaStr],
+      [`IP de origen:`, r.firmado_ip||'—'],
+      [`Conformidad:`, esConforme?'CONFORME':'NO CONFORME'],
+    ];
+    lineas.forEach(([label,val])=>{
+      pagina.drawText(label, { x:30, y, size:10, font, color: rgb(0.3,0.3,0.3) });
+      pagina.drawText(String(val), { x:220, y, size:10, font:fontN, color: rgb(0,0,0) });
+      y -= 20;
+    });
+
+    if(!esConforme && r.motivo_no_conformidad){
+      y -= 6;
+      pagina.drawText('Motivo de la disconformidad:', { x:30, y, size:10, font, color: rgb(0.6,0.1,0.1) });
+      y -= 16;
+      pagina.drawText(r.motivo_no_conformidad.slice(0,200), { x:30, y, size:9, font:fontN, color: rgb(0,0,0), maxWidth:360 });
+    }
+
+    y = 40;
+    pagina.drawText('Generado automáticamente por el Portal de Recibos — Hidromec SRL / Placemem SRL', { x:30, y, size:7, font:fontN, color: rgb(0.5,0.5,0.5) });
+
+    const outBytes = await pdfDoc.save();
+    const blob = new Blob([outBytes], { type:'application/pdf' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `recibo-firmado-${r.portal_empleados?.dni||'recibo'}-${r.periodo}.pdf`;
+    a.click();
+    URL.revokeObjectURL(url);
+  }catch(e){
+    toast('Error al generar el PDF: '+(e?.message||String(e)),'error');
+  }
+}
+
+
 async function descargarConstancia(reciboId){
   const { data: r, error } = await db.from('portal_recibos')
     .select('*,portal_empleados(nombre,dni,email)')
