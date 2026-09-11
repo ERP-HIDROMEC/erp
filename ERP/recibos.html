@@ -9,6 +9,7 @@
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/pdf-lib@1.17.1/dist/pdf-lib.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.min.js"></script>
 <script src="erp-utils.js"></script>
 <script src="erp-sidebar.js"></script>
 <script src="empresas.api.js"></script>
@@ -73,6 +74,7 @@
 // SUPA_URL, SUPA_KEY y db ya vienen declarados globalmente por erp-utils.js
 
 async function init(){
+  if(window.pdfjsLib) pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.worker.min.js';
   const usuario = await ERP.initLayout('recibos');
   if(!usuario) return;
   await cargarBadgeNoConforme();
@@ -224,24 +226,53 @@ function renderPortalCargar(){
     </div>`;
 }
 
-function previsualizarCarga(){
-  const input=document.getElementById('pc-archivos');
-  _archivosACargar = [...input.files].map(f=>{
-    const dniArchivo = f.name.replace(/\.pdf$/i,'').trim().replace(/\./g,'');
-    const match = _portalEmpleadosCache.find(pe=>pe.dni===dniArchivo);
-    return { file:f, dni:dniArchivo, empleado:match||null };
-  });
+// Extrae el DNI leyendo el CUIL del texto del PDF (ej: "27-37237706-8" → 37237706)
+async function extraerDniDePdf(file){
+  try{
+    const buf = await file.arrayBuffer();
+    const pdf = await pdfjsLib.getDocument({ data: buf }).promise;
+    let texto = '';
+    for(let i=1; i<=pdf.numPages; i++){
+      const page = await pdf.getPage(i);
+      const content = await page.getTextContent();
+      texto += content.items.map(it=>it.str).join(' ') + '\n';
+    }
+    const idx = texto.search(/CUIL/i);
+    if(idx===-1) return null;
+    const ventana = texto.slice(idx, idx+150); // el valor puede venir unas palabras después del label, por el layout de tabla
+    const m = ventana.match(/(\d{2})[\s\-]?(\d{7,8})[\s\-]?(\d)\b/);
+    return m ? m[2] : null;
+  }catch(e){
+    console.warn('No se pudo leer el PDF:', file.name, e);
+    return null;
+  }
+}
 
+async function previsualizarCarga(){
+  const input=document.getElementById('pc-archivos');
   const preview=document.getElementById('pc-preview');
+  preview.innerHTML='<div class="spinner-wrap"><div class="spinner"></div>Leyendo los PDF para detectar el DNI de cada uno...</div>';
+
+  const archivos = [...input.files];
+  _archivosACargar = await Promise.all(archivos.map(async f=>{
+    const dniContenido = await extraerDniDePdf(f);
+    const dniArchivo = f.name.replace(/\.pdf$/i,'').trim().replace(/\./g,'');
+    const dni = dniContenido || dniArchivo;
+    const origen = dniContenido ? 'contenido del PDF' : 'nombre del archivo';
+    const match = _portalEmpleadosCache.find(pe=>pe.dni===dni);
+    return { file:f, dni, origen, empleado:match||null };
+  }));
+
   const encontrados=_archivosACargar.filter(a=>a.empleado).length;
   preview.innerHTML=`
     <div style="font-size:12px;color:var(--muted);margin-bottom:8px">${encontrados} de ${_archivosACargar.length} archivos matcheados con un empleado</div>
     <table>
-      <thead><tr><th>Archivo</th><th>DNI detectado</th><th>Empleado</th><th>Estado</th></tr></thead>
+      <thead><tr><th>Archivo</th><th>DNI detectado</th><th>Fuente</th><th>Empleado</th><th>Estado</th></tr></thead>
       <tbody>${_archivosACargar.map(a=>`
         <tr>
           <td style="font-size:12px">${a.file.name}</td>
           <td class="mono">${a.dni}</td>
+          <td style="font-size:11px;color:var(--muted)">${a.origen}</td>
           <td>${a.empleado?a.empleado.nombre:'<span style="color:var(--red)">Sin coincidencia</span>'}</td>
           <td>${a.empleado?'<span class="estado activo">Listo</span>':'<span class="estado anulada">No se va a subir</span>'}</td>
         </tr>`).join('')}</tbody>
