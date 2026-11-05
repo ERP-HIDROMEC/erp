@@ -971,6 +971,10 @@ async function cargarFacturas(){
         const dias=r.fecha_cobro_estimada?Math.floor((new Date()-new Date(r.fecha_cobro_estimada+'T12:00:00'))/86400000):0;
         const acumNC=Number(r.monto_nc_acumulado||0);
         const saldoNeto=Math.max(Number(r.monto_total||0)-acumNC,0);
+        // Cobro: el cliente paga en pesos. Si la FC es USD, se pasa a ARS con el TC de la factura
+        const tcCobro=r.moneda==='USD'?(Number(r.tipo_cambio)||(Number(r.monto_total)?Number(r.monto_total_ars||0)/Number(r.monto_total):1)):1;
+        const saldoCobro=Math.round(saldoNeto*tcCobro*100)/100;
+        const netoCobro=Math.round(Number(r.monto_neto||0)*tcCobro*100)/100;
         return `<tr class="${venc?'vencida-row':''}">
           <td style="font-size:12px">${r.empresas?.nombre||'—'}</td>
           <td class="mono">${fmtF(r.fecha_emision)}</td>
@@ -985,8 +989,8 @@ async function cargarFacturas(){
           <td>
             <div style="display:flex;gap:6px">
               ${r.estado!=='cobrada'&&r.estado!=='anulada'&&!esNC(r)?`
-                <input type="checkbox" class="cb-factura" id="cb-fac-${r.id}" onchange="toggleSeleccionFactura('${r.id}','${r.empresa_id}',${saldoNeto})" style="cursor:pointer;width:14px;height:14px">
-                <button class="btn btn-sm btn-success" onclick="abrirCobro('${r.id}','${r.empresa_id}','${r.numero_factura}','${saldoNeto}','${r.monto_neto||0}')">Cobrar</button>`:''}
+                <input type="checkbox" class="cb-factura" id="cb-fac-${r.id}" onchange="toggleSeleccionFactura('${r.id}','${r.empresa_id}',${saldoCobro})" style="cursor:pointer;width:14px;height:14px">
+                <button class="btn btn-sm btn-success" onclick="abrirCobro('${r.id}','${r.empresa_id}','${r.numero_factura}','${saldoCobro}','${netoCobro}')">Cobrar</button>`:''}
               <button class="btn btn-sm btn-ghost" onclick="editarFactura('${r.id}')">Editar</button>
               ${r.estado!=='anulada'&&!esNC(r)?`<button class="btn btn-sm btn-danger" onclick="anularFactura('${r.id}','${r.numero_factura}')">Anular</button>`:''}
             </div>
