@@ -20,6 +20,7 @@ const RemitosAPI = (() => {
     if (filtros.estados)   q = q.in('estado', filtros.estados);
     if (filtros.fechaDesde) q = q.gte('fecha', filtros.fechaDesde);
     if (filtros.fechaHasta) q = q.lte('fecha', filtros.fechaHasta);
+    if (filtros.fechaAntes) q = q.lt('fecha', filtros.fechaAntes);
     if (filtros.sinFactura) q = q.is('factura_id', null);
     if (filtros.limit)     q = q.limit(filtros.limit);
 

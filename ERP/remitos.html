@@ -481,36 +481,69 @@ function cambiarTab(tab,btn){
 let _remitosCache = [];
 let _remitosCacheFiltrado = [];
 
-async function filtrarRemitosLocal(){
-  const buscar = document.getElementById('f-buscar').value.toLowerCase().trim();
-  if(!_remitosCache.length){ cargarRemitos(); return; }
-  if(!buscar){ renderRemitos(_remitosCache); return; }
+let _buscarTimer=null;
+function filtrarRemitosLocal(){
+  clearTimeout(_buscarTimer);
+  _buscarTimer=setTimeout(_filtrarRemitos,300);
+}
 
-  // 1. Filtrar por campos del remito (número, cliente)
-  const porCabecera = _remitosCache.filter(r =>
+// Busca en toda la base (no solo en los remitos ya cargados), por número,
+// OC, cliente o descripción de ítems. Respeta empresa, estado, mes y pestaña.
+async function _buscarRemitosServidor(buscar){
+  const b=buscar.replace(/[,()%*"\\]/g,' ').trim();
+  if(b.length<2) return [];
+  const ors=[`numero_formateado.ilike.%${b}%`,`orden_compra.ilike.%${b}%`];
+  try{
+    const {data:cls}=await db.from('clientes').select('id').ilike('nombre',`%${b}%`).limit(50);
+    if(cls&&cls.length) ors.push(`cliente_id.in.(${cls.map(c=>c.id).join(',')})`);
+    const {data:its}=await db.from('remito_items_v2').select('remito_id').ilike('descripcion',`%${b}%`).limit(200);
+    if(its&&its.length) ors.push(`id.in.(${[...new Set(its.map(i=>i.remito_id))].join(',')})`);
+  }catch(e){ console.warn('Búsqueda auxiliar falló:',e); }
+
+  let q=db.from('remitos_v2')
+    .select('*,clientes(nombre),empresas(nombre),factura_id')
+    .or(ors.join(','))
+    .order('fecha',{ascending:false})
+    .limit(300);
+  const emp=document.getElementById('f-empresa').value;
+  const estado=document.getElementById('f-estado').value;
+  const mes=document.getElementById('f-mes').value;
+  if(emp) q=q.eq('empresa_id',emp);
+  if(estado) q=q.eq('estado',estado);
+  if(mes) q=q.gte('fecha',mes+'-01').lt('fecha',finMesExclusivo(mes));
+  const {data,error}=await q;
+  if(error){ console.warn('Búsqueda en servidor falló:',error); return []; }
+  let rows=data||[];
+  if(tabActual==='historico') rows=rows.filter(r=>r.migrado);
+  if(tabActual==='todos') rows=rows.filter(r=>!r.migrado);
+  const facIds=[...new Set(rows.filter(r=>r.factura_id).map(r=>r.factura_id))];
+  if(facIds.length){
+    const facs=await RemitosAPI.getFacturasDeRemitos(facIds);
+    const facMap={};(facs||[]).forEach(f=>facMap[f.id]=f.numero_factura);
+    rows=rows.map(r=>({...r,_nroFactura:r.factura_id?facMap[r.factura_id]:null}));
+  }
+  return rows;
+}
+
+async function _filtrarRemitos(){
+  const buscar = document.getElementById('f-buscar').value.toLowerCase().trim();
+  if(!buscar){ _remitosCacheFiltrado=_remitosCache; renderRemitos(_remitosCache); return; }
+
+  // 1. Lo que ya está cargado (respuesta inmediata)
+  const local = _remitosCache.filter(r =>
     (r.numero_formateado||'').toLowerCase().includes(buscar) ||
     (r.clientes?.nombre||'').toLowerCase().includes(buscar) ||
     (r.orden_compra||'').toLowerCase().includes(buscar)
   );
+  _remitosCacheFiltrado = local;
+  renderRemitos(local);
 
-  // 2. Buscar en ítems — query a remito_items_v2 buscando la descripción
-  let porItems = [];
-  try {
-    const { data: itemsMatch } = await db
-      .from('remito_items_v2')
-      .select('remito_id')
-      .ilike('descripcion', `%${buscar}%`)
-      .limit(200);
-    if(itemsMatch && itemsMatch.length){
-      const idsConItem = new Set(itemsMatch.map(i => i.remito_id));
-      porItems = _remitosCache.filter(r => idsConItem.has(r.id));
-    }
-  } catch(e){ console.warn('Búsqueda en ítems falló:', e); }
-
-  // 3. Unir sin duplicados
-  const idsYaEncontrados = new Set(porCabecera.map(r => r.id));
-  const rows = [...porCabecera, ...porItems.filter(r => !idsYaEncontrados.has(r.id))];
-
+  // 2. Toda la base (incluye remitos viejos que no estaban cargados)
+  const servidor = await _buscarRemitosServidor(buscar);
+  if(document.getElementById('f-buscar').value.toLowerCase().trim()!==buscar) return; // el usuario siguió tipeando
+  const ids = new Set(local.map(r=>r.id));
+  const rows = [...local, ...servidor.filter(r=>!ids.has(r.id))];
+  rows.sort((a,b)=>ordenAsc?(a.numero||0)-(b.numero||0):(b.numero||0)-(a.numero||0));
   _remitosCacheFiltrado = rows;
   renderRemitos(rows);
 }
@@ -531,6 +564,9 @@ async function cargarRemitos(){
   const buscar=document.getElementById('f-buscar').value.toLowerCase();
 
   const filtros={limit:500};
+  // Si hay mes elegido, filtrar en el servidor: antes se traían solo los 500
+  // remitos más nuevos y el mes se filtraba sobre esos, así que lo viejo no aparecía.
+  if(mes){ filtros.fechaDesde=mes+'-01'; filtros.fechaAntes=finMesExclusivo(mes); filtros.limit=2000; }
   if(emp) filtros.empresaId=emp;
   if(tipo) filtros.tipo=tipo;
   if(estado) filtros.estado=estado;
@@ -561,6 +597,7 @@ async function cargarRemitos(){
     : rows;
   _remitosCacheFiltrado = rowsFilt;
   renderRemitos(rowsFilt);
+  if(buscar2) filtrarRemitosLocal();
 }
 
 function renderRemitos(rows){
@@ -1154,6 +1191,19 @@ async function resolverOrdenCompra(empresaId, clienteId){
   });
 }
 
+// Alerta (no bloqueante) si este remito hace que se supere el disponible.
+async function avisarSiExcedeOC(oc, montoRemito, remitoIdActual){
+  if(!oc) return;
+  try{
+    const consumidoPrevio = await OrdenesCompraAPI.getConsumidoOC(oc.id, remitoIdActual||null);
+    const disponibleAntes = Number(oc.monto_autorizado||0) - consumidoPrevio;
+    if(montoRemito > disponibleAntes){
+      const excedido = montoRemito - disponibleAntes;
+      toast(`⚠ Este remito supera el saldo disponible de la OC ${oc.numero_oc} por ${fmt(excedido)} (disponible antes: ${fmt(disponibleAntes)}).`, 'warn');
+    }
+  }catch(e){ console.warn('No se pudo chequear el excedido de OC:', e); }
+}
+
 async function cargarContratos(){
 
   const tipo=document.getElementById('nr-tipo').value;
@@ -1379,39 +1429,6 @@ async function guardarRemito(estado){
   }
   if(itemsValidos===0){toast('Agregá al menos un ítem con descripción.','warn');return;}
 
-  // Calcular items y total ANTES de guardar nada — así podemos chequear el
-  // excedido de la OC y frenar acá mismo si el usuario cancela, sin haber
-  // tocado la base todavía.
-  const filas=document.getElementById('items-body').querySelectorAll('tr');
-  const itemsData=[];
-  let totalValorizado=0;
-  filas.forEach((fila,i)=>{
-    const cantInput=fila.querySelector('input[type="number"]');
-    const cantRaw=cantInput?.value?.trim();
-    const hiddenDesc=fila.querySelector('[data-desc-hidden]');
-    const detalleEl=fila.querySelector('[data-detalle]');
-    const desc=detalleEl?((detalleEl.value||'').trim()||(hiddenDesc?.value||'').trim()):(hiddenDesc?.value||'').trim();
-    const precioRaw=fila.querySelector('[data-precio]')?.value||'0';
-    const selEl=fila.querySelector('select');
-    const contratoItemId=selEl?.value||null;
-    if(desc){
-      const cantNum=parseFloat(cantRaw)||null;
-      const esModoContrato=tipoRemito==='contrato';
-      const precio=esModoContrato && !contratoItemId ? 0 : (parseFloat(precioRaw)||0);
-      const subtotal=(cantNum||0)*precio;
-      totalValorizado+=subtotal;
-      itemsData.push({
-        orden:i+1,
-        cantidad:cantRaw||null,
-        descripcion:desc,
-        cantidad_num:cantNum,
-        precio_unitario:precio,
-        subtotal,
-        contrato_item_id:contratoItemId||null,
-      });
-    }
-  });
-
   // Obtener CAI si se emite
   let numero=null, cai=null, caiVto=null, puntoVenta='0001', talonarioId=null;
   if(estado==='emitido'&&!editId){
@@ -1447,23 +1464,6 @@ async function guardarRemito(estado){
       if(e.message==='monto_oc_requerido') return; // el toast ya se mostró
       console.warn('Error resolviendo OC:', e);
       toast('No se pudo procesar la OC — el remito se guarda igual, pero sin vincular.', 'warn');
-    }
-  }
-
-  // Si este remito supera el disponible de la OC, frenar acá con un modal
-  // grande — no se guarda nada hasta que el usuario confirme expresamente.
-  if(ocResuelta && totalValorizado>0){
-    const consumidoPrevio = await OrdenesCompraAPI.getConsumidoOC(ocResuelta.id, editId||null);
-    const disponibleAntes = Number(ocResuelta.monto_autorizado||0) - consumidoPrevio;
-    if(totalValorizado > disponibleAntes){
-      const excedido = totalValorizado - disponibleAntes;
-      const confirmado = await confirmar(
-        `La OC <strong>${ocResuelta.numero_oc}</strong> tiene <strong>${fmt(disponibleAntes)}</strong> disponibles.<br>`+
-        `Este remito vale <strong>${fmt(totalValorizado)}</strong> — te pasás por <strong>${fmt(excedido)}</strong>.<br><br>`+
-        `¿Confirmás que querés guardar igual, por encima del monto autorizado?`,
-        { tipo:'warn', titulo:'⚠ OC excedida', labelOk:'Sí, guardar igual', labelCancelar:'Cancelar' }
-      );
-      if(!confirmado) return;
     }
   }
   if(!editId && _rehaciendoDesdeId){
@@ -1504,10 +1504,46 @@ async function guardarRemito(estado){
     }
   }
 
-  // Guardar el total ya calculado antes, y guardar los items
+  // Guardar items — leyendo precio_unitario y calculando subtotales
+  const filas=document.getElementById('items-body').querySelectorAll('tr');
+  const itemsData=[];
+  let totalValorizado=0;
+  filas.forEach((fila,i)=>{
+    const cantInput=fila.querySelector('input[type="number"]');
+    const cantRaw=cantInput?.value?.trim();
+    // En modo contrato desc viene del [data-desc-hidden]; en modo normal del input type=text
+    const hiddenDesc=fila.querySelector('[data-desc-hidden]');
+    const detalleEl=fila.querySelector('[data-detalle]');
+    const desc=detalleEl?((detalleEl.value||'').trim()||(hiddenDesc?.value||'').trim()):(hiddenDesc?.value||'').trim();
+    const precioRaw=fila.querySelector('[data-precio]')?.value||'0';
+    // Recuperar contrato_item_id del select si está en modo contrato
+    const selEl=fila.querySelector('select');
+    const contratoItemId=selEl?.value||null;
+    if(desc){
+      const cantNum=parseFloat(cantRaw)||null;
+      // En modo contrato: si no hay item seleccionado, precio = 0 (no tomar valor residual del hidden)
+      const esModoContrato=tipoRemito==='contrato';
+      const precio=esModoContrato && !contratoItemId ? 0 : (parseFloat(precioRaw)||0);
+      const subtotal=(cantNum||0)*precio;
+      totalValorizado+=subtotal;
+      itemsData.push({
+        orden:i+1,
+        cantidad:cantRaw||null,
+        descripcion:desc,
+        cantidad_num:cantNum,
+        precio_unitario:precio,
+        subtotal,
+        contrato_item_id:contratoItemId||null,
+      });
+    }
+  });
+  // Actualizar total_valorizado en el payload
   payload.total_valorizado=totalValorizado||null;
+  // Actualizar total en la tabla (siempre, para nuevo y edición)
   try{ await RemitosAPI.actualizarRemito(remitoId,{total_valorizado:totalValorizado||null}); }catch(e){ console.warn('total_valorizado no actualizado:',e); }
 
+  // Avisar (sin bloquear) si este remito hace que se supere el disponible de la OC
+  if(ocResuelta && totalValorizado>0) await avisarSiExcedeOC(ocResuelta, totalValorizado, remitoId);
   if(itemsData.length){
     // Usar siempre insert directo (la RPC guardar_remito_con_items falla)
     try{ await RemitosAPI.insertarItemsDirecto(remitoId, itemsData); }catch(e){
